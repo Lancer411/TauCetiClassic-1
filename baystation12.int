@@ -1,6 +1,11 @@
 // BEGIN_INTERNALS
 /*
-MAP_ICON_TYPE: 0
+LAST_COMPILE_TIME: 1473797422
+DIR: code code\__DEFINES code\game code\game\gamemodes code\game\gamemodes\abduction code\game\machinery code\game\mecha code\game\mecha\equipment code\game\mecha\equipment\tools code\game\objects code\game\objects\closets code\game\objects\items code\modules code\modules\scrap maps tauceti tauceti\items tauceti\items\clothing tauceti\items\clothing\suits 
 AUTO_FILE_DIR: OFF
+MAP_ICON_TYPE: 0
+LAST_COMPILE_VERSION: 510.1347
+WINDOW: code\modules\scrap\scrap_tools.dm;code\modules\scrap\scrap_stacker.dm;code\modules\scrap\scrap_refinery.dm;code\modules\scrap\scrap.dm;tauceti\items\clothing\suits\new_hazmat.dm;tauceti\items\clothing\suits\new_hazmat.dmi
+FILE: tauceti\items\clothing\suits\new_hazmat.dmi
 */
 // END_INTERNALS
