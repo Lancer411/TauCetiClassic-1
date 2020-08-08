@@ -1,4 +1,4 @@
-/obj/item/gland/
+/obj/item/gland
 	name = "fleshy mass"
 	desc = "Eww!"
 	icon = 'icons/obj/abductor.dmi'
@@ -19,16 +19,16 @@
 /obj/item/gland/proc/Start()
 	active = 1
 	next_activation  = world.time + rand(cooldown_low,cooldown_high)
-	SSobj.processing |= src
+	START_PROCESSING(SSobj, src)
 
 /obj/item/gland/proc/Inject(mob/living/carbon/human/target)
 	host = target
-	target.internal_organs += src
+	target.organs += src
 	src.loc = target
 
 /obj/item/gland/process()
 	if(!active)
-		SSobj.processing.Remove(src)
+		STOP_PROCESSING(SSobj, src)
 		return
 	if(next_activation <= world.time)
 		//This gives a chance to transplant the gland active into someone else if you're fast
@@ -53,7 +53,7 @@
 	uses = -1
 	icon_state = "health"
 
-obj/item/gland/heals/activate()
+/obj/item/gland/heals/activate()
 	to_chat(host, "<span class='notice'>You feel curiously revitalized.</span>")
 	host.adjustBruteLoss(-25)
 	host.adjustOxyLoss(-25)
@@ -68,20 +68,12 @@ obj/item/gland/heals/activate()
 	uses = -1
 	icon_state = "slime"
 
-obj/item/gland/slime/activate()
+/obj/item/gland/slime/activate()
 	to_chat(host, "<span class='warning'>You feel nauseous!</span>")
 
-	host.visible_message("<span class='danger'>[host] vomits on the floor!</span>", \
-					"<span class='userdanger'>You throw up on the floor!</span>")
-
-	host.nutrition -= 20
-	host.adjustToxLoss(-3)
-
-	var/turf/pos = get_turf(host)
-	pos.add_vomit_floor(host)
-	playsound(pos, 'sound/effects/splat.ogg', 50, 1)
-
-	new/mob/living/simple_animal/slime(pos)
+	var/turf/T = get_turf(host)
+	if(host.vomit())
+		new/mob/living/simple_animal/slime(T)
 
 
 //SLIME BOOM
@@ -136,10 +128,7 @@ obj/item/gland/slime/activate()
 
 /obj/item/gland/pop/activate()
 	to_chat(host, "<span class='notice'>You feel unlike yourself.</span>")
-	var/species = pick(list(/datum/species/vox,/datum/species/diona,/datum/species/tajaran,/datum/species/unathi,/datum/species/human))
-	host.species = new species()
-	host.regenerate_icons()
-	return
+	host.set_species_soft(pick(HUMAN , UNATHI , TAJARAN , DIONA , VOX))
 
 
 //VENTCRAWLING
@@ -203,7 +192,7 @@ obj/item/gland/slime/activate()
 /obj/item/gland/spiderman/activate()
 	to_chat(host, "<span class='warning'>You feel something crawling in your skin.</span>")
 	if(uses == initial(uses))
-		host.faction += "spiders"
+		host.faction = "spiders"
 	new /obj/effect/spider/spiderling(host.loc)
 
 
@@ -280,11 +269,11 @@ obj/item/gland/slime/activate()
 
 /obj/effect/cocoon/abductor/proc/Start()
 	hatch_time = world.time + 600
-	SSobj.processing |= src
+	START_PROCESSING(SSobj, src)
 
 /obj/effect/cocoon/abductor/process()
 	if(world.time > hatch_time)
-		SSobj.processing.Remove(src)
+		STOP_PROCESSING(SSobj, src)
 		for(var/mob/M in contents)
 			src.visible_message("<span class='warning'>[src] hatches!</span>")
 			M.loc = src.loc

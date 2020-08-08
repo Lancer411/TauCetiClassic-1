@@ -1,7 +1,6 @@
 /datum/event/brand_intelligence
 	announceWhen	= 21
 	endWhen			= 1000	//Ends when all vending machines are subverted anyway.
-	oneShot			= 1
 
 	var/list/obj/machinery/vending/vendingMachines = list()
 	var/list/obj/machinery/vending/infectedVendingMachines = list()
@@ -9,12 +8,13 @@
 
 
 /datum/event/brand_intelligence/announce()
-	command_alert("Rampant brand intelligence has been detected aboard [station_name()], please stand-by.", "Machine Learning Alert")
+	command_alert("Rampant brand intelligence has been detected aboard [station_name()], please stand-by.", "Machine Learning Alert", "rampbrand")
 
 
 /datum/event/brand_intelligence/start()
 	for(var/obj/machinery/vending/V in machines)
-		if(V.z != ZLEVEL_STATION)	continue
+		if(!is_station_level(V.z))
+			continue
 		vendingMachines.Add(V)
 
 	if(!vendingMachines.len)
@@ -33,7 +33,7 @@
 		kill()
 		return
 
-	if(IsMultiple(activeFor, 5))
+	if(IS_MULTIPLE(activeFor, 5))
 		if(prob(15))
 			var/obj/machinery/vending/infectedMachine = pick(vendingMachines)
 			vendingMachines.Remove(infectedMachine)
@@ -41,7 +41,7 @@
 			infectedMachine.shut_up = 0
 			infectedMachine.shoot_inventory = 1
 
-			if(IsMultiple(activeFor, 12))
+			if(IS_MULTIPLE(activeFor, 12))
 				originMachine.speak(pick("Try our aggressive new marketing strategies!", \
 										 "You should buy products to feed your lifestyle obsession!", \
 										 "Consume!", \

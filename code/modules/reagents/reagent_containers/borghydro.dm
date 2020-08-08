@@ -8,7 +8,6 @@
 	amount_per_transfer_from_this = 5
 	volume = 30
 	possible_transfer_amounts = null
-	flags = FPRINT
 	var/mode = 1
 	var/charge_cost = 50
 	var/charge_tick = 0
@@ -24,16 +23,16 @@
 /obj/item/weapon/reagent_containers/borghypo/crisis
 	reagent_ids = list("tricordrazine", "inaprovaline", "tramadol")
 
-/obj/item/weapon/reagent_containers/borghypo/New()
-	..()
+/obj/item/weapon/reagent_containers/borghypo/atom_init()
+	. = ..()
 	for(var/R in reagent_ids)
 		add_reagent(R)
 
-	SSobj.processing |= src
+	START_PROCESSING(SSobj, src)
 
 
 /obj/item/weapon/reagent_containers/borghypo/Destroy()
-	SSobj.processing.Remove(src)
+	STOP_PROCESSING(SSobj, src)
 	return ..()
 
 /obj/item/weapon/reagent_containers/borghypo/process() //Every [recharge_time] seconds, recharge some reagents for the cyborg
@@ -71,30 +70,27 @@
 /obj/item/weapon/reagent_containers/borghypo/attack(mob/living/M, mob/user)
 	var/datum/reagents/R = reagent_list[mode]
 	if(!R.total_volume)
-		to_chat(user, "\red The injector is empty.")
+		to_chat(user, "<span class='warning'>The injector is empty.</span>")
 		return
-	if (!(istype(M)))
+	if (!istype(M))
 		return
 
-	if (R.total_volume && M.can_inject(user,1))
-		to_chat(user, "\blue You inject [M] with the injector.")
-		to_chat(M, "\red You feel a tiny prick!")
-
+	if (R.total_volume && M.try_inject(user, TRUE, TRUE, TRUE))
 		R.reaction(M, INGEST)
 		if(M.reagents)
 			var/trans = R.trans_to(M, amount_per_transfer_from_this)
-			to_chat(user, "\blue [trans] units injected. [R.total_volume] units remaining.")
+			to_chat(user, "<span class='notice'>[trans] units injected. [R.total_volume] units remaining.</span>")
 	return
 
 /obj/item/weapon/reagent_containers/borghypo/attack_self(mob/user)
-	playsound(src.loc, 'sound/effects/pop.ogg', 50, 0)		//Change the mode
+	playsound(src, 'sound/effects/pop.ogg', VOL_EFFECTS_MASTER, null, FALSE)		//Change the mode
 	mode++
 	if(mode > reagent_list.len)
 		mode = 1
 
 	charge_tick = 0 //Prevents wasted chems/cell charge if you're cycling through modes.
 	var/datum/reagent/R = chemical_reagents_list[reagent_ids[mode]]
-	to_chat(user, "\blue Synthesizer is now producing '[R.name]'.")
+	to_chat(user, "<span class='notice'>Synthesizer is now producing '[R.name]'.</span>")
 	return
 
 /obj/item/weapon/reagent_containers/borghypo/examine(mob/user)

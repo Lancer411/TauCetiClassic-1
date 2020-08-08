@@ -47,8 +47,8 @@
 	icon_state = "lightreplacer0"
 	item_state = "electronic"
 
-	flags = FPRINT | CONDUCT
-	slot_flags = SLOT_BELT
+	flags = CONDUCT
+	slot_flags = SLOT_FLAGS_BELT
 	origin_tech = "magnets=3;materials=2"
 
 	var/max_uses = 20
@@ -61,38 +61,31 @@
 	var/decrement = 1
 	var/charge = 1
 
-/obj/item/device/lightreplacer/New()
+/obj/item/device/lightreplacer/atom_init()
 	uses = max_uses / 2
 	failmsg = "The [name]'s refill light blinks red."
-	..()
+	. = ..()
 
 /obj/item/device/lightreplacer/examine(mob/user)
 	..()
 	if(src in view(1, user))
 		to_chat(user, "It has [uses] lights remaining.")
 
-/obj/item/device/lightreplacer/attackby(obj/item/W, mob/user)
-	if(istype(W,  /obj/item/weapon/card/emag) && emagged == 0)
-		Emag()
-		return
-
-	if(istype(W, /obj/item/stack/sheet/glass))
-		var/obj/item/stack/sheet/glass/G = W
-		if(G.amount - decrement >= 0 && uses < max_uses)
-			var/remaining = max(G.amount - decrement, 0)
-			if(!remaining && !(G.amount - decrement) == 0)
+/obj/item/device/lightreplacer/attackby(obj/item/I, mob/user, params)
+	if(istype(I, /obj/item/stack/sheet/glass))
+		var/obj/item/stack/sheet/glass/G = I
+		if(G.get_amount() - decrement >= 0 && uses < max_uses)
+			var/remaining = max(G.get_amount() - decrement, 0)
+			if(!remaining && !(G.get_amount() - decrement) == 0)
 				to_chat(user, "There isn't enough glass.")
 				return
-			G.amount = remaining
-			if(!G.amount)
-				user.drop_item()
-				qdel(G)
+			G.set_amount(remaining)
 			AddUses(increment)
 			to_chat(user, "You insert a piece of glass into the [src.name]. You have [uses] lights remaining.")
 			return
 
-	if(istype(W, /obj/item/weapon/light))
-		var/obj/item/weapon/light/L = W
+	else if(istype(I, /obj/item/weapon/light))
+		var/obj/item/weapon/light/L = I
 		if(L.status == 0) // LIGHT OKAY
 			if(uses < max_uses)
 				AddUses(1)
@@ -104,6 +97,8 @@
 			to_chat(user, "You need a working light.")
 			return
 
+	else
+		return ..()
 
 /obj/item/device/lightreplacer/attack_self(mob/user)
 	/* // This would probably be a bit OP. If you want it though, uncomment the code.
@@ -122,7 +117,7 @@
 
 /obj/item/device/lightreplacer/proc/Use(mob/user)
 
-	playsound(src.loc, 'sound/machines/click.ogg', 50, 1)
+	playsound(src, 'sound/machines/click.ogg', VOL_EFFECTS_MASTER)
 	AddUses(-1)
 	return 1
 
@@ -181,14 +176,15 @@
 		to_chat(U, "There is a working [target.fitting] already inserted.")
 		return
 
-/obj/item/device/lightreplacer/proc/Emag()
+/obj/item/device/lightreplacer/emag_act(mob/user)
 	emagged = !emagged
-	playsound(src.loc, "sparks", 100, 1)
+	playsound(src, pick(SOUNDIN_SPARKS), VOL_EFFECTS_MASTER)
 	if(emagged)
 		name = "Shortcircuited [initial(name)]"
 	else
 		name = initial(name)
 	update_icon()
+	return TRUE
 
 //Can you use it?
 

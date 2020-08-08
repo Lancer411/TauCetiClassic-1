@@ -42,7 +42,7 @@ var/datum/cameranet/cameranet = new()
 
 // Updates what the aiEye can see. It is recommended you use this when the aiEye moves or it's location is set.
 
-/datum/cameranet/proc/visibility(mob/aiEye/ai)
+/datum/cameranet/proc/visibility(mob/camera/Eye/ai)
 	// 0xf = 15
 	var/x1 = max(0, ai.x - 16) & ~0xf
 	var/y1 = max(0, ai.y - 16) & ~0xf
@@ -70,7 +70,7 @@ var/datum/cameranet/cameranet = new()
 
 /datum/cameranet/proc/updateVisibility(atom/A, opacity_check = 1)
 
-	if(!ticker || (opacity_check && !A.opacity))
+	if(!SSticker || (opacity_check && !A.opacity))
 		return
 	majorChunkChange(A, 2)
 
@@ -84,7 +84,7 @@ var/datum/cameranet/cameranet = new()
 // Removes a camera from a chunk.
 
 /datum/cameranet/proc/removeCamera(obj/machinery/camera/c)
-	if(c.can_use())
+	if(!c.can_use())
 		majorChunkChange(c, 0)
 
 // Add a camera to a chunk.
@@ -158,7 +158,7 @@ var/datum/cameranet/cameranet = new()
 
 /datum/cameranet/proc/stat_entry()
 	if(!statclick)
-		statclick = new/obj/effect/statclick/debug("Initializing...", src)
+		statclick = new/obj/effect/statclick/debug(null, "Initializing...", src)
 
 	stat(name, statclick.update("Cameras: [cameranet.cameras.len] | Chunks: [cameranet.chunks.len]"))
 

@@ -16,7 +16,7 @@
 //	testing("[name] assigned to block #[assigned].")
 	return assigned
 
-/proc/setupGenetics()
+/datum/controller/subsystem/atoms/proc/setupGenetics()
 
 	if (prob(50))
 		// Currently unused.  Will revisit. - N3X
@@ -24,44 +24,6 @@
 	if (prob(75))
 		DIFFMUT = rand(0,20)
 
-	/* Old, for reference (so I don't accidentally activate something) - N3X
-	var/list/avnums = new/list()
-	var/tempnum
-
-	avnums.Add(2)
-	avnums.Add(12)
-	avnums.Add(10)
-	avnums.Add(8)
-	avnums.Add(4)
-	avnums.Add(11)
-	avnums.Add(13)
-	avnums.Add(6)
-
-	tempnum = pick(avnums)
-	avnums.Remove(tempnum)
-	HULKBLOCK = tempnum
-	tempnum = pick(avnums)
-	avnums.Remove(tempnum)
-	TELEBLOCK = tempnum
-	tempnum = pick(avnums)
-	avnums.Remove(tempnum)
-	FIREBLOCK = tempnum
-	tempnum = pick(avnums)
-	avnums.Remove(tempnum)
-	XRAYBLOCK = tempnum
-	tempnum = pick(avnums)
-	avnums.Remove(tempnum)
-	CLUMSYBLOCK = tempnum
-	tempnum = pick(avnums)
-	avnums.Remove(tempnum)
-	FAKEBLOCK = tempnum
-	tempnum = pick(avnums)
-	avnums.Remove(tempnum)
-	DEAFBLOCK = tempnum
-	tempnum = pick(avnums)
-	avnums.Remove(tempnum)
-	BLINDBLOCK = tempnum
-	*/
 	var/list/numsToAssign=new()
 	for(var/i=1;i<DNA_SE_LENGTH;i++)
 		numsToAssign += i
@@ -129,28 +91,6 @@
 				assigned_gene_blocks[block] = gene
 	//testing("DNA2: [numsToAssign.len] blocks are unused: [english_list(numsToAssign)]") //##Z2
 
-	// HIDDEN MUTATIONS / SUPERPOWERS INITIALIZTION
-
-	/*
-	for(var/x in typesof(/datum/mutations) - /datum/mutations)
-		var/datum/mutations/mut = new x
-
-		for(var/i = 1, i <= mut.required, i++)
-			var/datum/mutationreq/require = new/datum/mutationreq
-			require.block = rand(1, 13)
-			require.subblock = rand(1, 3)
-
-			// Create random requirement identification
-			require.reqID = pick("0", "1", "2", "3", "4", "5", "6", "7", "8", "9", "A", \
-							 "B", "C", "D", "E", "F")
-
-			mut.requirements += require
-
-
-		global_mutations += mut// add to global mutations list!
-	*/
-
-
 /proc/setupFactions()
 
 	// Populate the factions list:
@@ -160,9 +100,9 @@
 			qdel(F)
 			continue
 		else
-			ticker.factions.Add(F)
-			ticker.availablefactions.Add(F)
+			SSticker.factions.Add(F)
+			SSticker.availablefactions.Add(F)
 
 	// Populate the syndicate coalition:
-	for(var/datum/faction/syndicate/S in ticker.factions)
-		ticker.syndicate_coalition.Add(S)
+	for(var/datum/faction/syndicate/S in SSticker.factions)
+		SSticker.syndicate_coalition.Add(S)

@@ -10,21 +10,21 @@
 	var/point_rate = 2
 	var/last_resource_collection
 
-/obj/effect/blob/core/New(loc, var/h = 200, var/client/new_overmind = null, var/new_rate = 2)
+/obj/effect/blob/core/atom_init(mapload, h = 200, client/new_overmind, new_rate = 2)
 	blob_cores += src
-	SSobj.processing |= src
+	START_PROCESSING(SSobj, src)
 	if(!overmind)
 		create_overmind(new_overmind)
 	point_rate = new_rate
 	last_resource_collection = world.time
-	..(loc, h)
+	. = ..()
 
 
 /obj/effect/blob/core/Destroy()
 	blob_cores -= src
 	if(overmind)
 		qdel(overmind)
-	SSobj.processing.Remove(src)
+	STOP_PROCESSING(SSobj, src)
 	return ..()
 //	return
 
@@ -50,8 +50,10 @@
 		last_resource_collection = world.time
 
 	health = min(initial(health), health + 1)
-	for(var/i = 1; i < 8; i += i)
-		Pulse(0, i)
+	if(overmind)
+		overmind.update_health_hud()
+	for(var/dir in cardinal)
+		Pulse(BLOB_CORE_MAX_PATH, dir)
 	for(var/b_dir in alldirs)
 		if(!prob(5))
 			continue
@@ -75,9 +77,10 @@
 	var/list/candidates = list()
 
 	if(!new_overmind)
-		candidates = get_candidates(ROLE_BLOB)
+		candidates = pollGhostCandidates("Would you like to be a BLOB?!", ROLE_BLOB)
 		if(candidates.len)
-			C = pick(candidates)
+			var/mob/M = pick(candidates)
+			C = M.client
 	else
 		C = new_overmind
 

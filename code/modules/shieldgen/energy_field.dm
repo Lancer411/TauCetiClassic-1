@@ -4,7 +4,7 @@
 /obj/effect/energy_field
 	name = "energy field"
 	desc = "Impenetrable field of energy, capable of blocking anything as long as it's active."
-	icon = 'code/modules/shieldgen/shielding.dmi'
+	icon = 'icons/obj/machines/shielding.dmi'
 	icon_state = "shieldsparkles"
 	anchored = 1
 	layer = 4.1		//just above mobs
@@ -18,11 +18,6 @@
 
 /obj/effect/energy_field/bullet_act(obj/item/projectile/Proj)
 	Stress(Proj.damage / 10)
-
-/obj/effect/energy_field/meteorhit(obj/effect/meteor/M)
-	if(M)
-		walk(M,0)
-		Stress(2)
 
 /obj/effect/energy_field/proc/Stress(severity)
 	strength -= severity

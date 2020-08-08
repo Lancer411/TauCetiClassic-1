@@ -30,29 +30,54 @@
 /obj/item/stack/sheet/glass/attack_self(mob/user)
 	construct_window(user)
 
-/obj/item/stack/sheet/glass/attackby(obj/item/W, mob/user)
-	..()
-	if(istype(W,/obj/item/weapon/cable_coil))
-		var/obj/item/weapon/cable_coil/CC = W
-		if(CC.amount < 5)
-			to_chat(user, "\b There is not enough wire in this coil. You need 5 lengths.")
+/obj/item/stack/sheet/glass/attackby(obj/item/I, mob/user, params)
+	if(iscoil(I))
+		var/list/resources_to_use = list()
+		resources_to_use[I] = 5
+		resources_to_use[src] = 1
+		if(!use_multi(user, resources_to_use))
 			return
-		CC.use(5)
-		to_chat(user, "\blue You attach wire to the [name].")
+
+		to_chat(user, "<span class='notice'>You attach wire to the [name].</span>")
 		new /obj/item/stack/light_w(user.loc)
-		src.use(1)
-	else if(istype(W, /obj/item/stack/rods))
-		var/obj/item/stack/rods/V  = W
+
+	else if(istype(I, /obj/item/stack/rods))
+		var/list/resources_to_use = list()
+		resources_to_use[I] = 1
+		resources_to_use[src] = 1
+		if(!use_multi(user, resources_to_use))
+			return
+
 		var/obj/item/stack/sheet/rglass/RG = new (user.loc)
 		RG.add_fingerprint(user)
-		RG.add_to_stacks(user)
-		V.use(1)
-		var/obj/item/stack/sheet/glass/G = src
-		src = null
-		var/replace = (user.get_inactive_hand() == G)
-		G.use(1)
-		if (!G && !RG && replace)
-			user.put_in_hands(RG)
+		for(var/obj/item/stack/sheet/rglass/G in user.loc)
+			if(G==RG)
+				continue
+			if(G.get_amount() >= G.max_amount)
+				continue
+			G.attackby(RG, user)
+			to_chat(usr, "You add the reinforced glass to the stack. It now contains [RG.get_amount()] sheets.")
+
+	else
+		return ..()
+
+/obj/item/stack/sheet/glass/phoronglass/attackby(obj/item/I, mob/user, params)
+	if(istype(I, /obj/item/stack/rods))
+		var/list/resources_to_use = list()
+		resources_to_use[I] = 1
+		resources_to_use[src] = 1
+		if(!use_multi(user, resources_to_use))
+			return
+
+		var/obj/item/stack/sheet/glass/phoronrglass/FG = new (user.loc)
+		FG.add_fingerprint(user)
+		for(var/obj/item/stack/sheet/glass/phoronrglass/G in user.loc)
+			if(G == FG)
+				continue
+			if(G.get_amount() >= G.max_amount)
+				continue
+			G.attackby(FG, user)
+
 	else
 		return ..()
 
@@ -62,13 +87,13 @@
 	if(!istype(user.loc,/turf))
 		return 0
 	if(!user.IsAdvancedToolUser())
-		to_chat(user, "\red You don't have the dexterity to do this!")
+		to_chat(user, "<span class='warning'>You don't have the dexterity to do this!</span>")
 		return 0
 	var/title = "Sheet-Glass"
-	title += " ([src.amount] sheet\s left)"
-	switch(alert(title, "Would you like full tile glass or one direction?", "One Direction", "Full Window", "Cancel", null))
+	title += " ([get_amount()] sheet\s left)"
+	switch(input(title, "What would you like to make?", "One Direction") in list("One Direction", "Full Window", "Glass Table Parts", "Cancel"))
 		if("One Direction")
-			if(!src)
+			if(QDELETED(src))
 				return 1
 			if(src.loc != user)
 				return 1
@@ -78,11 +103,11 @@
 			for(var/obj/structure/window/win in user.loc)
 				i++
 				if(i >= 4)
-					to_chat(user, "\red There are too many windows in this location.")
+					to_chat(user, "<span class='warning'>There are too many windows in this location.</span>")
 					return 1
 				directions-=win.dir
 				if(!(win.ini_dir in cardinal))
-					to_chat(user, "\red Can't let you do that.")
+					to_chat(user, "<span class='warning'>Can't let you do that.</span>")
 					return 1
 
 			//Determine the direction. It will first check in the direction the person making the window is facing, if it finds an already made window it will try looking at the next cardinal direction, etc.
@@ -95,52 +120,60 @@
 				if(!found)
 					dir_to_set = direction
 					break
+
+			if(!src.use(1))
+				to_chat(user, "<span class='warning'>You need more glass to do that.</span>")
+				return 1
+
 			var/obj/structure/window/W
 			W = new created_window(user.loc)
 			W.dir = dir_to_set
 			W.ini_dir = W.dir
 			W.anchored = 0
-			src.use(1)
 		if("Full Window")
-			if(!src)
+			if(QDELETED(src))
 				return 1
 			if(src.loc != user)
-				return 1
-			if(src.amount < 2)
-				to_chat(user, "\red You need more glass to do that.")
 				return 1
 			var/step = get_step(user, user.dir)
 			var/turf/T = get_turf(step)
 			if(T.density || (locate(/obj/structure/window) in step))
-				to_chat(user, "\red There is something in the way.")
+				to_chat(user, "<span class='warning'>There is something in the way.</span>")
 				return 1
+
+			if(!src.use(2))
+				to_chat(user, "<span class='warning'>You need more glass to do that.</span>")
+				return 1
+
 			var/obj/structure/window/W
 			W = new created_window(step)
 			W.dir = SOUTHWEST
 			W.ini_dir = SOUTHWEST
 			W.anchored = 0
-			src.use(2)
+		if("Glass Table Parts")
+			if(QDELETED(src))
+				return 1
+			if(src.loc != user)
+				return 1
+
+			if(!src.use(2))
+				to_chat(user, "<span class='warning'>You need more glass to do that.</span>")
+				return 1
+
+			new /obj/item/weapon/table_parts/glass(user.loc)
 	return 0
 
-/obj/item/stack/sheet/glass/throw_at(atom/target, range, speed, mob/user)
+/obj/item/stack/sheet/glass/after_throw(datum/callback/callback)
 	..()
-	playsound(src, "shatter", 70, 1)
+	playsound(src, pick(SOUNDIN_SHATTER), VOL_EFFECTS_MASTER)
 	new /obj/item/weapon/shard(loc)
-	var/new_amount = amount - rand(5,35)
-	if(new_amount > 0)
-		amount = new_amount
-	else
-		qdel(src)
+	set_amount(get_amount() - rand(5,35))
 
-/obj/item/stack/sheet/rglass/throw_at(atom/target, range, speed, mob/user)
+/obj/item/stack/sheet/rglass/after_throw(datum/callback/callback)
 	..()
-	playsound(src, "shatter", 70, 1)
+	playsound(src, pick(SOUNDIN_SHATTER), VOL_EFFECTS_MASTER)
 	new /obj/item/weapon/shard(loc)
-	var/new_amount = amount - rand(1,15)
-	if(new_amount > 0)
-		amount = new_amount
-	else
-		qdel(src)
+	set_amount(get_amount() - rand(1,15))
 
 /*
  * Reinforced glass sheets
@@ -166,18 +199,18 @@
 	construct_window(user)
 
 /obj/item/stack/sheet/rglass/proc/construct_window(mob/user)
-	if(!user || !src)
+	if(!user || QDELETED(src))
 		return 0
-	if(!istype(user.loc,/turf))
+	if(!isturf(user.loc))
 		return 0
 	if(!user.IsAdvancedToolUser())
-		to_chat(user, "\red You don't have the dexterity to do this!")
+		to_chat(user, "<span class='warning'>You don't have the dexterity to do this!</span>")
 		return 0
 	var/title = "Sheet Reinf. Glass"
-	title += " ([src.amount] sheet\s left)"
+	title += " ([get_amount()] sheet\s left)"
 	switch(input(title, "Would you like full tile glass a one direction glass pane or a windoor?") in list("One Direction", "Full Window", "Windoor", "Cancel"))
 		if("One Direction")
-			if(!src)
+			if(QDELETED(src))
 				return 1
 			if(src.loc != user)
 				return 1
@@ -186,11 +219,11 @@
 			for (var/obj/structure/window/win in user.loc)
 				i++
 				if(i >= 4)
-					to_chat(user, "\red There are too many windows in this location.")
+					to_chat(user, "<span class='warning'>There are too many windows in this location.</span>")
 					return 1
 				directions-=win.dir
 				if(!(win.ini_dir in cardinal))
-					to_chat(user, "\red Can't let you do that.")
+					to_chat(user, "<span class='warning'>Can't let you do that.</span>")
 					return 1
 
 			//Determine the direction. It will first check in the direction the person making the window is facing, if it finds an already made window it will try looking at the next cardinal direction, etc.
@@ -204,26 +237,29 @@
 					dir_to_set = direction
 					break
 
+			if(!src.use(1))
+				to_chat(user, "<span class='warning'>You need more glass to do that.</span>")
+				return 1
+
 			var/obj/structure/window/W
 			W = new /obj/structure/window/reinforced(user.loc)
 			W.state = 0
 			W.dir = dir_to_set
 			W.ini_dir = W.dir
 			W.anchored = 0
-			src.use(1)
 
 		if("Full Window")
-			if(!src)
+			if(QDELETED(src))
 				return 1
 			if(src.loc != user)
-				return 1
-			if(src.amount < 2)
-				to_chat(user, "\red You need more glass to do that.")
 				return 1
 			var/step = get_step(user, user.dir)
 			var/turf/T = get_turf(step)
 			if(T.density || (locate(/obj/structure/window) in step))
-				to_chat(user, "\red There is something in the way.")
+				to_chat(user, "<span class='warning'>There is something in the way.</span>")
+				return 1
+			if(!src.use(2))
+				to_chat(user, "<span class='warning'>You need more glass to do that.</span>")
 				return 1
 			var/obj/structure/window/W
 			W = new /obj/structure/window/reinforced(step)
@@ -232,29 +268,27 @@
 			W.ini_dir = SOUTHWEST
 			W.state = 0
 			W.anchored = 0
-			src.use(2)
 
 		if("Windoor")
-			if(!src || src.loc != user)
+			if(QDELETED(src) || src.loc != user)
 				return 1
 
-			if(isturf(user.loc) && locate(/obj/structure/windoor_assembly/, user.loc))
-				to_chat(user, "\red There is already a windoor assembly in that location.")
+			if(isturf(user.loc) && locate(/obj/structure/windoor_assembly, user.loc))
+				to_chat(user, "<span class='warning'>There is already a windoor assembly in that location.</span>")
 				return 1
 
-			if(isturf(user.loc) && locate(/obj/machinery/door/window/, user.loc))
-				to_chat(user, "\red There is already a windoor in that location.")
+			if(isturf(user.loc) && locate(/obj/machinery/door/window, user.loc))
+				to_chat(user, "<span class='warning'>There is already a windoor in that location.</span>")
 				return 1
 
-			if(src.amount < 5)
-				to_chat(user, "\red You need more glass to do that.")
+			if(!src.use(5))
+				to_chat(user, "<span class='warning'>You need more glass to do that.</span>")
 				return 1
 
 			var/obj/structure/windoor_assembly/WD
 			WD = new /obj/structure/windoor_assembly(user.loc)
 			WD.state = "01"
 			WD.anchored = 0
-			src.use(5)
 			switch(user.dir)
 				if(SOUTH)
 					WD.dir = SOUTH
@@ -278,72 +312,73 @@
  * Glass shards - TODO: Move this into code/game/object/item/weapons
  */
 /obj/item/weapon/shard/Bump()
-
-	spawn(0)
-		if(prob(20))
-			src.force = 15
-		else
-			src.force = 4
-		..()
-		return
-	return
-
-/obj/item/weapon/shard/New()
-
-	src.icon_state = pick("large", "medium", "small")
-	switch(src.icon_state)
-		if("small")
-			src.pixel_x = rand(-12, 12)
-			src.pixel_y = rand(-12, 12)
-		if("medium")
-			src.pixel_x = rand(-8, 8)
-			src.pixel_y = rand(-8, 8)
-		if("large")
-			src.pixel_x = rand(-5, 5)
-			src.pixel_y = rand(-5, 5)
-		else
-	return
-
-/obj/item/weapon/shard/attackby(obj/item/weapon/W, mob/user)
+	if(prob(20))
+		force = 15
+	else
+		force = 4
 	..()
-	if(istype(W, /obj/item/weapon/weldingtool))
-		var/obj/item/weapon/weldingtool/WT = W
-		if(WT.remove_fuel(0, user))
+
+/obj/item/weapon/shard/atom_init()
+	. = ..()
+
+	icon_state = pick("large", "medium", "small")
+	switch(icon_state)
+		if("small")
+			pixel_x = rand(-12, 12)
+			pixel_y = rand(-12, 12)
+		if("medium")
+			pixel_x = rand(-8, 8)
+			pixel_y = rand(-8, 8)
+		if("large")
+			pixel_x = rand(-5, 5)
+			pixel_y = rand(-5, 5)
+
+/obj/item/weapon/shard/attackby(obj/item/I, mob/user, params)
+	if(iswelder(I))
+		var/obj/item/weapon/weldingtool/WT = I
+		if(WT.use(0, user))
 			var/obj/item/stack/sheet/glass/NG = new (user.loc)
 			for(var/obj/item/stack/sheet/glass/G in user.loc)
 				if(G==NG)
 					continue
-				if(G.amount>=G.max_amount)
+				if(G.get_amount() >= G.max_amount)
 					continue
 				G.attackby(NG, user)
-				to_chat(usr, "You add the newly-formed glass to the stack. It now contains [NG.amount] sheets.")
-			//SN src = null
+				to_chat(usr, "You add the newly-formed glass to the stack. It now contains [NG.get_amount()] sheets.")
 			qdel(src)
-			return
-	return ..()
 
-/obj/item/weapon/shard/Crossed(AM as mob|obj)
-	if(ismob(AM))
+	else
+		return ..()
+
+/obj/item/weapon/shard/Crossed(atom/movable/AM)
+	if(ismob(AM) && !HAS_TRAIT(AM, TRAIT_LIGHT_STEP))
 		var/mob/M = AM
-		to_chat(M, "\red <B>You step in the broken glass!</B>")
-		playsound(src.loc, 'sound/effects/glass_step.ogg', 50, 1)
+		to_chat(M, "<span class='warning'><B>You step on the [src]!</B></span>")
+		playsound(src, on_step_sound, VOL_EFFECTS_MASTER)
 		if(ishuman(M))
 			var/mob/living/carbon/human/H = M
 
 			if(H.species.flags[IS_SYNTHETIC])
 				return
 
-			if(!H.shoes && (!H.wear_suit || !(H.wear_suit.body_parts_covered & FEET)))
-				var/datum/organ/external/affecting = H.get_organ(pick("l_foot", "r_foot"))
-				if(affecting.status & ORGAN_ROBOT)
+			if(H.wear_suit && (H.wear_suit.body_parts_covered & LEGS) && H.wear_suit.flags & THICKMATERIAL)
+				return
+
+			if(H.species.flags[NO_MINORCUTS])
+				return
+
+			if(H.buckled)
+				return
+
+			if(!H.shoes)
+				var/obj/item/organ/external/BP = H.bodyparts_by_name[pick(BP_L_LEG , BP_R_LEG)]
+				if(BP.is_robotic())
 					return
-				H.Weaken(3)
-				affecting.take_damage(5, 0)
+				BP.take_damage(5, 0)
+				if(!H.species.flags[NO_PAIN])
+					H.Weaken(3)
 				H.updatehealth()
-	..()
-
-
-
+	. = ..()
 
 /*
  * Phoron Glass sheets
@@ -359,23 +394,6 @@
 
 /obj/item/stack/sheet/glass/phoronglass/attack_self(mob/user)
 	construct_window(user)
-
-/obj/item/stack/sheet/glass/phoronglass/attackby(obj/item/W, mob/user)
-	..()
-	if(istype(W, /obj/item/stack/rods))
-		var/obj/item/stack/rods/V  = W
-		var/obj/item/stack/sheet/glass/phoronrglass/RG = new (user.loc)
-		RG.add_fingerprint(user)
-		RG.add_to_stacks(user)
-		V.use(1)
-		var/obj/item/stack/sheet/glass/G = src
-		src = null
-		var/replace = (user.get_inactive_hand() == G)
-		G.use(1)
-		if (!G && !RG && replace)
-			user.put_in_hands(RG)
-	else
-		return ..()
 
 /*
  * Reinforced phoron glass sheets

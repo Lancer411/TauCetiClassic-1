@@ -8,15 +8,14 @@
 	var/image/obscured
 
 /turf/proc/visibilityChanged()
-	if(ticker)
-		cameranet.updateVisibility(src)
+	cameranet.updateVisibility(src)
 
 /turf/simulated/Destroy()
 	visibilityChanged()
 	return ..()
 
-/turf/simulated/New()
-	..()
+/turf/simulated/atom_init()
+	. = ..()
 	visibilityChanged()
 
 
@@ -24,27 +23,23 @@
 // STRUCTURES
 
 /obj/structure/Destroy()
-	if(ticker)
-		cameranet.updateVisibility(src)
+	cameranet.updateVisibility(src)
 	climbers.Cut()
 	return ..()
 
-/obj/structure/New()
-	..()
-	if(ticker)
-		cameranet.updateVisibility(src)
+/obj/structure/atom_init()
+	. = ..()
+	cameranet.updateVisibility(src)
 
 // EFFECTS
 
 /obj/effect/Destroy()
-	if(ticker)
-		cameranet.updateVisibility(src)
+	cameranet.updateVisibility(src)
 	return ..()
 
-/obj/effect/New()
-	..()
-	if(ticker)
-		cameranet.updateVisibility(src)
+/obj/effect/atom_init()
+	. = ..()
+	cameranet.updateVisibility(src)
 
 
 // DOORS
@@ -64,7 +59,7 @@
 // This might be laggy, comment it out if there are problems.
 /mob/living/silicon/robot/var/updating = 0
 
-/mob/living/silicon/robot/Move()
+/mob/living/silicon/robot/Move(NewLoc, Dir = 0, step_x = 0, step_y = 0)
 	var/oldLoc = src.loc
 	. = ..()
 	if(.)
@@ -75,31 +70,5 @@
 					if(oldLoc != src.loc)
 						cameranet.updatePortableCamera(src.camera)
 					updating = 0
-
-// CAMERA
-
-// An addition to deactivate which removes/adds the camera from the chunk list based on if it works or not.
-
-/obj/machinery/camera/deactivate(user, choice = 1)
-	..(user, choice)
-	if(src.can_use())
-		cameranet.addCamera(src)
-	else
-		src.set_light(0)
-		cameranet.removeCamera(src)
-
-/obj/machinery/camera/New()
-	..()
-	cameranet.cameras += src //Camera must be added to global list of all cameras no matter what...
-	var/list/open_networks = difflist(network,RESTRICTED_CAMERA_NETWORKS) //...but if all of camera's networks are restricted, it only works for specific camera consoles.
-	if(open_networks.len) //If there is at least one open network, chunk is available for AI usage.
-		cameranet.addCamera(src)
-
-/obj/machinery/camera/Destroy()
-	cameranet.cameras -= src
-	var/list/open_networks = difflist(network,RESTRICTED_CAMERA_NETWORKS)
-	if(open_networks.len)
-		cameranet.removeCamera(src)
-	return ..()
 
 #undef BORG_CAMERA_BUFFER

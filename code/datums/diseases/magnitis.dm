@@ -5,7 +5,7 @@
 	cure = "Iron"
 	cure_id = "iron"
 	agent = "Fukkos Miracos"
-	affected_species = list("Human")
+	affected_species = list(HUMAN)
 	curable = 0
 	permeability_mod = 0.75
 	desc = "This disease disrupts the magnetic field of your body, making it act as if a powerful magnet. Injections of iron help stabilize the field."
@@ -16,7 +16,7 @@
 	switch(stage)
 		if(2)
 			if(prob(2))
-				to_chat(affected_mob, "\red You feel a slight shock course through your body.")
+				to_chat(affected_mob, "<span class='warning'>You feel a slight shock course through your body.</span>")
 			if(prob(2))
 				for(var/obj/M in orange(2,affected_mob))
 					if(!M.anchored && (M.flags & CONDUCT))
@@ -36,9 +36,9 @@
 						*/
 		if(3)
 			if(prob(2))
-				to_chat(affected_mob, "\red You feel a strong shock course through your body.")
+				to_chat(affected_mob, "<span class='warning'>You feel a strong shock course through your body.</span>")
 			if(prob(2))
-				to_chat(affected_mob, "\red You feel like clowning around.")
+				to_chat(affected_mob, "<span class='warning'>You feel like clowning around.</span>")
 			if(prob(4))
 				for(var/obj/M in orange(4,affected_mob))
 					if(!M.anchored && (M.flags & CONDUCT))
@@ -64,9 +64,9 @@
 						*/
 		if(4)
 			if(prob(2))
-				to_chat(affected_mob, "\red You feel a powerful shock course through your body.")
+				to_chat(affected_mob, "<span class='warning'>You feel a powerful shock course through your body.</span>")
 			if(prob(2))
-				to_chat(affected_mob, "\red You query upon the nature of miracles.")
+				to_chat(affected_mob, "<span class='warning'>You query upon the nature of miracles.</span>")
 			if(prob(8))
 				for(var/obj/M in orange(6,affected_mob))
 					if(!M.anchored && (M.flags & CONDUCT))

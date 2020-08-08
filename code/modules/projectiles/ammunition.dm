@@ -4,18 +4,18 @@
 	desc = "A bullet casing."
 	icon = 'icons/obj/ammo.dmi'
 	icon_state = "s-casing"
-	flags = FPRINT | TABLEPASS | CONDUCT
-	slot_flags = SLOT_BELT
+	flags = CONDUCT
+	slot_flags = SLOT_FLAGS_BELT
 	throwforce = 1
-	w_class = 1.0
+	w_class = ITEM_SIZE_TINY
 	var/caliber = null							//Which kind of guns it can be loaded into
 	var/projectile_type = null					//The bullet type to create when New() is called
 	var/obj/item/projectile/BB = null 			//The loaded bullet
 	var/pellets = 0								//Pellets for spreadshot
 	var/variance = 0							//Variance for inaccuracy fundamental to the casing
 
-/obj/item/ammo_casing/New()
-	..()
+/obj/item/ammo_casing/atom_init()
+	. = ..()
 	if(projectile_type)
 		BB = new projectile_type(src)
 	pixel_x = rand(-10.0, 10)
@@ -33,25 +33,26 @@
 		BB = new projectile_type(src)
 	return
 
-/obj/item/ammo_casing/attackby(obj/item/weapon/W, mob/user)
-	if(istype(W, /obj/item/weapon/screwdriver))
+/obj/item/ammo_casing/attackby(obj/item/I, mob/user, params)
+	if(isscrewdriver(I))
 		if(BB)
 			if(initial(BB.name) == "bullet")
-				var/tmp_label = ""
-				var/label_text = sanitize(copytext(input(user, "Inscribe some text into \the [initial(BB.name)]","Inscription",tmp_label), 1, MAX_NAME_LEN))
+				var/label_text = sanitize_safe(input(user, "Inscribe some text into \the [initial(BB.name)]","Inscription"), MAX_NAME_LEN)
 				if(length(label_text) > 20)
-					to_chat(user, "\red The inscription can be at most 20 characters long.")
+					to_chat(user, "<span class='warning'>The inscription can be at most 20 characters long.</span>")
 				else
 					if(label_text == "")
-						to_chat(user, "\blue You scratch the inscription off of [initial(BB)].")
+						to_chat(user, "<span class='notice'>You scratch the inscription off of [initial(BB)].</span>")
 						BB.name = initial(BB.name)
 					else
-						to_chat(user, "\blue You inscribe \"[label_text]\" into \the [initial(BB.name)].")
+						to_chat(user, "<span class='notice'>You inscribe \"[label_text]\" into \the [initial(BB.name)].</span>")
 						BB.name = "[initial(BB.name)] \"[label_text]\""
 			else
-				to_chat(user, "\blue You can only inscribe a metal bullet.")//because inscribing beanbags is silly
+				to_chat(user, "<span class='notice'>You can only inscribe a metal bullet.</span>")//because inscribing beanbags is silly
 		else
-			to_chat(user, "\blue There is no bullet in the casing to inscribe anything into.")
+			to_chat(user, "<span class='notice'>There is no bullet in the casing to inscribe anything into.</span>")
+	else
+		return ..()
 
 //Boxes of ammo
 /obj/item/ammo_box
@@ -59,12 +60,12 @@
 	desc = "A box of ammo"
 	icon_state = "357"
 	icon = 'icons/obj/ammo.dmi'
-	flags = FPRINT | TABLEPASS | CONDUCT
-	slot_flags = SLOT_BELT
+	flags = CONDUCT
+	slot_flags = SLOT_FLAGS_BELT
 	item_state = "syringe_kit"
-	m_amt = 50000
+	m_amt = 500
 	throwforce = 2
-	w_class = 2.0
+	w_class = ITEM_SIZE_SMALL
 	throw_speed = 4
 	throw_range = 10
 	var/list/stored_ammo = list()
@@ -74,8 +75,9 @@
 	var/caliber
 	var/multiload = 1
 
-/obj/item/ammo_box/New()
-	for(var/i = 1, i <= max_ammo, i++)
+/obj/item/ammo_box/atom_init()
+	. = ..()
+	for (var/i in 1 to max_ammo)
 		stored_ammo += new ammo_type(src)
 	update_icon()
 
@@ -98,10 +100,10 @@
 			return 1
 	return 0
 
-/obj/item/ammo_box/attackby(obj/item/A, mob/user, silent = 0)
+/obj/item/ammo_box/attackby(obj/item/I, mob/user, params)
 	var/num_loaded = 0
-	if(istype(A, /obj/item/ammo_box))
-		var/obj/item/ammo_box/AM = A
+	if(istype(I, /obj/item/ammo_box))
+		var/obj/item/ammo_box/AM = I
 		for(var/obj/item/ammo_casing/AC in AM.stored_ammo)
 			var/did_load = give_round(AC)
 			if(did_load)
@@ -109,19 +111,17 @@
 				num_loaded++
 			if(!did_load || !multiload)
 				break
-	if(istype(A, /obj/item/ammo_casing))
-		var/obj/item/ammo_casing/AC = A
+	if(istype(I, /obj/item/ammo_casing))
+		var/obj/item/ammo_casing/AC = I
 		if(give_round(AC))
-			user.drop_item()
-			AC.loc = src
+			user.drop_from_inventory(AC, src)
 			num_loaded++
 	if(num_loaded)
-		if (!silent)
-			to_chat(user, "<span class='notice'>You load [num_loaded] shell\s into \the [src]!</span>")
-		A.update_icon()
+		to_chat(user, "<span class='notice'>You load [num_loaded] shell\s into \the [src]!</span>")
+		I.update_icon()
 		update_icon()
 		return num_loaded
-	return 0
+	return ..()
 
 /obj/item/ammo_box/attack_self(mob/user)
 	var/obj/item/ammo_casing/A = get_round()

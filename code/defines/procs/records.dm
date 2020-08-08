@@ -9,11 +9,13 @@
 	G.fields["fingerprint"] = "Unknown"
 	G.fields["p_stat"] = "Active"
 	G.fields["m_stat"] = "Stable"
-	G.fields["species"] = "Human"
+	G.fields["species"] = HUMAN
 	G.fields["home_system"]	= "Unknown"
 	G.fields["citizenship"]	= "Unknown"
 	G.fields["faction"]		= "Unknown"
 	G.fields["religion"]	= "Unknown"
+	G.fields["photo_f"] = new /icon()
+	G.fields["photo_s"] = new /icon()
 	data_core.general += G
 	return G
 

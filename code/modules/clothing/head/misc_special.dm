@@ -15,7 +15,7 @@
 	name = "welding helmet"
 	desc = "A head-mounted face cover designed to protect the wearer completely from space-arc eye."
 	icon_state = "welding"
-	flags = (FPRINT | TABLEPASS | HEADCOVERSEYES | HEADCOVERSMOUTH)
+	flags = (HEADCOVERSEYES | HEADCOVERSMOUTH)
 	item_state = "welding"
 	m_amt = 3000
 	g_amt = 1000
@@ -25,7 +25,7 @@
 	body_parts_covered = HEAD|FACE|EYES
 	action_button_name = "Flip Welding Mask"
 	siemens_coefficient = 0.9
-	w_class = 3
+	w_class = ITEM_SIZE_NORMAL
 
 /obj/item/clothing/head/welding/attack_self()
 	toggle()
@@ -36,7 +36,7 @@
 	set name = "Adjust welding mask"
 	set src in usr
 
-	if(usr.canmove && !usr.stat && !usr.restrained())
+	if(!usr.incapacitated())
 		if(src.up)
 			src.up = !src.up
 			src.flags |= (HEADCOVERSEYES | HEADCOVERSMOUTH)
@@ -59,22 +59,27 @@
 	name = "cake-hat"
 	desc = "It's tasty looking!"
 	icon_state = "cake0"
-	flags = FPRINT|TABLEPASS|HEADCOVERSEYES
+	flags = HEADCOVERSEYES
 	var/onfire = 0.0
 	var/status = 0
 	var/fire_resist = T0C+1300	//this is the max temp it can stand before you start to cook. although it might not burn away, you take damage
 	var/processing = 0 //I dont think this is used anywhere.
 	body_parts_covered = EYES
 
+obj/item/clothing/head/cakehat/get_current_temperature()
+	if(onfire)
+		return 700
+	return 0
+
 /obj/item/clothing/head/cakehat/process()
 	if(!onfire)
-		SSobj.processing.Remove(src)
+		STOP_PROCESSING(SSobj, src)
 		return
 
 	var/turf/location = src.loc
-	if(istype(location, /mob/))
-		var/mob/living/carbon/human/M = location
-		if(M.l_hand == src || M.r_hand == src || M.head == src)
+	if(iscarbon(location))
+		var/mob/living/carbon/M = location
+		if(M.l_hand == src || M.r_hand == src || M.head == src || M.mouth == src)
 			location = M.loc
 
 	if (istype(location, /turf))
@@ -87,7 +92,7 @@
 		src.force = 3
 		src.damtype = "fire"
 		src.icon_state = "cake1"
-		SSobj.processing |= src
+		START_PROCESSING(SSobj, src)
 	else
 		src.force = null
 		src.damtype = "brute"
@@ -124,23 +129,23 @@
 	icon_state = "hardhat0_pumpkin"//Could stand to be renamed
 	item_state = "hardhat0_pumpkin"
 	item_color = "pumpkin"
-	flags = FPRINT | TABLEPASS | HEADCOVERSEYES | HEADCOVERSMOUTH | BLOCKHAIR
+	flags = HEADCOVERSEYES | HEADCOVERSMOUTH | BLOCKHAIR
 	flags_inv = HIDEMASK|HIDEEARS|HIDEEYES|HIDEFACE
 	body_parts_covered = HEAD|EYES
 	var/brightness_on = 2 //luminosity when on
 	var/on = 0
-	w_class = 3
+	w_class = ITEM_SIZE_NORMAL
 
-	attack_self(mob/user)
-		if(!isturf(user.loc))
-			to_chat(user, "You cannot turn the light on while in this [user.loc]")//To prevent some lighting anomalities.
-			return
-		on = !on
-		icon_state = "hardhat[on]_[item_color]"
-		item_state = "hardhat[on]_[item_color]"
+/obj/item/clothing/head/pumpkinhead/attack_self(mob/user)
+	if(!isturf(user.loc))
+		to_chat(user, "You cannot turn the light on while in this [user.loc]")//To prevent some lighting anomalities.
+		return
+	on = !on
+	icon_state = "hardhat[on]_[item_color]"
+	item_state = "hardhat[on]_[item_color]"
 
-		if(on)	set_light(brightness_on)
-		else	set_light(0)
+	if(on)	set_light(brightness_on)
+	else	set_light(0)
 
 /*
  * Kitty ears
@@ -149,20 +154,19 @@
 	name = "kitty ears"
 	desc = "A pair of kitty ears. Meow!"
 	icon_state = "kitty"
-	flags = FPRINT | TABLEPASS
 	body_parts_covered = 0
 	var/icon/mob
 	var/icon/mob2
 	siemens_coefficient = 1.5
 
-	update_icon(mob/living/carbon/human/user)
-		if(!istype(user)) return
-		mob = new/icon("icon" = 'icons/mob/head.dmi', "icon_state" = "kitty")
-		mob2 = new/icon("icon" = 'icons/mob/head.dmi', "icon_state" = "kitty2")
-		mob.Blend(rgb(user.r_hair, user.g_hair, user.b_hair), ICON_ADD)
-		mob2.Blend(rgb(user.r_hair, user.g_hair, user.b_hair), ICON_ADD)
+/obj/item/clothing/head/kitty/update_icon(mob/living/carbon/human/user)
+	if(!istype(user)) return
+	mob = new/icon("icon" = 'icons/mob/head.dmi', "icon_state" = "kitty")
+	mob2 = new/icon("icon" = 'icons/mob/head.dmi', "icon_state" = "kitty2")
+	mob.Blend(rgb(user.r_hair, user.g_hair, user.b_hair), ICON_ADD)
+	mob2.Blend(rgb(user.r_hair, user.g_hair, user.b_hair), ICON_ADD)
 
-		var/icon/earbit = new/icon("icon" = 'icons/mob/head.dmi', "icon_state" = "kittyinner")
-		var/icon/earbit2 = new/icon("icon" = 'icons/mob/head.dmi', "icon_state" = "kittyinner2")
-		mob.Blend(earbit, ICON_OVERLAY)
-		mob2.Blend(earbit2, ICON_OVERLAY)
+	var/icon/earbit = new/icon("icon" = 'icons/mob/head.dmi', "icon_state" = "kittyinner")
+	var/icon/earbit2 = new/icon("icon" = 'icons/mob/head.dmi', "icon_state" = "kittyinner2")
+	mob.Blend(earbit, ICON_OVERLAY)
+	mob2.Blend(earbit2, ICON_OVERLAY)

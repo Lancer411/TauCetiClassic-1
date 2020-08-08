@@ -52,15 +52,15 @@ Made by Xhuis
 	var/objective_explanation
 
 /proc/is_thrall(mob/living/M)
-	return istype(M) && M.mind && ticker && ticker.mode && (M.mind in ticker.mode.thralls)
+	return istype(M) && M.mind && SSticker && SSticker.mode && (M.mind in SSticker.mode.thralls)
 
 
 /proc/is_shadow_or_thrall(mob/living/M)
-	return istype(M) && M.mind && ticker && ticker.mode && ((M.mind in ticker.mode.thralls) || (M.mind in ticker.mode.shadows))
+	return istype(M) && M.mind && SSticker && SSticker.mode && ((M.mind in SSticker.mode.thralls) || (M.mind in SSticker.mode.shadows))
 
 
 /proc/is_shadow(mob/living/M)
-	return istype(M) && M.mind && ticker && ticker.mode && (M.mind in ticker.mode.shadows)
+	return istype(M) && M.mind && SSticker && SSticker.mode && (M.mind in SSticker.mode.shadows)
 
 
 /datum/game_mode/shadowling
@@ -68,14 +68,16 @@ Made by Xhuis
 	config_tag = "shadowling"
 	role_type = ROLE_SHADOWLING
 	required_players = 30
-	required_players_secret = 15
+	required_players_secret = 25
 	required_enemies = 2
 	recommended_enemies = 2
 
 	votable = 0
 
 	restricted_jobs = list("AI", "Cyborg")
-	protected_jobs = list("Security Officer", "Warden", "Detective", "Head of Security", "Captain")
+	protected_jobs = list("Security Cadet", "Security Officer", "Warden", "Detective", "Head of Security", "Captain")
+
+	restricted_species_flags = list(IS_SYNTHETIC)
 
 /datum/game_mode/shadowling/announce()
 	to_chat(world, "<b>The current game mode is - Shadowling!</b>")
@@ -94,7 +96,9 @@ Made by Xhuis
 			if(player.assigned_role == job)
 				antag_candidates -= player
 
-	var/shadowlings = 2 //How many shadowlings there are; hardcoded to 2
+	var/shadowlings = required_enemies
+	if (antag_candidates.len <= recommended_enemies)
+		shadowlings = antag_candidates.len
 
 	while(shadowlings)
 		var/datum/mind/shadow = pick(antag_candidates)
@@ -103,12 +107,12 @@ Made by Xhuis
 		modePlayer += shadow
 		shadow.special_role = "shadowling"
 		shadowlings--
-	return 1
+	return TRUE
 
 
 /datum/game_mode/shadowling/post_setup()
 	for(var/datum/mind/shadow in shadows)
-		log_game("[shadow.key] (ckey) has been selected as a Shadowling.")
+		log_game("[key_name(shadow)] has been selected as a Shadowling.")
 		sleep(10)
 		to_chat(shadow.current, "<br>")
 		to_chat(shadow.current, "<span class='deadsay'><b><font size=3>You are a shadowling!</font></b></span>")
@@ -121,7 +125,7 @@ Made by Xhuis
 	return ..()
 
 /datum/game_mode/proc/greet_shadow(datum/mind/shadow)
-	to_chat(shadow.current, "<b>Currently, you are disguised as an employee aboard [world.name].</b>")
+	to_chat(shadow.current, "<b>Currently, you are disguised as an employee aboard [station_name()].</b>")
 	to_chat(shadow.current, "<b>In your limited state, you have three abilities: Enthrall, Hatch, and Hivemind Commune.</b>")
 	to_chat(shadow.current, "<b>Any other shadowlings are you allies. You must assist them as they shall assist you.</b>")
 	to_chat(shadow.current, "<b>If you are new to shadowling, or want to read about abilities, check the wiki page at http://tauceti.ru/wiki/Shadowling</b><br>")
@@ -168,21 +172,6 @@ Made by Xhuis
 	GAME FINISH CHECKS
 */
 
-/*
-/datum/game_mode/shadowling/check_finished()
-	var/shadows_alive = 0 //and then shadowling was kill
-	for(var/datum/mind/shadow in shadows) //but what if shadowling was not kill?
-		if(!istype(shadow.current,/mob/living/carbon/human) && !istype(shadow.current,/mob/living/simple_animal/ascendant_shadowling))
-			continue
-		if(shadow.current.stat == DEAD)
-			continue
-		shadows_alive++
-	if(shadows_alive)
-		return ..()
-	else
-		shadowling_dead = 1 //but shadowling was kill :(
-		return 1*/
-
 /datum/game_mode/shadowling/proc/check_shadow_killed()
 	var/shadows_alive = 0 //and then shadowling was kill
 	for(var/datum/mind/shadow in shadows) //but what if shadowling was not kill?
@@ -205,16 +194,22 @@ Made by Xhuis
 
 /datum/game_mode/shadowling/declare_completion()
 	//if(check_shadow_victory() && SSshuttle.emergency.mode >= SHUTTLE_ESCAPE) //Doesn't end instantly - this is hacky and I don't know of a better way ~X
-	completion_text += "<B>Shadowling mode resume:</B><BR>"
+	completion_text += "<h3>Shadowling mode resume:</h3>"
 	if(check_shadow_victory() && SSshuttle.location==2)
-		completion_text += "<font size=3, color=green><B>The shadowlings have ascended and taken over the station!</FONT></B>"
+		mode_result = "win - shadowlings ascended"
+		feedback_set_details("round_end_result",mode_result)
+		completion_text += "<span style='color: green; font-weight: bold;'>The shadowlings have ascended and taken over the station!</span>"
 		score["roleswon"]++
 	//else if(shadowling_dead && !check_shadow_victory()) //If the shadowlings have ascended, they can not lose the round
 	else if(check_shadow_killed() && !check_shadow_victory())
-		completion_text += "<font size=3, color=red><B>The shadowlings have been killed by the crew!</B></FONT>"
+		mode_result = "loss - shadowlings dead"
+		feedback_set_details("round_end_result",mode_result)
+		completion_text += "<span style='color: red; font-weight: bold;'>The shadowlings have been killed by the crew!</span>"
 	//else if(!check_shadow_victory() && SSshuttle.emergency.mode >= SHUTTLE_ESCAPE)
 	else if(!check_shadow_victory() && SSshuttle.location==2)
-		completion_text += "<font size=3, color=red><B>The crew has escaped the station before the shadowlings could ascend!</B></FONT>"
+		mode_result = "halfwin - evacuation"
+		feedback_set_details("round_end_result",mode_result)
+		completion_text += "<span style='color: red; font-weight: bold;'>The crew has escaped the station before the shadowlings could ascend!</span>"
 	..()
 	return 1
 
@@ -225,13 +220,17 @@ Made by Xhuis
 		text += printlogo("shadowling", "shadowlings")
 		for(var/datum/mind/shadow in shadows)
 			text += printplayerwithicon(shadow)
-		text += "<BR>"
+		text += "<br>"
 		if(thralls.len)
 			text += printlogo("thrall", "thralls")
 			for(var/datum/mind/thrall in thralls)
 				text += printplayerwithicon(thrall)
-			text += "<BR>"
-		text += "<HR>"
+			text += "<br>"
+
+	if(text)
+		antagonists_completion += list(list("mode" = "shadowling", "html" = text))
+		text = "<div class='block'>[text]</div>"
+
 	return text
 
 /*
@@ -328,69 +327,3 @@ Made by Xhuis
 				for(var/image/I in thrall.current.client.images)
 					if(I.icon_state == "thrall" || I.icon_state == "shadowling")
 						qdel(I)
-
-/*
-/datum/species/shadow
-	// Humans cursed to stay in the darkness, lest their life forces drain. They regain health in shadow and die in light.
-	name = "Shadow"
-	language = "Sol Common"
-	unarmed_type = /datum/unarmed_attack/claws
-	warning_low_pressure = 50
-	hazard_low_pressure = -1
-
-	cold_level_1 = 50
-	cold_level_2 = -1
-	cold_level_3 = -1
-
-	heat_level_1 = 2000
-	heat_level_2 = 3000
-	heat_level_3 = 4000
-	blood_color = "#000000"
-	//id = "shadow"
-	darksight = 8
-	//sexes = 0
-	//ignored_by = list(/mob/living/simple_animal/hostile/faithless)
-	//faction = list("faithless")
-	//meat = /obj/item/weapon/reagent_containers/food/snacks/meat/slab/human/mutant/shadow
-	//specflags = list(NOBREATH,NOBLOOD,RADIMMUNE)
-	flags = list(
-	 NO_BREATHE = TRUE
-	,NO_BLOOD = TRUE
-	,RAD_IMMUNE = TRUE
-	)*/
-
-/datum/species/shadow/ling
-	//Normal shadowpeople but with enhanced effects
-	name = "Shadowling"
-	icobase = 'icons/mob/human_races/r_shadowling.dmi'
-	deform = 'icons/mob/human_races/r_def_shadowling.dmi'
-	language = "Sol Common"
-	unarmed_type = /datum/unarmed_attack/claws
-
-	warning_low_pressure = 50
-	hazard_low_pressure = -1
-
-	cold_level_1 = 50
-	cold_level_2 = -1
-	cold_level_3 = -1
-
-	heat_level_1 = 2000
-	heat_level_2 = 3000
-	heat_level_3 = 4000
-
-	blood_color = "#000000"
-	darksight = 8
-
-	flags = list(
-	 NO_BREATHE = TRUE
-	,NO_BLOOD = TRUE
-	,RAD_IMMUNE = TRUE
-	,VIRUS_IMMUNE = TRUE
-	)
-	burn_mod = 2 //2x burn damage lel
-
-
-/datum/species/shadow/ling/handle_post_spawn(mob/living/carbon/human/H)
-	H.gender = NEUTER
-
-	return ..()

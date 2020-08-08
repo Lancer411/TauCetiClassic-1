@@ -6,7 +6,7 @@
 	cure = "Common Cold Anti-bodies & Spaceacillin"
 	cure_id = "spaceacillin"
 	agent = "ICE9-rhinovirus"
-	affected_species = list("Human")
+	affected_species = list(HUMAN)
 	desc = "If left untreated the subject will slow, as if partly frozen."
 	severity = "Moderate"
 
@@ -16,7 +16,7 @@
 		if(2)
 			affected_mob.bodytemperature -= 10
 			if(prob(1) && prob(10))
-				to_chat(affected_mob, "\blue You feel better.")
+				to_chat(affected_mob, "<span class='notice'>You feel better.</span>")
 				cure()
 				return
 			if(prob(1))
@@ -24,9 +24,9 @@
 			if(prob(1))
 				affected_mob.emote("cough")
 			if(prob(1))
-				to_chat(affected_mob, "\red Your throat feels sore.")
+				to_chat(affected_mob, "<span class='warning'>Your throat feels sore.</span>")
 			if(prob(5))
-				to_chat(affected_mob, "\red You feel stiff.")
+				to_chat(affected_mob, "<span class='warning'>You feel stiff.</span>")
 		if(3)
 			affected_mob.bodytemperature -= 20
 			if(prob(1))
@@ -34,6 +34,6 @@
 			if(prob(1))
 				affected_mob.emote("cough")
 			if(prob(1))
-				to_chat(affected_mob, "\red Your throat feels sore.")
+				to_chat(affected_mob, "<span class='warning'>Your throat feels sore.</span>")
 			if(prob(10))
-				to_chat(affected_mob, "\red You feel stiff.")
+				to_chat(affected_mob, "<span class='warning'>You feel stiff.</span>")

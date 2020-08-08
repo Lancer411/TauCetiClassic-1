@@ -17,13 +17,14 @@
 	name = "status display"
 	anchored = 1
 	density = 0
-	use_power = 1
+	use_power = IDLE_POWER_USE
 	idle_power_usage = 10
-	var/mode = 1	// 0 = Blank
+	var/mode = 5	// 0 = Blank
 					// 1 = Shuttle timer
 					// 2 = Arbitrary message(s)
 					// 3 = alert picture
 					// 4 = Supply shuttle timer
+					// 5 = default N picture
 
 	var/picture_state	// icon_state of alert picture
 	var/message1 = ""	// message line 1
@@ -31,24 +32,26 @@
 	var/index1			// display index for scrolling messages or 0 if non-scrolling
 	var/index2
 
-	var/frequency = 1435		// radio frequency
+	frequency = 1435		// radio frequency
 	var/supply_display = 0		// true if a supply shuttle display
 
 	var/friendc = 0      // track if Friend Computer mode
 
-	maptext_height = 26
+	maptext_height = 28
 	maptext_width = 32
 
 	// new display
 	// register for radio system
 
-/obj/machinery/status_display/New()
-	..()
-	spawn(5)	// must wait for map loading to finish
-		if(radio_controller)
-			radio_controller.add_object(src, frequency)
+/obj/machinery/status_display/atom_init()
+	. = ..()
+	status_display_list += src
+	radio_controller.add_object(src, frequency)
+	update()
+
 
 /obj/machinery/status_display/Destroy()
+	status_display_list -= src
 	if(radio_controller)
 		radio_controller.remove_object(src,frequency)
 	return ..()
@@ -77,7 +80,7 @@
 		return
 
 	if(overlays.len && !friendc || mode == 4)
-		overlays.Cut()
+		cut_overlays()
 
 	switch(mode)
 		if(0)				//blank
@@ -90,7 +93,7 @@
 					line1 = "-ETD-"
 				else
 					line1 = "-ETA-"
-				if(length(line2) > CHARS_PER_LINE)
+				if(length_char(line2) > CHARS_PER_LINE)
 					line2 = "Error!"
 				update_display(line1, line2)
 			else
@@ -102,7 +105,7 @@
 			if(!index1)
 				line1 = message1
 			else
-				line1 = copytext(message1+"|"+message1, index1, index1+CHARS_PER_LINE)
+				line1 = copytext_char(message1+"|"+message1, index1, index1+CHARS_PER_LINE)
 				var/message1_len = length(message1)
 				index1 += SCROLL_SPEED
 				if(index1 > message1_len)
@@ -111,8 +114,8 @@
 			if(!index2)
 				line2 = message2
 			else
-				line2 = copytext(message2+"|"+message2, index2, index2+CHARS_PER_LINE)
-				var/message2_len = length(message2)
+				line2 = copytext_char(message2+"|"+message2, index2, index2+CHARS_PER_LINE)
+				var/message2_len = length_char(message2)
 				index2 += SCROLL_SPEED
 				if(index2 > message2_len)
 					index2 -= message2_len
@@ -122,7 +125,7 @@
 			var/line2
 			if(SSshuttle.moving)
 				line2 = get_SSshuttle_timer()
-				if(lentext(line2) > CHARS_PER_LINE)
+				if(length_char(line2) > CHARS_PER_LINE)
 					line2 = "Error"
 			else
 				if(SSshuttle.at_station)
@@ -130,6 +133,8 @@
 				else
 					line1 = ""
 			update_display(line1, line2)
+		if(5)				// default picture
+			set_picture("default")
 
 /obj/machinery/status_display/examine(mob/user)
 	..()
@@ -140,14 +145,14 @@
 
 /obj/machinery/status_display/proc/set_message(m1, m2)
 	if(m1)
-		index1 = (length(m1) > CHARS_PER_LINE)
+		index1 = (length_char(m1) > CHARS_PER_LINE)
 		message1 = m1
 	else
 		message1 = ""
 		index1 = 0
 
 	if(m2)
-		index2 = (length(m2) > CHARS_PER_LINE)
+		index2 = (length_char(m2) > CHARS_PER_LINE)
 		message2 = m2
 	else
 		message2 = ""
@@ -156,7 +161,7 @@
 /obj/machinery/status_display/proc/set_picture(state)
 	picture_state = state
 	remove_display()
-	overlays += image('icons/obj/status_display.dmi', icon_state=picture_state)
+	add_overlay(image('icons/obj/status_display.dmi', icon_state=picture_state))
 
 /obj/machinery/status_display/proc/update_display(line1, line2)
 	var/new_text = {"<div style="font-size:[FONT_SIZE];color:[FONT_COLOR];font:'[FONT_STYLE]';text-align:center;" valign="top">[line1]<br>[line2]</div>"}
@@ -179,7 +184,7 @@
 
 /obj/machinery/status_display/proc/remove_display()
 	if(overlays.len)
-		overlays.Cut()
+		cut_overlays()
 	if(maptext)
 		maptext = ""
 
@@ -205,6 +210,10 @@
 			if(supply_display)
 				mode = 4
 
+		if("default")
+			mode = 5
+
+
 	update()
 
 
@@ -223,10 +232,17 @@
 
 	var/emotion = "Neutral"
 
+/obj/machinery/ai_status_display/atom_init()
+	. = ..()
+	ai_status_display_list += src
+
+/obj/machinery/ai_status_display/Destroy()
+	ai_status_display_list -= src
+	return ..()
 
 /obj/machinery/ai_status_display/process()
 	if(stat & NOPOWER)
-		overlays.Cut()
+		cut_overlays()
 		return
 
 	update()
@@ -241,7 +257,7 @@
 /obj/machinery/ai_status_display/proc/update()
 
 	if(mode==0) //Blank
-		overlays.Cut()
+		cut_overlays()
 		return
 
 	if(mode==1)	// AI emoticon
@@ -272,6 +288,8 @@
 				set_picture("ai_facepalm")
 			if("Friend Computer")
 				set_picture("ai_friend")
+			if("HAL")
+				set_picture("ai_hal")
 
 		return
 
@@ -283,11 +301,11 @@
 /obj/machinery/ai_status_display/proc/set_picture(state)
 	picture_state = state
 	if(overlays.len)
-		overlays.Cut()
-	overlays += image('icons/obj/status_display.dmi', icon_state=picture_state)
+		cut_overlays()
+	add_overlay(image('icons/obj/status_display.dmi', icon_state=picture_state))
 
 #undef CHARS_PER_LINE
-#undef FOND_SIZE
+#undef FONT_SIZE
 #undef FONT_COLOR
 #undef FONT_STYLE
 #undef SCROLL_SPEED

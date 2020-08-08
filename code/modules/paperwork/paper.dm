@@ -9,26 +9,27 @@
 	icon = 'icons/obj/bureaucracy.dmi'
 	icon_state = "paper"
 	throwforce = 0
-	w_class = 1.0
+	w_class = ITEM_SIZE_TINY
 	throw_range = 1
 	throw_speed = 1
 	layer = 3.9
-	pressure_resistance = 1
-	slot_flags = SLOT_HEAD
+	slot_flags = SLOT_FLAGS_HEAD
 	body_parts_covered = HEAD
 	attack_verb = list("bapped")
 
 	var/info		//What's actually written on the paper.
 	var/info_links	//A different version of the paper which includes html links at fields and EOF
-	var/stamps		//The (text for the) stamps on the paper.
+	var/stamp_text		//The (text for the) stamp_text on the paper.
 	var/fields		//Amount of user created fields
+	var/sfields
+	var/free_space = MAX_PAPER_MESSAGE_LEN
 	var/list/stamped
-	var/ico[0]      //Icons and
-	var/offset_x[0] //offsets stored for later
-	var/offset_y[0] //usage by the photocopier
+	var/list/ico      //Icons and
+	var/list/offset_x //offsets stored for later
+	var/list/offset_y //usage by the photocopier
 	var/rigged = 0
-	var/spam_flag = 0
-	var/crumpled = 0
+	var/spam_flag = FALSE
+	var/crumpled = FALSE
 
 	var/const/deffont = "Verdana"
 	var/const/signfont = "Times New Roman"
@@ -36,15 +37,15 @@
 
 //lipstick wiping is in code/game/objects/items/weapons/cosmetics.dm!
 
-/obj/item/weapon/paper/New()
-	..()
+/obj/item/weapon/paper/atom_init()
+	. = ..()
 	pixel_y = rand(-8, 8)
 	pixel_x = rand(-9, 9)
-	stamps = ""
-	spawn(2)
-		update_icon()
-		updateinfolinks()
-		return
+	stamp_text = ""
+
+	update_icon()
+	update_space(info)
+	updateinfolinks()
 
 /obj/item/weapon/paper/update_icon()
 	if(icon_state == "scrap_bloodied")
@@ -54,39 +55,57 @@
 		return
 	icon_state = "paper"
 
-/obj/item/weapon/paper/examine()
-	set src in oview(1)
+/obj/item/weapon/paper/proc/update_space(var/new_text)
+	if(!new_text)
+		return
 
-//	..()	//We don't want them to see the dumb "this is a paper" thing every time.
-// I didn't like the idea that people can read tiny pieces of paper from across the room.
-// Now you need to be next to the paper in order to read it.
-	if(in_range(usr, src))
-		if(crumpled==1)
-			to_chat(usr, "<span class='notice'>You can't read anything until it crumpled.</span>")
+	free_space -= length(strip_html_properly(new_text))
+
+/obj/item/weapon/paper/examine(mob/user)
+	..()
+	if(in_range(user, src) || istype(user, /mob/dead/observer))
+		if(crumpled)
+			to_chat(user, "<span class='notice'>You can't read anything until it crumpled.</span>")
 			return
-		if(!(istype(usr, /mob/living/carbon/human) || istype(usr, /mob/dead/observer) || istype(usr, /mob/living/silicon)))
-			usr << browse("<HTML><HEAD><TITLE>[sanitize_popup(name)]</TITLE></HEAD><BODY>[sanitize_plus_popup(stars(revert_ja(info)))][stamps]</BODY></HTML>", "window=[name]")
-			onclose(usr, "[name]")
-		else
-			usr << browse("<HTML><HEAD><TITLE>[sanitize_popup(name)]</TITLE></HEAD><BODY>[info][stamps]</BODY></HTML>", "window=[name]")
-			onclose(usr, "[name]")
+		show_content(user)
 	else
-		to_chat(usr, "<span class='notice'>It is too far away.</span>")
-	return
+		to_chat(user, "<span class='notice'>It is too far away to see anything.</span>")
+
+/obj/item/weapon/paper/proc/show_content(mob/user, forceshow = FALSE, forcestars = FALSE, infolinks = FALSE, view = TRUE)
+	var/datum/asset/assets = get_asset_datum(/datum/asset/simple/paper)
+	assets.register()
+	assets.send(user)
+
+	name = sanitize(name)
+	var/data
+
+	if((!(ishuman(user) || isobserver(user) || issilicon(user)) && !forceshow) || forcestars)
+		data = "[stars(info)][stamp_text]"
+	else
+		data = "[infolinks ? info_links : info][stamp_text]"
+
+	if(view)
+		var/datum/browser/popup = new(usr, "window=[name]", "[name]", 300, 480, ntheme = CSS_THEME_LIGHT)
+		popup.set_content(data)
+		popup.open()
+	
+	return data
 
 /obj/item/weapon/paper/verb/rename()
 	set name = "Rename paper"
 	set category = "Object"
 	set src in usr
 
+
 	if((CLUMSY in usr.mutations) && prob(50))
-		to_chat(usr, "<span class='warning'>You cut yourself on the paper.</span>")
+		var/mob/living/carbon/human/H = usr
+		if(istype(H) && !H.species.flags[NO_MINORCUTS])
+			to_chat(usr, "<span class='warning'>You cut yourself on the paper.</span>")
 		return
-	var/n_name = sanitize(copytext(input(usr, "What would you like to label the paper?", "Paper Labelling", null)  as text, 1, MAX_NAME_LEN))
+	var/n_name = sanitize_safe(input(usr, "What would you like to label the paper?", "Paper Labelling", null) as text, MAX_NAME_LEN)
 	if((loc == usr && usr.stat == CONSCIOUS))
 		name = "[(n_name ? text("[n_name]") : "paper")]"
 	add_fingerprint(usr)
-	return
 
 /obj/item/weapon/paper/verb/crumple()
 	set name = "Crump paper"
@@ -94,23 +113,23 @@
 	set src in usr
 
 	if((CLUMSY in usr.mutations) && prob(50))
-		to_chat(usr, "<span class='warning'>You cut yourself on the paper.</span>")
+		var/mob/living/carbon/human/H = usr
+		if(istype(H) && !H.species.flags[NO_MINORCUTS])
+			to_chat(usr, "<span class='warning'>You cut yourself on the paper.</span>")
 		return
-	if(!(crumpled==1))
-		crumpled = 1
+	if(!crumpled)
+		crumpled = TRUE
 		icon_state = "crumpled"
 		throw_range = 5
-		overlays = null
+		cut_overlays()
 	else
-		crumpled = 2
 		icon_state = "scrap"
 		throw_range = 1
 
-	playsound(src, 'sound/items/crumple.ogg', 15, 1, 1)
+	playsound(src, 'sound/items/crumple.ogg', VOL_EFFECTS_MASTER, 15)
 	add_fingerprint(usr)
-	return
 
-/obj/item/weapon/paper/afterattack(atom/target, mob/user, proximity)
+/obj/item/weapon/paper/afterattack(atom/target, mob/user, proximity, params)
 	if(!proximity) return
 	if(istype(src, /obj/item/weapon/paper/talisman)) return
 	if(istype(src, /obj/item/weapon/paper/crumpled/bloody)) return
@@ -128,14 +147,12 @@
 	return
 
 /obj/item/weapon/paper/attack_self(mob/living/user)
-	examine()
+	examine(user)
 	if(rigged && (Holiday == "April Fool's Day"))
-		if(spam_flag == 0)
-			spam_flag = 1
-			playsound(loc, 'sound/items/bikehorn.ogg', 50, 1)
-			spawn(20)
-				spam_flag = 0
-	return
+		if(!spam_flag)
+			spam_flag = TRUE
+			playsound(src, 'sound/items/bikehorn.ogg', VOL_EFFECTS_MASTER)
+			addtimer(VARSET_CALLBACK(src, spam_flag, FALSE), 20)
 
 /obj/item/weapon/paper/attack_ai(mob/living/silicon/ai/user)
 	var/dist
@@ -143,30 +160,31 @@
 		dist = get_dist(src, user.camera)
 	else //cyborg or AI not seeing through a camera
 		dist = get_dist(src, user)
-	if(crumpled==1)
+	if(crumpled)
 		return
 	if(dist < 2)
-		usr << browse("<HTML><HEAD><TITLE>[sanitize_popup(name)]</TITLE></HEAD><BODY>[info][stamps]</BODY></HTML>", "window=[name]")
-		onclose(usr, "[name]")
+		show_content(user, forceshow = TRUE)
 	else
-		usr << browse("<HTML><HEAD><TITLE>[sanitize_popup(name)]</TITLE></HEAD><BODY>[sanitize_plus_popup(stars(revert_ja(info)))][stamps]</BODY></HTML>", "window=[name]")
-		onclose(usr, "[name]")
+		show_content(user, forcestars = TRUE)
 	return
 
-/obj/item/weapon/paper/attack(mob/living/carbon/M, mob/living/carbon/user)
-	if(user.zone_sel.selecting == "eyes")
+/obj/item/weapon/paper/attack(mob/living/carbon/M, mob/living/carbon/user, def_zone)
+	user.SetNextMove(CLICK_CD_MELEE)
+	if(def_zone == O_EYES)
 		user.visible_message("<span class='notice'>You show the paper to [M]. </span>", \
 			"<span class='notice'> [user] holds up a paper and shows it to [M]. </span>")
-		to_chat(M, examine())
-
-	else if(user.zone_sel.selecting == "mouth") // lipstick wiping
+		if(crumpled)
+			to_chat(M, "<span class='notice'>You can't read anything until it crumpled.</span>")
+			return
+		show_content(M)
+	else if(def_zone == O_MOUTH) // lipstick wiping
 		if(ishuman(M))
 			var/mob/living/carbon/human/H = M
 			if(H == user)
 				to_chat(user, "<span class='notice'>You wipe off the lipstick with [src].</span>")
 				H.lip_style = null
 				H.update_body()
-			else
+			else if(!user.is_busy())
 				user.visible_message("<span class='warning'>[user] begins to wipe [H]'s lipstick off with \the [src].</span>", \
 								 	 "<span class='notice'>You begin to wipe off [H]'s lipstick.</span>")
 				if(do_after(user, 10, target = H))	//user needs to keep their active hand, H does not.
@@ -175,16 +193,16 @@
 					H.lip_style = null
 					H.update_body()
 
-/obj/item/weapon/paper/proc/addtofield(id, text, links = 0)
+/obj/item/weapon/paper/proc/addtofield(id, text, links = 0, type = "paper")
 	var/locid = 0
 	var/laststart = 1
 	var/textindex = 1
 	while(1) // I know this can cause infinite loops and fuck up the whole server, but the if(istart==0) should be safe as fuck
 		var/istart = 0
 		if(links)
-			istart = findtext(info_links, "<span class=\"paper_field\">", laststart)
+			istart = findtext(info_links, "<span class=\"[type]_field\">", laststart)
 		else
-			istart = findtext(info, "<span class=\"paper_field\">", laststart)
+			istart = findtext(info, "<span class=\"[type]_field\">", laststart)
 
 		if(istart==0)
 			return // No field found with matching id
@@ -215,66 +233,90 @@
 /obj/item/weapon/paper/proc/updateinfolinks()
 	info_links = info
 	var/i = 0
-	for(i=1,i<=fields,i++)
-		addtofield(i, "<font face=\"[deffont]\"><A href='?src=\ref[src];write=[i]'>write</A></font>", 1)
-	info_links = info_links + "<font face=\"[deffont]\"><A href='?src=\ref[src];write=end'>write</A></font>"
+	for(i = 1, i <= fields, i++)
+		addtofield(i, " <font face=\"[deffont]\"><A href='?src=\ref[src];write=[i]'>write</A></font>", 1)
+	for(i = 1, i <= sfields, i++)
+		addtofield(i, " <font face=\"[deffont]\"><A href='?src=\ref[src];write=[i];sign=1'>sign</A></font>", 1, "sign")
+	info_links = info_links + " <font face=\"[deffont]\"><A href='?src=\ref[src];write=end'>write</A></font>"
 
 
 /obj/item/weapon/paper/proc/clearpaper()
 	info = null
-	stamps = null
-	stamped = list()
-	overlays.Cut()
+	stamp_text = null
+	free_space = MAX_PAPER_MESSAGE_LEN
+	LAZYCLEARLIST(stamped)
+	LAZYCLEARLIST(ico)
+	LAZYCLEARLIST(offset_x)
+	LAZYCLEARLIST(offset_y)
+	cut_overlays()
 	updateinfolinks()
 	update_icon()
 
+/obj/item/weapon/paper/proc/create_self_copy()
+	var/obj/item/weapon/paper/P = new
+
+	P.name       = name
+	P.info       = info
+	P.info_links = info_links
+	P.stamp_text = stamp_text
+	P.fields     = fields
+	P.sfields    = sfields
+	P.stamped    = LAZYCOPY(stamped)
+	P.ico        = LAZYCOPY(ico)
+	P.offset_x   = LAZYCOPY(offset_x)
+	P.offset_y   = LAZYCOPY(offset_y)
+	P.copy_overlays(src, TRUE)
+
+	P.updateinfolinks()
+	P.update_icon()
+
+	return P
+
+/obj/item/weapon/paper/proc/get_signature(obj/item/weapon/pen/P, mob/user)
+	if(P && istype(P, /obj/item/weapon/pen))
+		return P.get_signature(user)
+	return (user && user.real_name) ? user.real_name : "Anonymous"
 
 /obj/item/weapon/paper/proc/parsepencode(t, obj/item/weapon/pen/P, mob/user, iscrayon = 0)
-//	t = copytext(sanitize(t),1,MAX_MESSAGE_LEN)
+	if(length(t) == 0)
+		return ""
 
-	t = replacetext(t, "\[center\]", "<center>")
-	t = replacetext(t, "\[/center\]", "</center>")
-	t = replacetext(t, "\[br\]", "<BR>")
-	t = replacetext(t, "\[b\]", "<B>")
-	t = replacetext(t, "\[/b\]", "</B>")
-	t = replacetext(t, "\[i\]", "<I>")
-	t = replacetext(t, "\[/i\]", "</I>")
-	t = replacetext(t, "\[u\]", "<U>")
-	t = replacetext(t, "\[/u\]", "</U>")
-	t = replacetext(t, "\[large\]", "<font size=\"4\">")
-	t = replacetext(t, "\[/large\]", "</font>")
-	t = replacetext(t, "\[sign\]", "<font face=\"[signfont]\"><i>[user.real_name]</i></font>")
-	t = replacetext(t, "\[field\]", "<span class=\"paper_field\"></span>")
+	if(findtext(t, "\[sign\]"))
+		t = replacetext(t, "\[sign\]", "<font face=\"[signfont]\"><i>[get_signature(P, user)]</i></font>")
 
-	if(!iscrayon)
-		t = replacetext(t, "\[*\]", "<li>")
-		t = replacetext(t, "\[hr\]", "<HR>")
-		t = replacetext(t, "\[small\]", "<font size = \"1\">")
-		t = replacetext(t, "\[/small\]", "</font>")
-		t = replacetext(t, "\[list\]", "<ul>")
-		t = replacetext(t, "\[/list\]", "</ul>")
-
-		t = "<font face=\"[deffont]\" color=[P.colour]>[t]</font>"
-	else // If it is a crayon, and he still tries to use these, make them empty!
+	var/font = deffont
+	if(iscrayon) // If it is a crayon, and he still tries to use these, make them empty!
 		t = replacetext(t, "\[*\]", "")
 		t = replacetext(t, "\[hr\]", "")
 		t = replacetext(t, "\[small\]", "")
 		t = replacetext(t, "\[/small\]", "")
 		t = replacetext(t, "\[list\]", "")
 		t = replacetext(t, "\[/list\]", "")
+		t = "<b>[t]</b>"
+		font = crayonfont
 
-		t = "<font face=\"[crayonfont]\" color=[P.colour]><b>[t]</b></font>"
-
+	t = parsebbcode(t, P.colour)
+	t = replacetext(t, "\[field\]", "<span class=\"paper_field\"></span>")
+	t = replacetext(t, "\[sfield\]", "<span class=\"sign_field\"></span>")
+	t = "<font face=\"[font]\" color=\"[P.colour]\">[t]</font>"
 //	t = replacetext(t, "#", "") // Junk converted to nothing!
 
 //Count the fields
 	var/laststart = 1
 	while(1)
-		var/i = findtext(t, "<span class=\"paper_field\">", laststart)
+		var/i = findtext(t, "<span class=\"paper_field\">", laststart) //</span>
 		if(i==0)
 			break
 		laststart = i+1
 		fields++
+
+	laststart = 1
+	while(1)
+		var/i = findtext(t, "<span class=\"sign_field\">", laststart) //</span>
+		if(i==0)
+			break
+		laststart = i+1
+		sfields++
 
 	return t
 
@@ -309,19 +351,21 @@
 	if(!is_type_in_list(src, burnable))
 		return
 
-	if(P.lit && !user.restrained())
-		var/class = "<span class='red'>"
+	if(P.lit && !user.restrained() && !user.is_busy())
+		var/class = "red"
 		if(istype(P, /obj/item/weapon/lighter/zippo))
-			class = "<span class='rose'>"
+			class = "rose"
 
-		user.visible_message("[class][user] holds \the [P] up to \the [src], it looks like \he's trying to burn it!</span>", \
-		"[class]You hold \the [P] up to \the [src], burning it slowly.</span>")
+		user.visible_message("<span class='[class]'>[user] holds \the [P] up to \the [src], it looks like \he's trying to burn it!</span>", \
+		"<span class='[class]'>You hold \the [P] up to \the [src], burning it slowly.</span>")
 
-		if(do_after(user, 20, TRUE, P, TRUE))
+		icon_state = "paper_onfire"
+		if(P.use_tool(P, user, 20, volume = 50))
 			if((get_dist(src, user) > 1) || !P.lit)
+				update_icon()
 				return
-			user.visible_message("[class][user] burns right through \the [src], turning it to ash. It flutters through the air before settling on the floor in a heap.</span>", \
-			"[class]You burn right through \the [src], turning it to ash. It flutters through the air before settling on the floor in a heap.</span>")
+			user.visible_message("<span class='[class]'>[user] burns right through \the [src], turning it to ash. It flutters through the air before settling on the floor in a heap.</span>", \
+			"<span class='[class]'>You burn right through \the [src], turning it to ash. It flutters through the air before settling on the floor in a heap.</span>")
 
 			if(user.get_inactive_hand() == src)
 				user.drop_from_inventory(src)
@@ -330,19 +374,33 @@
 			qdel(src)
 
 		else
+			update_icon()
 			to_chat(user, "<span class='warning'>You must hold \the [P] steady to burn \the [src].</span>")
 
 
 /obj/item/weapon/paper/Topic(href, href_list)
 	..()
-	if(!usr || (usr.stat || usr.restrained()))
+	if(!usr || usr.incapacitated())
 		return
 
 	if(href_list["write"])
 		var/id = href_list["write"]
-		//var/t = strip_html_simple(input(usr, "What text do you wish to add to " + (id=="end" ? "the end of the paper" : "field "+id) + "?", "[name]", null),8192) as message
-		//var/t =  strip_html_simple(input("Enter what you want to write:", "Write", null, null)  as message, MAX_MESSAGE_LEN)
-		var/t =  input("Enter what you want to write:", "Write", null, null)  as message
+
+		if(free_space <= 0)
+			usr << "<span class='info'>There isn't enough space left on \the [src] to write anything.</span>"
+			return
+
+		var/t = ""
+		if(href_list["sign"])
+			if(alert("Are you sure you want to sign this paper?",,"Yes","No") == "No")
+				return
+			t = "\[sign\] "
+		else
+			t = sanitize(input("Enter what you want to write:", "Write", null, null)  as message, free_space, extra = FALSE)
+
+		if(!t)
+			return
+
 		var/obj/item/i = usr.get_active_hand() // Check to see if he still got that darn pen, also check if he's using a crayon or pen.
 		var/iscrayon = 0
 		if(!istype(i, /obj/item/weapon/pen))
@@ -354,70 +412,67 @@
 		if((!in_range(src, usr) && loc != usr && !( istype(loc, /obj/item/weapon/clipboard) ) && loc.loc != usr && usr.get_active_hand() != i)) // Some check to see if he's allowed to write
 			return
 
-		/*t = checkhtml(t)
+		var/last_fields_value = fields
+		var/last_sfields_value = sfields
 
-		var/index = findtext(t, LETTER_255)
-		while(index)
-			t = copytext(t, 1, index) + "&#1103;" + copytext(t, index+8)
-			index = findtext(t, LETTER_255)*/
-		
-		var last_fields_value = fields
-		
-		t = sanitize_alt(t, list("\n"="\[br\]","ÿ"=LETTER_255))
-
-		// check for exploits
-		for(var/bad in paper_blacklist)
-			if(findtext(t,bad))
-				to_chat(usr, "\blue You think to yourself, \"Hm.. this is only paper...\"")
-				log_admin("PAPER: [usr] ([usr.ckey]) tried to use forbidden word in [src]: [bad].")
-				message_admins("PAPER: [usr] ([usr.ckey]) tried to use forbidden word in [src]: [bad].")
-				return
-
-		//t = replacetext(t, "\n", "<BR>")
 		t = parsepencode(t, i, usr, iscrayon) // Encode everything from pencode to html
 
-		if(fields > 50)
+		if((fields + sfields) > 50)
 			to_chat(usr, "<span class='warning'>Too many fields. Sorry, you can't do this.</span>")
 			fields = last_fields_value
+			sfields = last_sfields_value
 			return
 
-		if(id!="end")
+		if(isIAN(usr))
+			t = GibberishAll(t)
+
+		if(href_list["sign"])
+			addtofield(text2num(id), t, type = "sign")
+		else if(id!="end")
 			addtofield(text2num(id), t) // He wants to edit a field, let him.
 		else
 			info += t // Oh, he wants to edit to the end of the file, let him.
 			updateinfolinks()
 
-		usr << browse("<HTML><HEAD><TITLE>[name]</TITLE></HEAD><BODY>[info_links][stamps]</BODY></HTML>", "window=[name]") // Update the window
-
+		playsound(src, pick(SOUNDIN_PEN), VOL_EFFECTS_MASTER, null, FALSE)
+		update_space(t)
+		show_content(usr, forceshow = TRUE, infolinks = TRUE)
 		update_icon()
 
 
-/obj/item/weapon/paper/attackby(obj/item/weapon/P, mob/user)
-	..()
+/obj/item/weapon/paper/attackby(obj/item/I, mob/user, params)
+	user.SetNextMove(CLICK_CD_INTERACT)
 	var/clown = 0
 	if(user.mind && (user.mind.assigned_role == "Clown"))
 		clown = 1
 
+	if(istype(I, /obj/item/weapon/paper))
+		var/obj/item/weapon/paper/paper = I
+		if(paper.crumpled)
+			to_chat(user, "<span class='notice'>Paper too crumpled for anything.</span>")
+			return
+
 	if(crumpled)
-		if(!(istype(P, /obj/item/weapon/lighter)))
+		if(!(istype(I, /obj/item/weapon/lighter)))
 			to_chat(user, "<span class='notice'>Paper too crumpled for anything.</span>")
 			return
 		else
-			burnpaper(P, user)
+			burnpaper(I, user)
 
-	else if(istype(P, /obj/item/weapon/paper) || istype(P, /obj/item/weapon/photo))
-		if (istype(P, /obj/item/weapon/paper/carbon))
-			var/obj/item/weapon/paper/carbon/C = P
+	else if(istype(I, /obj/item/weapon/paper) || istype(I, /obj/item/weapon/photo))
+		if (istype(I, /obj/item/weapon/paper/carbon))
+			var/obj/item/weapon/paper/carbon/C = I
 			if (!C.iscopy && !C.copied)
 				to_chat(user, "<span class='notice'>Take off the carbon copy first.</span>")
 				add_fingerprint(user)
 				return
-		var/obj/item/weapon/paper_bundle/B = new(src.loc)
+		var/old_loc = loc
+		var/obj/item/weapon/paper_bundle/B = new(loc)
 		if (name != "paper")
 			B.name = name
-		else if (P.name != "paper" && P.name != "photo")
-			B.name = P.name
-		user.drop_from_inventory(P)
+		else if(I.name != "paper" && I.name != "photo")
+			B.name = I.name
+		user.drop_from_inventory(I)
 		if (istype(user, /mob/living/carbon/human))
 			var/mob/living/carbon/human/h_user = user
 			if (h_user.r_hand == src)
@@ -443,66 +498,46 @@
 			else if (h_user.head == src)
 				h_user.u_equip(src)
 				h_user.put_in_hands(B)
-			else if (!istype(src.loc, /turf))
+			else if (!istype(loc, /turf))
 				src.loc = get_turf(h_user)
 				if(h_user.client)	h_user.client.screen -= src
 				h_user.put_in_hands(B)
-		to_chat(user, "<span class='notice'>You clip the [P.name] to [(src.name == "paper") ? "the paper" : src.name].</span>")
-		src.loc = B
-		P.loc = B
+		to_chat(user, "<span class='notice'>You clip the [I.name] to [(src.name == "paper") ? "the paper" : name].</span>")
+		forceMove(B)
+		I.forceMove(B)
 		B.amount++
 		B.update_icon()
+		if (istype(old_loc, /obj/item/weapon/storage))
+			var/obj/item/weapon/storage/s = old_loc
+			s.update_ui_after_item_removal()
 
-	else if(istype(P, /obj/item/weapon/pen) || istype(P, /obj/item/toy/crayon))
-		if ( istype(P, /obj/item/weapon/pen/robopen) && P:mode == 2 )
-			P:RenamePaper(user,src)
+	else if(istype(I, /obj/item/weapon/pen) || istype(I, /obj/item/toy/crayon))
+		if ( istype(I, /obj/item/weapon/pen/robopen) && I:mode == 2 )
+			I:RenamePaper(user,src)
 		else
-			user << browse("<HTML><HEAD><TITLE>[sanitize_popup(name)]</TITLE></HEAD><BODY>[info_links][stamps]</BODY></HTML>", "window=[name]")
+			show_content(user, forceshow = TRUE, infolinks = TRUE)
 		//openhelp(user)
-		add_fingerprint(user)
-		return
 
-	else if(istype(P, /obj/item/weapon/stamp))
-		if((!in_range(src, usr) && loc != user && !( istype(loc, /obj/item/weapon/clipboard) ) && loc.loc != user && user.get_active_hand() != P))
+	else if(istype(I, /obj/item/weapon/stamp))
+		if(!in_range(src, user))
 			return
 
-		stamps += (stamps=="" ? "<HR>" : "<BR>") + "<i>This paper has been stamped with the [P.name].</i>"
-
-		var/image/stampoverlay = image('icons/obj/bureaucracy.dmi')
-		var/{x; y;}
-		if(istype(P, /obj/item/weapon/stamp/captain) || istype(P, /obj/item/weapon/stamp/centcomm))
-			x = rand(-2, 0)
-			y = rand(-1, 2)
-		else
-			x = rand(-2, 2)
-			y = rand(-3, 2)
-		offset_x += x
-		offset_y += y
-		stampoverlay.pixel_x = x
-		stampoverlay.pixel_y = y
-
-		if(istype(P, /obj/item/weapon/stamp/clown))
+		if(istype(I, /obj/item/weapon/stamp/clown))
 			if(!clown)
 				to_chat(user, "<span class='notice'>You are totally unable to use the stamp. HONK!</span>")
 				return
 
-		if(!ico)
-			ico = new
-		ico += "paper_[P.icon_state]"
-		stampoverlay.icon_state = "paper_[P.icon_state]"
+		var/obj/item/weapon/stamp/S = I
+		S.stamp_paper(src)
 
-		if(!stamped)
-			stamped = new
-		stamped += P.type
-		overlays += stampoverlay
+		playsound(src, 'sound/effects/stamp.ogg', VOL_EFFECTS_MASTER)
+		visible_message("<span class='notice'>[user] stamp the paper.</span>", "<span class='notice'>You stamp the paper with your rubber stamp.</span>")
 
-		to_chat(user, "<span class='notice'>You stamp the paper with your rubber stamp.</span>")
+	else if(istype(I, /obj/item/weapon/lighter))
+		burnpaper(I, user)
 
-	else if(istype(P, /obj/item/weapon/lighter))
-		burnpaper(P, user)
-
-	add_fingerprint(user)
-	return
+	else
+		return ..()
 
 /*
  * Premade paper
@@ -554,3 +589,84 @@
 
 /obj/item/weapon/paper/crumpled/bloody
 	icon_state = "scrap_bloodied"
+
+/obj/item/weapon/paper/wires
+	name = "paper - 'Airlock wires documentation'"
+
+/obj/item/weapon/paper/wires/atom_init()
+	. = ..()
+	identify_wires()
+
+/obj/item/weapon/paper/wires/proc/identify_wires()
+	info = get_airlock_wires_identification()
+
+	var/obj/item/weapon/stamp/centcomm/S = new
+	S.stamp_paper(src, "Centcomm Engineer Department")
+
+	update_icon()
+	updateinfolinks()
+
+/obj/item/weapon/paper/brig_arsenal
+	name = "Armory Inventory"
+	info = "<b>Armory Inventory:</b><ul>6 Deployable Barriers<br>4 Portable Flashers<br>1 Riot Set:<small><ul><li>Riot Shield<li>Stun Baton<li>Riot Helmet<li>Riot Suit</ul></small>3 Marine Sets:<small><ul><li>Marine Jumpsuit<li>Marine Armor<li>Marine Helmet<li>Work Boots<li>Combat Belt<li>Balaclava<li>Tactical Hud<li>Marine Headset<li>Marine Gloves<li>Marine Dufflebag</ul></small>3 Bulletproof Helmets<br>3 Bulletproof Vests<br>3 Ablative Helmets <br>3 Ablative Vests <br>1 Bomb Suit <br>1 Biohazard Suit<br>6 Security Masks<br>6 Magazines (9mm rubber)</ul><b>Secure Armory Inventory:</b><ul>4 Energy Guns<br>1 Ion Rifle<br>1 L10-c Carbine<br>1 M79 Grenade Launcher<br>2 Shotguns<br>6 Magazines (9mm)<br>2 Shotgun Shell Boxes (beanbag, 20 shells)<br>1 m79 Grenade Box (40x46 rubber, 7 rounds)<br>1 Chemical Implant Kit<br>1 Tracking Implant Kit<br>1 Mind Shield Implant Kit<br>1 Death Alarm Implant Kit<br>1 Box of Flashbangs<br>2 Boxes of teargas grenades<br>1 Space Security Set:<small><ul><li>Security Hardsuit<li>Security Hardsuit Helmet<li>Magboots<li>Breath Mask</ul></small></ul>"
+
+/obj/item/weapon/paper/firing_range
+	name = "Firing Range Instructions"
+	info = "Directions:<br><i>First you'll want to make sure there is a target stake in the center of the magnetic platform. Next, take an aluminum target from the crates back there and slip it into the stake. Make sure it clicks! Next, there should be a control console mounted on the wall somewhere in the room.<br><br> This control console dictates the behaviors of the magnetic platform, which can move your firing target around to simulate real-world combat situations. From here, you can turn off the magnets or adjust their electromagnetic levels and magnetic fields. The electricity level dictates the strength of the pull - you will usually want this to be the same value as the speed. The magnetic field level dictates how far the magnetic pull reaches.<br><br>Speed and path are the next two settings. Speed is associated with how fast the machine loops through the designated path. Paths dictate where the magnetic field will be centered at what times. There should be a pre-fabricated path input already. You can enable moving to observe how the path affects the way the stake moves. To script your own path, look at the following key:</i><br><br>N: North<br>S: South<br>E: East<br>W: West<br>C: Center<br>R: Random (results may vary)<br>; or &: separators. They are not necessary but can make the path string better visible."
+
+/obj/item/weapon/paper/space_structures
+	name = "NSS Exodus Sensor Readings"
+
+/obj/item/weapon/paper/space_structures/atom_init()
+	. = ..()
+	name = "[station_name()] Sensor Readings"
+	info = get_space_structures_info()
+
+	var/obj/item/weapon/stamp/centcomm/S = new
+	S.stamp_paper(src, "Centcomm Science Department")
+
+	update_icon()
+	updateinfolinks()
+
+/obj/item/weapon/paper/space_structures/proc/get_space_structures_info()
+	var/paper_text = "<center><img src = bluentlogo.png /><br /><font size = 3><b>[station_name()]</b> Sensor Readings:</font></center><br /><hr>"
+	paper_text += "Scan results show the following points of interest:<br />"
+	for(var/list/structure in SSmapping.spawned_structures)
+		paper_text += "<li><b>[structure["desc"]]</b>: x = [structure["x"]], y = [structure["y"]], z = [prob(50) ? structure["z"] : "unknown"]</li>"
+	return paper_text
+
+/obj/item/weapon/paper/cloning_lab
+	name = "paper - 'H-11 Cloning Apparatus Manual"
+	info = {"<h4>Getting Started</h4>
+	Congratulations, you are testing the H-11 experimental cloning device!<br>
+	Using the H-11 is almost as simple as brain surgery! Simply insert the target humanoid into the scanning chamber and select the clone option to initiate cloning!<br>
+	<b>That's all there is to it!</b><br>
+	<i>Notice, cloning system cannot scan inorganic life or small primates.  Scan may fail if subject has suffered extreme brain damage.</i><br>
+	<p>The provided CLONEPOD SYSTEM will produce the desired clone.  Standard clone maturation times are roughly 90 seconds.
+	The cloning pod may be unlocked early after initial maturation is complete.</p><br>
+	<i>Please note that resulting clones will have a DEVELOPMENTAL DEFECT as a result of genetic drift. We hope to reduce this through further testing.<br>
+	Clones may also experience memory loss and radical changes in personality as a result of the cloning process.</i><br>
+	<br>
+	<font size=1>This technology produced under license from Thinktronic Systems, LTD.</font>"}
+
+/obj/item/weapon/paper/cloning_log
+	name = "experiment log"
+	info = {"<h4>Day 1</h4>
+	We are very excited to be part of the first crew of the SC Irmanda!<br>
+	This ship is made to test an innovative FTL technology. I had some concerns at first, \
+	but the engineers assure me that it is safe and there is absolutely no risk of the external wings breaking off from the acceleration.<br>
+	We've been tasked with testing the latest model of the Thinktronic Cloning Pod. We'll stay in dock for a week before launching, but we're going to get started right away. \
+	If the engine is as fast as they say, we might not have the time to run all the routine tests on the cloned subject!<br>
+	<br>
+	<h4>Day 2</h4>
+	We cloned an unknown corpse that was given to us by the medical crew. The genetic replication is good enough to let the subject survive outside of the pod, \
+	but the cellular damage remains a concern for his long-term survival. For safety we will be keeping him in quarantine.<br>
+	We left him some books, but clearly we were too optimistic about his mental faculties. His brain seems to suffer from the same cloning decay that was caused by \
+	the previous models. We will run further tests to see if there are improvements.<br>
+	<h4>Day 4</h4>
+	It seems we'll be launching even sooner than expected! Apparently the press is starting to lose interest, so we have to cut short the pre-flight checks \
+	and give them something to talk about. Hopefully this will end up with increased funding...<br>
+	The crew has all been invited to the main hall, where we have seats for the initial FTL acceleration. Unfortunately the clone cannot leave the quarantine room \
+	without risking infection, so we will strap him into the bed and hope for the best. We can grow another clone if anything goes wrong, anyway.
+	<br>
+	<i>Professor Galen Linkovich</i>"}

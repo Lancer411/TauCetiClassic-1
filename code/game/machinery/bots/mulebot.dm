@@ -20,20 +20,22 @@
 	maxhealth = 150
 	fire_dam_coeff = 0.7
 	brute_dam_coeff = 0.5
-	var/atom/movable/load = null		// the loaded crate (usually)
-	var/beacon_freq = 1400
-	var/control_freq = 1447
+
 	can_buckle = 1
 	buckle_lying = 0
 
 	suffix = ""
+	req_access = list(access_cargo) // added robotics access so assembly line drop-off works properly -veyveyr //I don't think so, Tim. You need to add it to the MULE's hidden robot ID card. -NEO
 
+	var/atom/movable/load = null		// the loaded crate (usually)
+	var/beacon_freq = 1400
+	var/control_freq = 1447
 	var/turf/target				// this is turf to navigate to (location of beacon)
 	var/loaddir = 0				// this the direction to unload onto/load from
 	var/new_destination = ""	// pending new destination (waiting for beacon response)
 	var/destination = ""		// destination description
 	var/home_destination = "" 	// tag of home beacon
-	req_access = list(access_cargo) // added robotics access so assembly line drop-off works properly -veyveyr //I don't think so, Tim. You need to add it to the MULE's hidden robot ID card. -NEO
+
 	var/path[] = new()
 
 	var/mode = 0		//0 = idle/ready
@@ -54,29 +56,12 @@
 
 	var/obj/item/weapon/stock_parts/cell/cell
 						// the installed power cell
-
-	// constants for internal wiring bitflags
-	var/const/wire_power1 = 1			// power connections
-	var/const/wire_power2 = 2
-	var/const/wire_mobavoid = 4		// mob avoidance
-	var/const/wire_loadcheck = 8		// load checking (non-crate)
-	var/const/wire_motor1 = 16		// motor wires
-	var/const/wire_motor2 = 32		//
-	var/const/wire_remote_rx = 64		// remote recv functions
-	var/const/wire_remote_tx = 128	// remote trans status
-	var/const/wire_beacon_rx = 256	// beacon ping recv
-	var/const/wire_beacon_tx = 512	// beacon ping trans
-
-	var/wires = 1023		// all flags on
-
-	var/list/wire_text	// list of wire colours
-	var/list/wire_order	// order of wire indices
-
-
+	var/datum/wires/mulebot/wires = null
 	var/bloodiness = 0		// count of bloodiness
 
-/obj/machinery/bot/mulebot/New()
+/obj/machinery/bot/mulebot/atom_init()
 	..()
+	wires = new(src)
 	botcard = new(src)
 	var/datum/job/cargo_tech/J = new/datum/job/cargo_tech
 	botcard.access = J.get_access()
@@ -84,45 +69,28 @@
 	cell = new(src)
 	cell.charge = 2000
 	cell.maxcharge = 2000
-	setup_wires()
 
-	spawn(5)	// must wait for map loading to finish
-		if(radio_controller)
-			radio_controller.add_object(src, control_freq, filter = RADIO_MULEBOT)
-			radio_controller.add_object(src, beacon_freq, filter = RADIO_NAVBEACONS)
+	if(radio_controller)
+		radio_controller.add_object(src, control_freq, filter = RADIO_MULEBOT)
+		radio_controller.add_object(src, beacon_freq, filter = RADIO_NAVBEACONS)
 
-		var/count = 0
-		for(var/obj/machinery/bot/mulebot/other in machines)
-			count++
-		if(!suffix)
-			suffix = "#[count]"
-		name = "Mulebot ([suffix])"
+	return INITIALIZE_HINT_LATELOAD
+
+/obj/machinery/bot/mulebot/atom_init_late()
+	var/count = 0
+	for(var/obj/machinery/bot/mulebot/other in bots_list)
+		count++
+	if(!suffix)
+		suffix = "#[count]"
+	name = "Mulebot ([suffix])"
 
 /obj/machinery/bot/mulebot/Destroy()
+	QDEL_NULL(wires)
 	if(radio_controller)
 		radio_controller.remove_object(src,beacon_freq)
 		radio_controller.remove_object(src,control_freq)
 	unload(0)
 	return ..()
-
-// set up the wire colours in random order
-// and the random wire display order
-// needs 10 wire colours
-/obj/machinery/bot/mulebot/proc/setup_wires()
-	var/list/colours = list("Red", "Green", "Blue", "Magenta", "Cyan", "Yellow", "Black", "White", "Orange", "Grey")
-	var/list/orders = list("0","1","2","3","4","5","6","7","8","9")
-	wire_text = list()
-	wire_order = list()
-	while(colours.len > 0)
-		var/colour = colours[ rand(1,colours.len) ]
-		wire_text += colour
-		colours -= colour
-
-		var/order = orders[ rand(1,orders.len) ]
-		wire_order += text2num(order)
-		orders -= order
-
-
 
 // attack by item
 // emag : lock/unlock,
@@ -130,61 +98,63 @@
 // cell: insert it
 // other: chance to knock rider off bot
 /obj/machinery/bot/mulebot/attackby(obj/item/I, mob/user)
-	if(istype(I,/obj/item/weapon/card/emag))
-		locked = !locked
-		to_chat(user, "\blue You [locked ? "lock" : "unlock"] the mulebot's controls!")
-		flick("mulebot-emagged", src)
-		playsound(src.loc, 'sound/effects/sparks1.ogg', 100, 0)
-	else if(istype(I,/obj/item/weapon/stock_parts/cell) && open && !cell)
+	if(istype(I,/obj/item/weapon/stock_parts/cell) && open && !cell)
 		var/obj/item/weapon/stock_parts/cell/C = I
 		user.drop_item()
 		C.loc = src
 		cell = C
 		updateDialog()
-	else if(istype(I,/obj/item/weapon/screwdriver))
+	else if(isscrewdriver(I))
 		if(locked)
-			to_chat(user, "\blue The maintenance hatch cannot be opened or closed while the controls are locked.")
+			to_chat(user, "<span class='notice'>The maintenance hatch cannot be opened or closed while the controls are locked.</span>")
 			return
 
 		open = !open
 		if(open)
-			src.visible_message("[user] opens the maintenance hatch of [src]", "\blue You open [src]'s maintenance hatch.")
+			src.visible_message("[user] opens the maintenance hatch of [src]", "<span class='notice'>You open [src]'s maintenance hatch.</span>")
 			on = 0
 			icon_state="mulebot-hatch"
 		else
-			src.visible_message("[user] closes the maintenance hatch of [src]", "\blue You close [src]'s maintenance hatch.")
+			src.visible_message("[user] closes the maintenance hatch of [src]", "<span class='notice'>You close [src]'s maintenance hatch.</span>")
 			icon_state = "mulebot0"
 
 		updateDialog()
-	else if (istype(I, /obj/item/weapon/wrench))
+	else if(is_wire_tool(I))
+		wires.interact(user)
+	else if (iswrench(I))
 		if (src.health < maxhealth)
 			src.health = min(maxhealth, src.health+25)
 			user.visible_message(
-				"\red [user] repairs [src]!",
-				"\blue You repair [src]!"
+				"<span class='warning'>[user] repairs [src]!</span>",
+				"<span class='notice'>You repair [src]!</span>"
 			)
 		else
-			to_chat(user, "\blue [src] does not need a repair!")
+			to_chat(user, "<span class='notice'>[src] does not need a repair!</span>")
 	else if(load && ismob(load))  // chance to knock off rider
 		if(prob(1+I.force * 2))
 			unload(0)
-			user.visible_message("\red [user] knocks [load] off [src] with \the [I]!", "\red You knock [load] off [src] with \the [I]!")
+			user.visible_message("<span class='warning'>[user] knocks [load] off [src] with \the [I]!</span>", "<span class='warning'>You knock [load] off [src] with \the [I]!</span>")
 		else
 			to_chat(user, "You hit [src] with \the [I] but to no effect.")
 	else
-		..()
-	return
+		return ..()
 
+/obj/machinery/bot/mulebot/emag_act(mob/user)
+	locked = !locked
+	to_chat(user, "<span class='notice'>You [locked ? "lock" : "unlock"] the mulebot's controls!</span>")
+	flick("mulebot-emagged", src)
+	playsound(src, 'sound/effects/sparks1.ogg', VOL_EFFECTS_MASTER, null, FALSE)
+	return TRUE
 
-/obj/machinery/bot/mulebot/ex_act(var/severity)
+/obj/machinery/bot/mulebot/ex_act(severity)
 	unload(0)
 	switch(severity)
 		if(2)
-			wires &= ~(1 << rand(0,9))
-			wires &= ~(1 << rand(0,9))
-			wires &= ~(1 << rand(0,9))
+			wires.random_cut()
+			wires.random_cut()
+			wires.random_cut()
 		if(3)
-			wires &= ~(1 << rand(0,9))
+			wires.random_cut()
 	..()
 	return
 
@@ -192,34 +162,19 @@
 	if(prob(50) && !isnull(load))
 		unload(0)
 	if(prob(25))
-		src.visible_message("\red Something shorts out inside [src]!")
-		var/index = 1<< (rand(0,9))
-		if(wires & index)
-			wires &= ~index
-		else
-			wires |= index
+		visible_message("<span class='red'>Something shorts out inside [src]!</span>")
+		wires.random_cut()
 	..()
 
-
-/obj/machinery/bot/mulebot/attack_ai(mob/user)
-	user.set_machine(src)
-	interact(user, 1)
-
-/obj/machinery/bot/mulebot/attack_hand(mob/user)
-	. = ..()
-	if (.)
-		return
-	user.set_machine(src)
-	interact(user, 0)
-
-/obj/machinery/bot/mulebot/interact(mob/user, ai=0)
+/obj/machinery/bot/mulebot/ui_interact(mob/user)
+	var/ai = isAI(user) || isobserver(user)
 	var/dat
+
 	dat += "<TT><B>Multiple Utility Load Effector Mk. III</B></TT><BR><BR>"
 	dat += "ID: [suffix]<BR>"
 	dat += "Power: [on ? "On" : "Off"]<BR>"
 
 	if(!open)
-
 		dat += "Status: "
 		switch(mode)
 			if(0)
@@ -269,27 +224,12 @@
 				dat += "<A href='byond://?src=\ref[src];op=cellremove'>Installed</A><BR>"
 			else
 				dat += "<A href='byond://?src=\ref[src];op=cellinsert'>Removed</A><BR>"
-
-			dat += wires()
 		else
 			dat += "The bot is in maintenance mode and cannot be controlled.<BR>"
 
-	user << browse("<HEAD><TITLE>Mulebot [suffix ? "([suffix])" : ""]</TITLE></HEAD>[dat]", "window=mulebot;size=350x500")
-	onclose(user, "mulebot")
-	return
-
-// returns the wire panel text
-/obj/machinery/bot/mulebot/proc/wires()
-	var/t = ""
-	for(var/i = 0 to 9)
-		var/index = 1<<wire_order[i+1]
-		t += "[wire_text[i+1]] wire: "
-		if(index & wires)
-			t += "<A href='byond://?src=\ref[src];op=wirecut;wire=[index]'>(cut)</A> <A href='byond://?src=\ref[src];op=wirepulse;wire=[index]'>(pulse)</A><BR>"
-		else
-			t += "<A href='byond://?src=\ref[src];op=wiremend;wire=[index]'>(mend)</A><BR>"
-
-	return t
+	var/datum/browser/popup = new(user, "window=mulebot", src.name, 350, 500)
+	popup.set_content(dat)
+	popup.open()
 
 /obj/machinery/bot/mulebot/Topic(href, href_list)
 	. = ..()
@@ -301,14 +241,14 @@
 			if(src.allowed(usr))
 				locked = !locked
 			else
-				to_chat(usr, "\red Access denied.")
+				to_chat(usr, "<span class='warning'>Access denied.</span>")
 				return FALSE
 		if("power")
 			if (src.on)
 				turn_off()
 			else if (cell && !open)
 				if (!turn_on())
-					to_chat(usr, "\red You can't switch on [src].")
+					to_chat(usr, "<span class='warning'>You can't switch on [src].</span>")
 					return FALSE
 			else
 				return FALSE
@@ -322,7 +262,7 @@
 				cell.add_fingerprint(usr)
 				cell = null
 
-				usr.visible_message("\blue [usr] removes the power cell from [src].", "\blue You remove the power cell from [src].")
+				usr.visible_message("<span class='notice'>[usr] removes the power cell from [src].</span>", "<span class='notice'>You remove the power cell from [src].</span>")
 
 		if("cellinsert")
 			if(open && !cell)
@@ -333,7 +273,7 @@
 					C.loc = src
 					C.add_fingerprint(usr)
 
-					usr.visible_message("\blue [usr] inserts a power cell into [src].", "\blue You insert the power cell into [src].")
+					usr.visible_message("<span class='notice'>[usr] inserts a power cell into [src].</span>", "<span class='notice'>You insert the power cell into [src].</span>")
 
 
 		if("stop")
@@ -350,7 +290,7 @@
 
 		if("destination")
 			refresh=0
-			var/new_dest = input("Enter new destination tag", "Mulebot [suffix ? "([suffix])" : ""]", destination) as text|null
+			var/new_dest = sanitize_safe(input("Enter new destination tag", "Mulebot [suffix ? "([suffix])" : ""]", input_default(destination)) as text|null, MAX_LNAME_LEN)
 			refresh=1
 			if(new_dest)
 				set_destination(new_dest)
@@ -358,7 +298,7 @@
 
 		if("setid")
 			refresh=0
-			var/new_id = sanitize(copytext(input("Enter new bot ID", "Mulebot [suffix ? "([suffix])" : ""]", suffix) as text|null,1,MAX_NAME_LEN))
+			var/new_id = sanitize_safe(input("Enter new bot ID", "Mulebot [suffix ? "([suffix])" : ""]", input_default(suffix)) as text|null, MAX_LNAME_LEN)
 			refresh=1
 			if(new_id)
 				suffix = new_id
@@ -366,7 +306,7 @@
 
 		if("sethome")
 			refresh=0
-			var/new_home = input("Enter new home tag", "Mulebot [suffix ? "([suffix])" : ""]", home_destination) as text|null
+			var/new_home = sanitize_safe(input("Enter new home tag", "Mulebot [suffix ? "([suffix])" : ""]", input_default(home_destination)) as text|null, MAX_LNAME_LEN)
 			refresh=1
 			if(new_home)
 				home_destination = new_home
@@ -388,59 +328,30 @@
 			usr.unset_machine()
 			usr << browse(null,"window=mulebot")
 
-
-		if("wirecut")
-			if(istype(usr.get_active_hand(), /obj/item/weapon/wirecutters))
-				var/wirebit = text2num(href_list["wire"])
-				wires &= ~wirebit
-			else
-				to_chat(usr, "\blue You need wirecutters!")
-		if("wiremend")
-			if(istype(usr.get_active_hand(), /obj/item/weapon/wirecutters))
-				var/wirebit = text2num(href_list["wire"])
-				wires |= wirebit
-			else
-				to_chat(usr, "\blue You need wirecutters!")
-
-		if("wirepulse")
-			if(istype(usr.get_active_hand(), /obj/item/device/multitool))
-				switch(href_list["wire"])
-					if("1","2")
-						to_chat(usr, "\blue [bicon(src)] The charge light flickers.")
-					if("4")
-						to_chat(usr, "\blue [bicon(src)] The external warning lights flash briefly.")
-					if("8")
-						to_chat(usr, "\blue [bicon(src)] The load platform clunks.")
-					if("16", "32")
-						to_chat(usr, "\blue [bicon(src)] The drive motor whines briefly.")
-					else
-						to_chat(usr, "\blue [bicon(src)] You hear a radio crackle.")
-			else
-				to_chat(usr, "\blue You need a multitool!")
 	updateDialog()
 
 // returns true if the bot has power
 /obj/machinery/bot/mulebot/proc/has_power()
-	return !open && cell && cell.charge>0 && (wires & wire_power1) && (wires & wire_power2)
+	return !open && cell && cell.charge>0 && wires.has_power()
 
 /obj/machinery/bot/mulebot/proc/buzz(type)
 	switch(type)
 		if(SIGH)
 			visible_message("[src] makes a sighing buzz.", "<span class='italics'>You hear an electronic buzzing sound.</span>")
-			playsound(loc, 'sound/machines/buzz-sigh.ogg', 50, 0)
+			playsound(src, 'sound/machines/buzz-sigh.ogg', VOL_EFFECTS_MASTER, null, FALSE)
 		if(ANNOYED)
 			visible_message("[src] makes an annoyed buzzing sound.", "<span class='italics'>You hear an electronic buzzing sound.</span>")
-			playsound(loc, 'sound/machines/buzz-two.ogg', 50, 0)
+			playsound(src, 'sound/machines/buzz-two.ogg', VOL_EFFECTS_MASTER, null, FALSE)
 		if(DELIGHT)
 			visible_message("[src] makes a delighted ping!", "<span class='italics'>You hear a ping.</span>")
-			playsound(loc, 'sound/machines/ping.ogg', 50, 0)
+			playsound(src, 'sound/machines/ping.ogg', VOL_EFFECTS_MASTER, null, FALSE)
 
 /obj/machinery/bot/mulebot/MouseDrop_T(atom/movable/AM, mob/user)
-
-	if(user.stat)
+	if(user.incapacitated() || user.lying)
 		return
 
-	if(user.incapacitated() || user.lying)
+	if(!user.IsAdvancedToolUser())
+		to_chat(user, "<span class='warning'>You can not comprehend what to do with this.</span>")
 		return
 
 	if (!istype(AM))
@@ -453,8 +364,14 @@
 /obj/machinery/bot/mulebot/MouseDrop_T(atom/movable/AM, mob/user)
 	if(user.incapacitated() || user.lying)
 		return
+
+	if(!user.IsAdvancedToolUser())
+		to_chat(user, "<span class='warning'>You can not comprehend what to do with this.</span>")
+		return
+
 	if (!istype(AM))
 		return
+
 	load(AM)
 
 // called to load a crate
@@ -468,7 +385,7 @@
 	if(istype(AM,/obj/structure/closet/crate))
 		CRATE = AM
 	else
-		if(wires & wire_loadcheck)
+		if(wires.load_check())
 			buzz(SIGH)
 			return		// if not emagged, only allow crates to be loaded
 
@@ -489,7 +406,7 @@
 		AM.pixel_y += 9
 		if(AM.layer < layer)
 			AM.layer = layer + 0.1
-		overlays += AM
+		add_overlay(AM)
 
 	load= AM
 	mode = 0
@@ -529,7 +446,7 @@
 
 	mode = 0
 
-	overlays.Cut()
+	cut_overlays()
 
 	if(buckled_mob)
 		unbuckle_mob()
@@ -553,7 +470,7 @@
 		on = 0
 		return
 	if(on)
-		var/speed = ((wires & wire_motor1) ? 1:0) + ((wires & wire_motor2) ? 2:0)
+		var/speed = (wires.motor1() ? 1 : 0) + (wires.motor2() ? 2 : 0)
 		//world << "speed: [speed]"
 		switch(speed)
 			if(0)
@@ -681,9 +598,7 @@
 // calculates a path to the current destination
 // given an optional turf to avoid
 /obj/machinery/bot/mulebot/proc/calc_path(turf/avoid = null)
-	src.path = AStar(src.loc, src.target, /turf/proc/CardinalTurfsWithAccess, /turf/proc/Distance, 0, 250, id=botcard, exclude=avoid)
-	if(!src.path)
-		src.path = list()
+	src.path = get_path_to(src.loc, src.target, /turf/proc/Distance_cardinal, 0, 250, id=botcard, exclude=avoid)
 
 
 // sets the current destination
@@ -703,7 +618,7 @@
 		mode = 3
 	else
 		mode = 2
-	icon_state = "mulebot[(wires & wire_mobavoid) == wire_mobavoid]"
+	icon_state = "mulebot[wires.mob_avoid()]"
 
 // starts bot moving to home
 // sends a beacon query to find
@@ -713,13 +628,13 @@
 	spawn(0)
 		set_destination(home_destination)
 		mode = 4
-	icon_state = "mulebot[(wires & wire_mobavoid) == wire_mobavoid]"
+	icon_state = "mulebot[wires.mob_avoid()]"
 
 // called when bot reaches current target
 /obj/machinery/bot/mulebot/proc/at_target()
 	if(!reached_target)
 		src.visible_message("[src] makes a chiming sound!", "You hear a chime.")
-		playsound(src.loc, 'sound/machines/chime.ogg', 50, 0)
+		playsound(src, 'sound/machines/chime.ogg', VOL_EFFECTS_MASTER, null, FALSE)
 		reached_target = 1
 
 		if(load)		// if loaded, unload at target
@@ -728,7 +643,7 @@
 			// not loaded
 			if(auto_pickup)		// find a crate
 				var/atom/movable/AM
-				if(!(wires & wire_loadcheck))		// if emagged, load first unanchored thing we find
+				if(!wires.load_check())		// if emagged, load first unanchored thing we find
 					for(var/atom/movable/A in get_step(loc, loaddir))
 						if(!A.anchored)
 							AM = A
@@ -751,14 +666,14 @@
 	return
 
 // called when bot bumps into anything
-/obj/machinery/bot/mulebot/Bump(var/atom/obs)
-	if(!(wires & wire_mobavoid))		//usually just bumps, but if avoidance disabled knock over mobs
+/obj/machinery/bot/mulebot/Bump(atom/obs)
+	if(!wires.mob_avoid())		//usually just bumps, but if avoidance disabled knock over mobs
 		var/mob/M = obs
 		if(ismob(M))
 			if(istype(M,/mob/living/silicon/robot))
-				src.visible_message("\red [src] bumps into [M]!")
+				src.visible_message("<span class='warning'>[src] bumps into [M]!</span>")
 			else
-				src.visible_message("\red [src] knocks over [M]!")
+				src.visible_message("<span class='warning'>[src] knocks over [M]!</span>")
 				M.stop_pulling()
 				M.Stun(8)
 				M.Weaken(5)
@@ -772,16 +687,16 @@
 // called from mob/living/carbon/human/Crossed()
 // when mulebot is in the same loc
 /obj/machinery/bot/mulebot/proc/RunOver(mob/living/carbon/human/H)
-	src.visible_message("\red [src] drives over [H]!")
-	playsound(src.loc, 'sound/effects/splat.ogg', 50, 1)
+	src.visible_message("<span class='warning'>[src] drives over [H]!</span>")
+	playsound(src, 'sound/effects/splat.ogg', VOL_EFFECTS_MASTER)
 
 	var/damage = rand(5,15)
-	H.apply_damage(2*damage, BRUTE, "head")
-	H.apply_damage(2*damage, BRUTE, "chest")
-	H.apply_damage(0.5*damage, BRUTE, "l_leg")
-	H.apply_damage(0.5*damage, BRUTE, "r_leg")
-	H.apply_damage(0.5*damage, BRUTE, "l_arm")
-	H.apply_damage(0.5*damage, BRUTE, "r_arm")
+	H.apply_damage(2*damage, BRUTE, BP_HEAD)
+	H.apply_damage(2*damage, BRUTE, BP_CHEST)
+	H.apply_damage(0.5*damage, BRUTE, BP_L_LEG)
+	H.apply_damage(0.5*damage, BRUTE, BP_R_LEG)
+	H.apply_damage(0.5*damage, BRUTE, BP_L_ARM)
+	H.apply_damage(0.5*damage, BRUTE, BP_R_ARM)
 
 	var/obj/effect/decal/cleanable/blood/B = new(src.loc)
 	B.blood_DNA = list()
@@ -811,12 +726,12 @@
 	*/
 	var/recv = signal.data["command"]
 	// process all-bot input
-	if(recv=="bot_status" && (wires & wire_remote_rx))
+	if(recv=="bot_status" && wires.remote_rx())
 		send_status()
 
 
 	recv = signal.data["command [suffix]"]
-	if(wires & wire_remote_rx)
+	if(wires.remote_rx())
 		// process control input
 		switch(recv)
 			if("stop")
@@ -856,7 +771,7 @@
 
 	// receive response from beacon
 	recv = signal.data["beacon"]
-	if(wires & wire_beacon_rx)
+	if(wires.beacon_rx())
 		if(recv == new_destination)	// if the recvd beacon location matches the set destination
 									// the we will navigate there
 			destination = new_destination
@@ -866,7 +781,7 @@
 				loaddir = text2num(direction)
 			else
 				loaddir = 0
-			icon_state = "mulebot[(wires & wire_mobavoid) == wire_mobavoid]"
+			icon_state = "mulebot[wires.mob_avoid()]"
 			calc_path()
 			updateDialog()
 
@@ -877,16 +792,14 @@
 // send a radio signal with multiple data key/values
 /obj/machinery/bot/mulebot/proc/post_signal_multiple(freq, list/keyval)
 
-	if(freq == beacon_freq && !(wires & wire_beacon_tx))
+	if(freq == beacon_freq && !wires.beacon_rx())
 		return
-	if(freq == control_freq && !(wires & wire_remote_tx))
+	if(freq == control_freq && !wires.remote_tx())
 		return
 
 	var/datum/radio_frequency/frequency = radio_controller.return_frequency(freq)
 
 	if(!frequency) return
-
-
 
 	var/datum/signal/signal = new()
 	signal.source = src
@@ -920,20 +833,20 @@
 
 /obj/machinery/bot/mulebot/emp_act(severity)
 	if (cell)
-		cell.emp_act(severity)
+		cell.emplode(severity)
 	if(load)
-		load.emp_act(severity)
+		load.emplode(severity)
 	..()
 
 
 /obj/machinery/bot/mulebot/explode()
-	src.visible_message("\red <B>[src] blows apart!</B>", 1)
+	src.visible_message("<span class='danger'>[src] blows apart!</span>")
 	var/turf/Tsec = get_turf(src)
 
 	new /obj/item/device/assembly/prox_sensor(Tsec)
-	PoolOrNew(/obj/item/stack/rods, Tsec)
-	PoolOrNew(/obj/item/stack/rods, Tsec)
-	new /obj/item/weapon/cable_coil/cut(Tsec)
+	new /obj/item/stack/rods(Tsec)
+	new /obj/item/stack/rods(Tsec)
+	new /obj/item/stack/cable_coil/cut/red(Tsec)
 	if (cell)
 		cell.loc = Tsec
 		cell.update_icon()

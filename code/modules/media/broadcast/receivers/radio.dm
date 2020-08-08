@@ -7,19 +7,13 @@
 
 	var/on=0
 
-/obj/machinery/media/receiver/boombox/initialize()
+/obj/machinery/media/receiver/boombox/atom_init()
+	. = ..()
 	if(on)
 		update_on()
 	update_icon()
 
-/obj/machinery/media/receiver/boombox/attack_hand(mob/user)
-	if(stat & (NOPOWER|BROKEN))
-		to_chat(usr, "\red You don't see anything to mess with.")
-		return
-	user.set_machine(src)
-	interact(user)
-
-/obj/machinery/media/receiver/boombox/interact(mob/user)
+/obj/machinery/media/receiver/boombox/ui_interact(mob/user)
 	var/dat = "<html><head><title>[src]</title></head><body><TT>"
 	dat += {"
 				Power: <a href="?src=\ref[src];power=1">[on ? "On" : "Off"]</a><BR>
@@ -28,7 +22,6 @@
 	dat+={"</TT></body></html>"}
 	user << browse(dat, "window=radio-recv")
 	onclose(user, "radio-recv")
-	return
 
 /obj/machinery/media/receiver/boombox/proc/update_on()
 	if(on)
@@ -54,14 +47,14 @@
 		else
 			newfreq = input(usr, "Set a new frequency (MHz, 90.0, 200.0).", src, media_frequency) as null|num
 		if(newfreq)
-			if(findtext(num2text(newfreq), "."))
+			if(!IS_INTEGER(newfreq))
 				newfreq *= 10 // shift the decimal one place
 			if(newfreq > 900 && newfreq < 2000) // Between (90.0 and 100.0)
 				disconnect_frequency()
 				media_frequency = newfreq
 				connect_frequency()
 			else
-				to_chat(usr, "\red Invalid FM frequency. (90.0, 200.0)")
+				to_chat(usr, "<span class='warning'>Invalid FM frequency. (90.0, 200.0)</span>")
 	updateDialog()
 
 

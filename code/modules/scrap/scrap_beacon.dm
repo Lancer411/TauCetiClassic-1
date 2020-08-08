@@ -10,10 +10,11 @@
 	var/impact_speed = 3
 	var/impact_prob = 100
 	var/impact_range = 2
-	var/last_summon = -300
+	var/last_summon = -3000
 	var/active = 0
 
 /obj/structure/scrap_beacon/attack_hand(mob/user)
+	user.SetNextMove(CLICK_CD_INTERACT)
 	if((last_summon + summon_cooldown) >= world.time)
 		to_chat(user, "<span class='notice'>[src.name] not charged yet.</span>")
 		return
@@ -25,7 +26,10 @@
 	icon_state = "beacon[active]"
 
 /obj/structure/scrap_beacon/proc/start_scrap_summon()
+	set waitfor = FALSE
+
 	active = 1
+	playsound(src, 'sound/machines/scrap_beacon_start.ogg', VOL_EFFECTS_MASTER, null, FALSE)
 	update_icon()
 	sleep(30)
 	var/list/flooring_near_beacon = list()
@@ -42,14 +46,7 @@
 		sleep(impact_speed)
 		var/turf/newloc = pick(flooring_near_beacon)
 		flooring_near_beacon -= newloc
-		spawn()
-			summon_scrap_pile(newloc)
+		new /obj/effect/falling_effect(newloc, /obj/random/scrap/moderate_weighted)
 	active = 0
 	update_icon()
 	return
-
-/obj/structure/scrap_beacon/proc/summon_scrap_pile(newloc)
-	new /obj/random/scrap/moderate_weighted(newloc)
-	var/datum/effect/effect/system/spark_spread/s = PoolOrNew(/datum/effect/effect/system/spark_spread)
-	s.set_up(3, 1, newloc)
-	s.start()

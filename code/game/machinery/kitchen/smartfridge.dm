@@ -1,7 +1,7 @@
 /* SmartFridge.  Much todo
 */
 /obj/machinery/smartfridge
-	name = "\improper SmartFridge"
+	name = "SmartFridge"
 	icon = 'icons/obj/vending.dmi'
 	icon_state = "smartfridge"
 	layer = 2.9
@@ -11,6 +11,7 @@
 	idle_power_usage = 5
 	active_power_usage = 100
 	flags = NOREACT
+	allowed_checks = ALLOWED_CHECK_NONE
 	var/max_n_of_items = 1500
 	var/icon_on = "smartfridge"
 	var/icon_off = "smartfridge-off"
@@ -21,17 +22,19 @@
 	var/seconds_electrified = 0;
 	var/shoot_inventory = 0
 	var/locked = 0
-	var/wires = 7
-	var/const/WIRE_SHOCK = 1
-	var/const/WIRE_SHOOTINV = 2
-	var/const/WIRE_SCANID = 3 //Only used by the secure smartfridge, but required by the cut, mend and pulse procs.
+	var/datum/wires/smartfridge/wires = null
 
-/obj/machinery/smartfridge/New()
-	..()
+/obj/machinery/smartfridge/atom_init()
+	. = ..()
+	wires = new(src)
 	component_parts = list()
 	component_parts += new /obj/item/weapon/circuitboard/smartfridge(null, type)
 	component_parts += new /obj/item/weapon/stock_parts/matter_bin(null)
 	RefreshParts()
+
+/obj/machinery/smartfridge/Destroy()
+	QDEL_NULL(wires)
+	return ..()
 
 /obj/machinery/smartfridge/construction()
 	for(var/datum/A in contents)
@@ -46,12 +49,12 @@
 		max_n_of_items = 1500 * B.rating
 
 /obj/machinery/smartfridge/proc/accept_check(obj/item/O)
-	if(istype(O,/obj/item/weapon/reagent_containers/food/snacks/grown/) || istype(O,/obj/item/seeds/))
+	if(istype(O,/obj/item/weapon/reagent_containers/food/snacks/grown) || istype(O,/obj/item/seeds))
 		return 1
 	return 0
 
 /obj/machinery/smartfridge/seeds
-	name = "\improper MegaSeed Servitor"
+	name = "MegaSeed Servitor"
 	desc = "When you need seeds fast!"
 	icon = 'icons/obj/vending.dmi'
 	icon_state = "seeds"
@@ -59,7 +62,7 @@
 	icon_off = "seeds-off"
 
 /obj/machinery/smartfridge/seeds/accept_check(obj/item/O)
-	if(istype(O,/obj/item/seeds/))
+	if(istype(O,/obj/item/seeds))
 		return 1
 	return 0
 
@@ -69,26 +72,21 @@
 
 /obj/machinery/smartfridge/chemistry/accept_check(obj/item/O)
 	if(istype(O,/obj/item/weapon/storage/pill_bottle))
-		if(O.contents.len)
-			for(var/obj/item/I in O)
-				if(!accept_check(I))
-					return 0
-			return 1
-		return 0
+		return TRUE
 	if(!istype(O,/obj/item/weapon/reagent_containers))
-		return 0
+		return FALSE
 	if(istype(O,/obj/item/weapon/reagent_containers/pill)) // empty pill prank ok
-		return 1
+		return TRUE
 	if(!O.reagents || !O.reagents.reagent_list.len) // other empty containers not accepted
-		return 0
+		return FALSE
 	if(istype(O,/obj/item/weapon/reagent_containers/syringe) || istype(O,/obj/item/weapon/reagent_containers/glass/bottle) || istype(O,/obj/item/weapon/reagent_containers/glass/beaker) || istype(O,/obj/item/weapon/reagent_containers/spray))
-		return 1
-	return 0
+		return TRUE
+	return FALSE
 
 /obj/machinery/smartfridge/secure/extract
-	name = "\improper Slime Extract Storage"
+	name = "Slime Extract Storage"
 	desc = "A refrigerated storage unit for slime extracts."
-	req_access_txt = "47"
+	req_access = list(47)
 
 /obj/machinery/smartfridge/secure/extract/accept_check(obj/item/O)
 	if(istype(O,/obj/item/slime_extract))
@@ -96,52 +94,43 @@
 	return 0
 
 /obj/machinery/smartfridge/secure/medbay
-	name = "\improper Refrigerated Medicine Storage"
+	name = "Refrigerated Medicine Storage"
 	desc = "A refrigerated storage unit for storing medicine and chemicals."
 	icon_state = "smartfridge" //To fix the icon in the map editor.
 	icon_on = "smartfridge_chem"
-	req_one_access_txt = "5;33"
+	req_one_access = list(5, 33)
 
 /obj/machinery/smartfridge/secure/medbay/accept_check(obj/item/O)
-	if(istype(O,/obj/item/weapon/reagent_containers/glass/))
+	if(istype(O,/obj/item/weapon/reagent_containers/glass))
 		return 1
-	if(istype(O,/obj/item/weapon/storage/pill_bottle/))
+	if(istype(O,/obj/item/weapon/storage/pill_bottle))
 		return 1
-	if(istype(O,/obj/item/weapon/reagent_containers/pill/))
+	if(istype(O,/obj/item/weapon/reagent_containers/pill))
 		return 1
 	return 0
 
 /obj/machinery/smartfridge/secure/virology
-	name = "\improper Refrigerated Virus Storage"
+	name = "Refrigerated Virus Storage"
 	desc = "A refrigerated storage unit for storing viral material."
-	req_access_txt = "39"
+	req_access = list(39)
 	icon_state = "smartfridge_virology"
 	icon_on = "smartfridge_virology"
 	icon_off = "smartfridge_virology-off"
 
 /obj/machinery/smartfridge/secure/virology/accept_check(obj/item/O)
-	if(istype(O,/obj/item/weapon/reagent_containers/glass/beaker/vial/))
+	if(istype(O,/obj/item/weapon/reagent_containers/glass/beaker/vial))
 		return 1
-	if(istype(O,/obj/item/weapon/virusdish/))
-		return 1
-	return 0
-
-/obj/machinery/smartfridge/chemistry
-	name = "\improper Smart Chemical Storage"
-	desc = "A refrigerated storage unit for medicine and chemical storage."
-
-/obj/machinery/smartfridge/chemistry/accept_check(obj/item/O)
-	if(istype(O,/obj/item/weapon/storage/pill_bottle) || istype(O,/obj/item/weapon/reagent_containers))
+	if(istype(O,/obj/item/weapon/virusdish))
 		return 1
 	return 0
 
 /obj/machinery/smartfridge/chemistry/virology
-	name = "\improper Smart Virus Storage"
+	name = "Smart Virus Storage"
 	desc = "A refrigerated storage unit for volatile sample storage."
 
 
 /obj/machinery/smartfridge/drinks
-	name = "\improper Drink Showcase"
+	name = "Drink Showcase"
 	desc = "A refrigerated storage unit for tasty tasty alcohol."
 
 /obj/machinery/smartfridge/drinks/accept_check(obj/item/O)
@@ -168,6 +157,7 @@
 		stat |= NOPOWER
 		if(!isbroken)
 			icon_state = icon_off
+	update_power_use()
 
 /*******************
 *   Item Adding
@@ -189,18 +179,16 @@
 
 	default_deconstruction_crowbar(O)
 
-	if(istype(O, /obj/item/weapon/screwdriver))
+	if(isscrewdriver(O))
 		panel_open = !panel_open
 		to_chat(user, "You [panel_open ? "open" : "close"] the maintenance panel.")
-		overlays.Cut()
+		cut_overlays()
 		if(panel_open)
-			overlays += image(icon, icon_panel)
+			add_overlay(image(icon, icon_panel))
 		nanomanager.update_uis(src)
 		return
 
-	if(istype(O, /obj/item/device/multitool)||istype(O, /obj/item/weapon/wirecutters))
-		if(panel_open)
-			attack_hand(user)
+	if(is_wire_tool(O) && panel_open && wires.interact(user))
 		return
 
 	if(!src.ispowered)
@@ -210,7 +198,7 @@
 	if(accept_check(O))
 		if(contents.len >= max_n_of_items)
 			to_chat(user, "<span class='notice'>\The [src] is full.</span>")
-			return 1
+			return
 		else
 			user.remove_from_mob(O)
 			O.loc = src
@@ -218,76 +206,74 @@
 				item_quants[O.name]++
 			else
 				item_quants[O.name] = 1
-			user.visible_message("<span class='notice'>[user] has added \the [O] to \the [src].", \
-								 "<span class='notice'>You add \the [O] to \the [src].")
+			user.visible_message("<span class='notice'>[user] has added \the [O] to \the [src].</span>", \
+								 "<span class='notice'>You add \the [O] to \the [src].</span>")
 
 			nanomanager.update_uis(src)
 
-	else if(istype(O, /obj/item/weapon/storage/bag/plants))
-		var/obj/item/weapon/storage/bag/plants/P = O
-		var/plants_loaded = 0
-		for(var/obj/G in P.contents)
-			if(accept_check(G))
+	else if(istype(O, /obj/item/weapon/storage)) // fastload from userstorage
+		if(istype(O, /obj/item/weapon/storage/lockbox))
+			var/obj/item/weapon/storage/lockbox/L = O
+			if(L.locked)
+				to_chat(user, "<span class='notice'>\The [L] is locked.</span>")
+				return
+		var/obj/item/weapon/storage/S = O
+		var/item_loaded = 0
+		for(var/obj/I in S.contents)
+			if(accept_check(I))
 				if(contents.len >= max_n_of_items)
 					to_chat(user, "<span class='notice'>\The [src] is full.</span>")
-					return 1
+					return
 				else
-					P.remove_from_storage(G,src)
-					if(item_quants[G.name])
-						item_quants[G.name]++
+					S.remove_from_storage(I,src)
+					if(item_quants[I.name])
+						item_quants[I.name]++
 					else
-						item_quants[G.name] = 1
-					plants_loaded++
-		if(plants_loaded)
+						item_quants[I.name] = 1
+					item_loaded++
 
+		if(item_loaded)
 			user.visible_message( \
-				"<span class='notice'>[user] loads \the [src] with \the [P].</span>", \
-				"<span class='notice'>You load \the [src] with \the [P].</span>")
-			if(P.contents.len > 0)
+				"<span class='notice'>[user] loads \the [src] with \the [S].</span>", \
+				"<span class='notice'>You load \the [src] with \the [S].</span>")
+			if(S.contents.len > 0)
 				to_chat(user, "<span class='notice'>Some items are refused.</span>")
 
 		nanomanager.update_uis(src)
-
+		return
 	else
 		to_chat(user, "<span class='notice'>\The [src] smartly refuses [O].</span>")
-		return 1
-
-/obj/machinery/smartfridge/secure/attackby(obj/item/O, mob/user)
-	if (istype(O, /obj/item/weapon/card/emag))
-		emagged = 1
-		locked = -1
-		to_chat(user, "You short out the product lock on [src].")
 		return
 
-	..()
-
-/obj/machinery/smartfridge/attack_paw(mob/user)
-	return attack_hand(user)
+/obj/machinery/smartfridge/secure/emag_act(mob/user)
+	if(emagged)
+		return FALSE
+	emagged = 1
+	locked = -1
+	to_chat(user, "You short out the product lock on [src].")
+	return TRUE
 
 /obj/machinery/smartfridge/attack_ai(mob/user)
+	if(IsAdminGhost(user))
+		return ..()
 	return 0
 
 /obj/machinery/smartfridge/attack_hand(mob/user)
-	if(!ispowered) return
-	if(seconds_electrified != 0)
+	if(!issilicon(user) && !isobserver(user) && seconds_electrified)
 		if(shock(user, 100))
 			return
 
-	ui_interact(user)
+	return ..()
 
 /*******************
 *   SmartFridge Menu
 ********************/
 
 /obj/machinery/smartfridge/ui_interact(mob/user, ui_key = "main", datum/nanoui/ui = null)
-	user.set_machine(src)
-
 	var/is_secure = istype(src,/obj/machinery/smartfridge/secure)
 
 	var/data[0]
 	data["contents"] = null
-	data["wires"] = null
-	data["panel_open"] = panel_open
 	data["electrified"] = seconds_electrified > 0
 	data["shoot_inventory"] = shoot_inventory
 	data["locked"] = locked
@@ -302,26 +288,6 @@
 
 	if (items.len > 0)
 		data["contents"] = items
-
-	var/list/vendwires = null
-	if (is_secure)
-		vendwires = list(
-			"Violet" = 1,
-			"Orange" = 2,
-			"Green" = 3)
-	else
-		vendwires = list(
-			"Blue" = 1,
-			"Red" = 2,
-			"Black" = 3)
-
-	var/list/vendor_wires[0]
-	for (var/wire in vendwires)
-		var is_uncut = wires & APCWireColorToFlag[vendwires[wire]]
-		vendor_wires.Add(list(list("wire" = wire, "cut" = !is_uncut, "index" = vendwires[wire])))
-
-	if (vendor_wires.len > 0)
-		data["wires"] = vendor_wires
 
 	ui = nanomanager.try_update_ui(user, src, ui_key, ui, data)
 	if (!ui)
@@ -362,79 +328,6 @@
 
 		return TRUE
 
-	if (panel_open)
-		if (href_list["cutwire"])
-			if (!( istype(usr.get_active_hand(), /obj/item/weapon/wirecutters) ))
-				to_chat(user, "You need wirecutters!")
-				return FALSE
-
-			var/wire_index = text2num(href_list["cutwire"])
-			if (isWireColorCut(wire_index))
-				mend(wire_index)
-			else
-				cut(wire_index)
-			return TRUE
-
-		if (href_list["pulsewire"])
-			if (!istype(usr.get_active_hand(), /obj/item/device/multitool))
-				to_chat(usr, "You need a multitool!")
-				return FALSE
-
-			var/wire_index = text2num(href_list["pulsewire"])
-			if (isWireColorCut(wire_index))
-				to_chat(usr, "You can't pulse a cut wire.")
-				return FALSE
-
-			pulse(wire_index)
-			return TRUE
-
-/*************
-*	Hacking
-**************/
-
-/obj/machinery/smartfridge/proc/cut(wireColor)
-	var/wireFlag = APCWireColorToFlag[wireColor]
-	var/wireIndex = APCWireColorToIndex[wireColor]
-	src.wires &= ~wireFlag
-	switch(wireIndex)
-		if(WIRE_SHOCK)
-			src.seconds_electrified = -1
-		if (WIRE_SHOOTINV)
-			if(!src.shoot_inventory)
-				src.shoot_inventory = 1
-		if(WIRE_SCANID)
-			src.locked = 1
-
-/obj/machinery/smartfridge/proc/mend(wireColor)
-	var/wireFlag = APCWireColorToFlag[wireColor]
-	var/wireIndex = APCWireColorToIndex[wireColor]
-	src.wires |= wireFlag
-	switch(wireIndex)
-		if(WIRE_SHOCK)
-			src.seconds_electrified = 0
-		if (WIRE_SHOOTINV)
-			src.shoot_inventory = 0
-		if(WIRE_SCANID)
-			src.locked = 0
-
-/obj/machinery/smartfridge/proc/pulse(wireColor)
-	var/wireIndex = APCWireColorToIndex[wireColor]
-	switch(wireIndex)
-		if(WIRE_SHOCK)
-			src.seconds_electrified = 30
-		if(WIRE_SHOOTINV)
-			src.shoot_inventory = !src.shoot_inventory
-		if(WIRE_SCANID)
-			src.locked = -1
-
-/obj/machinery/smartfridge/proc/isWireColorCut(wireColor)
-	var/wireFlag = APCWireColorToFlag[wireColor]
-	return ((src.wires & wireFlag) == 0)
-
-/obj/machinery/smartfridge/proc/isWireCut(wireIndex)
-	var/wireFlag = APCIndexToFlag[wireIndex]
-	return ((src.wires & wireFlag) == 0)
-
 /obj/machinery/smartfridge/proc/throw_item()
 	var/obj/throw_item = null
 	var/mob/living/target = locate() in view(7,src)
@@ -454,9 +347,8 @@
 		break
 	if(!throw_item)
 		return 0
-	spawn(0)
-		throw_item.throw_at(target,16,3,src)
-	src.visible_message("\red <b>[src] launches [throw_item.name] at [target.name]!</b>")
+	throw_item.throw_at(target,16,3,src)
+	src.visible_message("<span class='warning'><b>[src] launches [throw_item.name] at [target.name]!</b></span>")
 	return 1
 
 /obj/machinery/smartfridge/proc/shock(mob/user, prb)
@@ -478,5 +370,5 @@
 	if(!.)
 		return
 	if (!allowed(usr) && !emagged && locked != -1 && href_list["vend"])
-		to_chat(usr, "\red Access denied.")
+		to_chat(usr, "<span class='warning'>Access denied.</span>")
 		return FALSE

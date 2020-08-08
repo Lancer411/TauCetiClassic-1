@@ -4,7 +4,7 @@
 	icon = 'icons/obj/pda.dmi'
 	icon_state = "cart"
 	item_state = "electronic"
-	w_class = 1
+	w_class = ITEM_SIZE_TINY
 
 	var/obj/item/radio/integrated/radio = null
 	var/access_security = 0
@@ -64,10 +64,9 @@
 	icon_state = "cart-s"
 	access_security = 1
 
-/obj/item/weapon/cartridge/security/New()
-	..()
-	spawn(5)
-		radio = new /obj/item/radio/integrated/beepsky(src)
+/obj/item/weapon/cartridge/security/atom_init()
+	. = ..()
+	radio = new /obj/item/radio/integrated/beepsky(src)
 
 /obj/item/weapon/cartridge/detective
 	name = "D.E.T.E.C.T. Cartridge"
@@ -116,10 +115,9 @@
 	access_reagent_scanner = 1
 	access_atmos = 1
 
-/obj/item/weapon/cartridge/signal/New()
-	..()
-	spawn(5)
-		radio = new /obj/item/radio/integrated/signal(src)
+/obj/item/weapon/cartridge/signal/atom_init()
+	. = ..()
+	radio = new /obj/item/radio/integrated/signal(src)
 
 /obj/item/weapon/cartridge/quartermaster
 	name = "Space Parts & Space Vendors Cartridge"
@@ -127,10 +125,9 @@
 	icon_state = "cart-q"
 	access_quartermaster = 1
 
-/obj/item/weapon/cartridge/quartermaster/New()
-	..()
-	spawn(5)
-		radio = new /obj/item/radio/integrated/mule(src)
+/obj/item/weapon/cartridge/quartermaster/atom_init()
+	. = ..()
+	radio = new /obj/item/radio/integrated/mule(src)
 
 /obj/item/weapon/cartridge/head
 	name = "Easy-Record DELUXE"
@@ -145,10 +142,9 @@
 	access_janitor = 1
 	access_security = 1
 
-/obj/item/weapon/cartridge/hop/New()
-	..()
-	spawn(5)
-		radio = new /obj/item/radio/integrated/mule(src)
+/obj/item/weapon/cartridge/hop/atom_init()
+	. = ..()
+	radio = new /obj/item/radio/integrated/mule(src)
 
 /obj/item/weapon/cartridge/hos
 	name = "R.O.B.U.S.T. DELUXE"
@@ -156,10 +152,9 @@
 	access_status_display = 1
 	access_security = 1
 
-/obj/item/weapon/cartridge/hos/New()
-	..()
-	spawn(5)
-		radio = new /obj/item/radio/integrated/beepsky(src)
+/obj/item/weapon/cartridge/hos/atom_init()
+	. = ..()
+	radio = new /obj/item/radio/integrated/beepsky(src)
 
 /obj/item/weapon/cartridge/ce
 	name = "Power-On DELUXE"
@@ -182,10 +177,9 @@
 	access_reagent_scanner = 1
 	access_atmos = 1
 
-/obj/item/weapon/cartridge/rd/New()
-	..()
-	spawn(5)
-		radio = new /obj/item/radio/integrated/signal(src)
+/obj/item/weapon/cartridge/rd/atom_init()
+	. = ..()
+	radio = new /obj/item/radio/integrated/signal(src)
 
 /obj/item/weapon/cartridge/captain
 	name = "Value-PAK Cartridge"
@@ -211,7 +205,8 @@
 /obj/item/weapon/cartridge/proc/post_status(command, data1, data2)
 
 	var/datum/radio_frequency/frequency = radio_controller.return_frequency(1435)
-	if(!frequency) return
+	if(!frequency)
+		return
 
 	var/datum/signal/status_signal = new
 	status_signal.source = src
@@ -224,11 +219,21 @@
 			status_signal.data["msg2"] = data2
 			if(loc)
 				var/obj/item/PDA = loc
-				var/mob/user = PDA.fingerprintslast
+				var/mob/user = null
 				if(istype(PDA.loc,/mob/living))
-					name = PDA.loc
-				log_admin("STATUS: [user] set status screen with [PDA]. Message: [data1] [data2]")
-				message_admins("STATUS: [user] set status screen with [PDA]. Message: [data1] [data2] (<A HREF='?_src_=holder;adminplayerobservecoodjump=1;X=[user.x];Y=[user.y];Z=[user.z]'>JMP</a>)")
+					user = PDA.loc
+				else if(PDA.fingerprintslast)
+					var/client/user_client = directory[PDA.fingerprintslast]
+					if(user_client && user_client.mob)
+						user = user_client.mob
+
+				if(user)
+					log_admin("STATUS: [key_name(user)] set status screen with [PDA]. Message: [data1] [data2]")
+					message_admins("STATUS: [key_name_admin(user)] set status screen with [PDA]. Message: [data1] [data2] [ADMIN_FLW(user)]")
+				else
+					var/turf/PDA_turf = get_turf(PDA)
+					log_admin("STATUS: UNKNOWN set status screen with [PDA]. Message: [data1] [data2]")
+					message_admins("STATUS: UNKNOWN set status screen with [PDA]. Message: [data1] [data2] [PDA.loc ? "[ADMIN_JMP(PDA_turf)]" : ""] ")
 
 		if("alert")
 			status_signal.data["picture_state"] = data1
@@ -266,32 +271,37 @@
 
 
 	/*		Power Monitor (Mode: 43 / 433)			*/
-	if(mode==43 || mode==433)
+	if(mode==43)
 		var/pMonData[0]
-		for(var/obj/machinery/computer/monitor/pMon in machines)
+		for(var/obj/machinery/computer/monitor/pMon in computer_list)
 			if(!(pMon.stat & (NOPOWER|BROKEN)) )
 				pMonData[++pMonData.len] = list ("Name" = pMon.name, "ref" = "\ref[pMon]")
-				if(isnull(powmonitor)) powmonitor = pMon
+				if(isnull(powmonitor))
+					powmonitor = pMon
 
 		values["powermonitors"] = pMonData
 
-		values["poweravail"] = powmonitor.powernet.avail
-		values["powerload"] = num2text(powmonitor.powernet.viewload,10)
+	if(mode==433)
+		if(powmonitor)
+			values["powermonitor_detected"] = TRUE
+			values["poweravail"] = powmonitor.powernet.avail
+			values["powerload"] = num2text(powmonitor.powernet.viewload,10)
 
-		var/list/L = list()
-		for(var/obj/machinery/power/terminal/term in powmonitor.powernet.nodes)
-			if(istype(term.master, /obj/machinery/power/apc))
-				var/obj/machinery/power/apc/A = term.master
-				L += A
+			var/list/L = list()
+			for(var/obj/machinery/power/terminal/term in powmonitor.powernet.nodes)
+				if(istype(term.master, /obj/machinery/power/apc))
+					var/obj/machinery/power/apc/A = term.master
+					L += A
 
-		var/list/Status = list(0,0,1,1) // Status:  off, auto-off, on, auto-on
-		var/list/chg = list(0,1,1)	// Charging: nope, charging, full
-		var/apcData[0]
-		for(var/obj/machinery/power/apc/A in L)
-			apcData[++apcData.len] = list("Name" = html_encode(A.area.name), "Equipment" = Status[A.equipment+1], "Lights" = Status[A.lighting+1], "Environment" = Status[A.environ+1], "CellPct" = A.cell ? round(A.cell.percent(),1) : -1, "CellStatus" = A.cell ? chg[A.charging+1] : 0)
+			var/list/Status = list("Off","AOff","On","AOn") // Status:  off, auto-off, on, auto-on
+			var/list/chg = list("N","C","F")	// Charging: nope, charging, full
+			var/apcData[0]
+			for(var/obj/machinery/power/apc/A in L)
+				apcData[++apcData.len] = list("Name" = html_encode(A.area.name), "Equipment" = Status[A.equipment+1], "Lights" = Status[A.lighting+1], "Environment" = Status[A.environ+1], "CellStatus" = A.cell ? "[add_lspace(round(A.cell.percent()), 3)]% [chg[A.charging+1]]" : "N/C", "Load" = add_lspace(A.lastused_total, 6))
 
-		values["apcs"] = apcData
-
+			values["apcs"] = apcData
+		else
+			values["powermonitor_detected"] = FALSE
 
 
 
@@ -458,7 +468,7 @@
 		else
 			JaniData["user_loc"] = list("x" = 0, "y" = 0)
 		var/MopData[0]
-		for(var/obj/item/weapon/mop/M in world)
+		for(var/obj/item/weapon/mop/M in mop_list)
 			var/turf/ml = get_turf(M)
 			if(ml)
 				if(ml.z != cl.z)
@@ -471,7 +481,7 @@
 
 
 		var/BucketData[0]
-		for(var/obj/structure/mopbucket/B in world)
+		for(var/obj/structure/mopbucket/B in mopbucket_list)
 			var/turf/bl = get_turf(B)
 			if(bl)
 				if(bl.z != cl.z)
@@ -483,7 +493,7 @@
 			BucketData[++BucketData.len] = list("x" = 0, "y" = 0, dir=null, status = null)
 
 		var/CbotData[0]
-		for(var/obj/machinery/bot/cleanbot/B in world)
+		for(var/obj/machinery/bot/cleanbot/B in bots_list)
 			var/turf/bl = get_turf(B)
 			if(bl)
 				if(bl.z != cl.z)
@@ -495,13 +505,13 @@
 		if(!CbotData.len)
 			CbotData[++CbotData.len] = list("x" = 0, "y" = 0, dir=null, status = null)
 		var/CartData[0]
-		for(var/obj/structure/janitorialcart/B in world)
+		for(var/obj/structure/stool/bed/chair/janitorialcart/B in janitorialcart_list)
 			var/turf/bl = get_turf(B)
 			if(bl)
 				if(bl.z != cl.z)
 					continue
 				var/direction = get_dir(src,B)
-				CartData[++CartData.len] = list("x" = bl.x, "y" = bl.y, "dir" = uppertext(dir2text(direction)), "status" = B.reagents.total_volume/100)
+				CartData[++CartData.len] = list("x" = bl.x, "y" = bl.y, "dir" = uppertext(dir2text(direction)), "status" = B.mybucket ? B.mybucket.reagents.total_volume / 100 : "No bucket.")
 		if(!CartData.len)
 			CartData[++CartData.len] = list("x" = 0, "y" = 0, dir=null, status = null)
 
@@ -523,7 +533,7 @@
 /obj/item/weapon/cartridge/Topic(href, href_list)
 	..()
 
-	if (!usr.canmove || usr.stat || usr.restrained() || !in_range(loc, usr))
+	if (usr.incapacitated() || !in_range(loc, usr))
 		usr.unset_machine()
 		usr << browse(null, "window=pda")
 		return
@@ -580,10 +590,10 @@
 				if("alert")
 					post_status("alert", href_list["alert"])
 				if("setmsg1")
-					message1 = input("Line 1", "Enter Message Text", message1) as text|null
+					message1 = sanitize_safe(input("Line 1", "Enter Message Text", message1) as text|null, MAX_LNAME_LEN)
 					updateSelfDialog()
 				if("setmsg2")
-					message2 = input("Line 2", "Enter Message Text", message2) as text|null
+					message2 = sanitize_safe(input("Line 2", "Enter Message Text", message2) as text|null, MAX_LNAME_LEN)
 					updateSelfDialog()
 				else
 					post_status(href_list["statdisp"])

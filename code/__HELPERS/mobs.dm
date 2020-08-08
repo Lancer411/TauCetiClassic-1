@@ -1,47 +1,44 @@
-proc/random_hair_style(gender, species = "Human")
+/proc/random_blood_type()
+	return pick(4;"O-", 36;"O+", 3;"A-", 28;"A+", 1;"B-", 20;"B+", 1;"AB-", 5;"AB+")
+
+/proc/random_hair_style(gender, species = HUMAN, ipc_head)
 	var/h_style = "Bald"
 
-	var/list/valid_hairstyles = list()
-	for(var/hairstyle in hair_styles_list)
-		var/datum/sprite_accessory/S = hair_styles_list[hairstyle]
-		if(gender == MALE && S.gender == FEMALE)
-			continue
-		if(gender == FEMALE && S.gender == MALE)
-			continue
-		if( !(species in S.species_allowed))
-			continue
-		valid_hairstyles[hairstyle] = hair_styles_list[hairstyle]
+	var/list/valid_hairstyles = get_valid_styles_from_cache(hairs_cache, species, gender, ipc_head)
 
 	if(valid_hairstyles.len)
 		h_style = pick(valid_hairstyles)
 
 	return h_style
 
-proc/random_facial_hair_style(gender, species = "Human")
+/proc/random_gradient_style()
+	return pick(hair_gradients)
+
+/proc/random_facial_hair_style(gender, species = HUMAN)
 	var/f_style = "Shaved"
 
-	var/list/valid_facialhairstyles = list()
-	for(var/facialhairstyle in facial_hair_styles_list)
-		var/datum/sprite_accessory/S = facial_hair_styles_list[facialhairstyle]
-		if(gender == MALE && S.gender == FEMALE)
-			continue
-		if(gender == FEMALE && S.gender == MALE)
-			continue
-		if( !(species in S.species_allowed))
-			continue
-
-		valid_facialhairstyles[facialhairstyle] = facial_hair_styles_list[facialhairstyle]
+	var/list/valid_facialhairstyles = get_valid_styles_from_cache(facial_hairs_cache, species, gender)
 
 	if(valid_facialhairstyles.len)
 		f_style = pick(valid_facialhairstyles)
 
 		return f_style
 
-proc/random_name(gender, species = "Human")
+/proc/random_unique_name(gender, attempts_to_find_unique_name = 10)
+	for(var/i in 1 to attempts_to_find_unique_name)
+		if(gender == FEMALE)
+			. = capitalize(pick(global.first_names_female)) + " " + capitalize(pick(global.last_names))
+		else
+			. = capitalize(pick(global.first_names_male)) + " " + capitalize(pick(global.last_names))
+
+		if(!findname(.))
+			break
+
+/proc/random_name(gender, species = HUMAN)
 	if(gender==FEMALE)	return capitalize(pick(first_names_female)) + " " + capitalize(pick(last_names))
 	else				return capitalize(pick(first_names_male)) + " " + capitalize(pick(last_names))
 
-proc/random_skin_tone()
+/proc/random_skin_tone()
 	switch(pick(60;"caucasian", 15;"afroamerican", 10;"african", 10;"latino", 5;"albino"))
 		if("caucasian")		. = -10
 		if("afroamerican")	. = -115
@@ -51,7 +48,7 @@ proc/random_skin_tone()
 		else				. = rand(-185,34)
 	return min(max( .+rand(-25, 25), -185),34)
 
-proc/skintone2racedescription(tone)
+/proc/skintone2racedescription(tone)
 	switch (tone)
 		if(30 to INFINITY)		return "albino"
 		if(20 to 30)			return "pale"
@@ -63,7 +60,7 @@ proc/skintone2racedescription(tone)
 		if(-INFINITY to -65)	return "black"
 		else					return "unknown"
 
-proc/age2agedescription(age)
+/proc/age2agedescription(age)
 	switch(age)
 		if(0 to 1)			return "infant"
 		if(1 to 3)			return "toddler"
@@ -76,32 +73,62 @@ proc/age2agedescription(age)
 		if(70 to INFINITY)	return "elderly"
 		else				return "unknown"
 
-proc/RoundHealth(health)
+/proc/RoundHealth(health)
 	switch(health)
 		if(100 to INFINITY)
 			return "health100"
-		if(70 to 100)
-			return "health80"
-		if(50 to 70)
-			return "health60"
-		if(30 to 50)
-			return "health40"
-		if(18 to 30)
-			return "health25"
-		if(5 to 18)
-			return "health10"
-		if(1 to 5)
+		if(93 to 100)
+			return "health93"
+		if(86 to 93)
+			return "health86"
+		if(78 to 86)
+			return "health78"
+		if(71 to 78)
+			return "health71"
+		if(64 to 71)
+			return "health64"
+		if(56 to 64)
+			return "health56"
+		if(49 to 56)
+			return "health49"
+		if(42 to 49)
+			return "health42"
+		if(35 to 42)
+			return "health35"
+		if(28 to 35)
+			return "health28"
+		if(21 to 28)
+			return "health21"
+		if(14 to 21)
+			return "health14"
+		if(7 to 14)
+			return "health7"
+		if(1 to 7)
 			return "health1"
-		if(-99 to 0)
+		if(-50 to 1)
 			return "health0"
+		if(-85 to -50)
+			return "health-50"
+		if(-99 to -85)
+			return "health-85"
 		else
 			return "health-100"
-	return "0"
 
+//helper for inverting armor blocked values into a multiplier
+#define blocked_mult(blocked) max(1 - (blocked / 100), 0)
 
-/proc/do_mob(mob/user , mob/target, time = 30, uninterruptible = 0, progress = 1)
+/proc/do_mob(mob/user , mob/target, time = 30, check_target_zone = FALSE, uninterruptible = FALSE, progress = TRUE, datum/callback/extra_checks = null)
 	if(!user || !target)
-		return 0
+		return FALSE
+
+	var/busy_hand = user.hand
+	user.become_busy(_hand = busy_hand)
+
+	target.in_use_action = TRUE
+
+	if(check_target_zone)
+		check_target_zone = user.zone_sel.selecting
+
 	var/user_loc = user.loc
 
 	var/target_loc = target.loc
@@ -112,74 +139,133 @@ proc/RoundHealth(health)
 		if(user.client && (user.client.prefs.toggles & SHOW_PROGBAR))
 			progbar = new(user, time, target)
 		else
-			progress = 0
+			progress = FALSE
 
 	var/endtime = world.time+time
 	var/starttime = world.time
-	. = 1
+	. = TRUE
 	while (world.time < endtime)
-		sleep(1)
+		stoplag(1)
 		if (progress)
 			progbar.update(world.time - starttime)
-		if(!user || !target)
-			. = 0
+		if(QDELETED(user) || QDELETED(target))
+			. = FALSE
 			break
 		if(uninterruptible)
 			continue
-		if(user.loc != user_loc || target.loc != target_loc || user.get_active_hand() != holding || user.incapacitated() || user.lying )
-			. = 0
+		if(user.loc != user_loc || target.loc != target_loc || user.incapacitated() || user.lying || (extra_checks && !extra_checks.Invoke()))
+			. = FALSE
 			break
-	if (progress)
+
+		if(HAS_TRAIT(user, TRAIT_MULTITASKING))
+			if(user.hand != busy_hand)
+				if(user.get_inactive_hand() != holding)
+					. = FALSE
+					break
+			else
+				if(user.get_active_hand() != holding)
+					. = FALSE
+					break
+		else
+			if(user.hand != busy_hand)
+				. = FALSE
+				break
+			if(user.get_active_hand() != holding)
+				. = FALSE
+				break
+
+		if(check_target_zone && user.zone_sel.selecting != check_target_zone)
+			. = FALSE
+			break
+	if(progress)
 		qdel(progbar)
+	if(user)
+		user.become_not_busy(_hand = busy_hand)
+	if(target)
+		target.in_use_action = FALSE
 
+/proc/do_after(mob/user, delay, needhand = TRUE, atom/target = null, can_move = FALSE, progress = TRUE, datum/callback/extra_checks = null)
+	if(!user || target && QDELING(target))
+		return FALSE
 
-/proc/do_after(mob/user, delay, needhand = 1, atom/target = null, progress = 1)
-	if(!user)
-		return 0
+	var/busy_hand = user.hand
+	user.become_busy(_hand = busy_hand)
+
+	var/target_null = TRUE
 	var/atom/Tloc = null
 	if(target)
-		Tloc = target.loc
+		target_null = FALSE
+		if(target != user)
+			target.in_use_action = TRUE
+			Tloc = target.loc
 
-	var/atom/Uloc = user.loc
+	var/atom/Uloc = null
+	if(!can_move)
+		Uloc = user.loc
 
-	var/holding = user.get_active_hand()
+	var/obj/item/holding = user.get_active_hand()
 
-	var/holdingnull = 1 //User's hand started out empty, check for an empty hand
+	var/holdingnull = TRUE //User's hand started out empty, check for an empty hand
 	if(holding)
-		holdingnull = 0 //Users hand started holding something, check to see if it's still holding that
+		holdingnull = FALSE //Users hand started holding something, check to see if it's still holding that
 
 	var/datum/progressbar/progbar
 	if (progress)
 		if(user.client && (user.client.prefs.toggles & SHOW_PROGBAR))
 			progbar = new(user, delay, target)
 		else
-			progress = 0
+			progress = FALSE
 
 	var/endtime = world.time + delay
 	var/starttime = world.time
-	. = 1
+	. = TRUE
 	while (world.time < endtime)
-		sleep(1)
+		stoplag(1)
 		if (progress)
 			progbar.update(world.time - starttime)
 
-		if(!user || user.stat || user.weakened || user.stunned  || user.loc != Uloc)
-			. = 0
+		if(QDELETED(user) || !target_null && QDELETED(target))
+			. = FALSE
 			break
 
-		if(Tloc && (!target || Tloc != target.loc))
-			. = 0
+		if(user.stat || user.weakened || user.stunned)
+			. = FALSE
+			break
+
+		if(Uloc && (user.loc != Uloc) || Tloc && (Tloc != target.loc))
+			. = FALSE
+			break
+		if(extra_checks && !extra_checks.Invoke())
+			. = FALSE
 			break
 
 		if(needhand)
 			//This might seem like an odd check, but you can still need a hand even when it's empty
 			//i.e the hand is used to pull some item/tool out of the construction
-			if(!holdingnull)
-				if(!holding)
-					. = 0
-					break
-			if(user.get_active_hand() != holding)
-				. = 0
+			if(!holdingnull && QDELETED(holding))
+				. = FALSE
 				break
-	if (progress)
+
+			if(HAS_TRAIT(user, TRAIT_MULTITASKING))
+				if(user.hand != busy_hand)
+					if(user.get_inactive_hand() != holding)
+						. = FALSE
+						break
+				else
+					if(user.get_active_hand() != holding)
+						. = FALSE
+						break
+			else
+				if(user.hand != busy_hand)
+					. = FALSE
+					break
+				if(user.get_active_hand() != holding)
+					. = FALSE
+					break
+
+	if(progress)
 		qdel(progbar)
+	if(user)
+		user.become_not_busy(_hand = busy_hand)
+	if(target && target != user)
+		target.in_use_action = FALSE

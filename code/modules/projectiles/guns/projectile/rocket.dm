@@ -3,17 +3,15 @@
 	desc = "The Goliath is a single-shot shoulder-fired multipurpose missile launcher."
 	icon_state = "rocket"
 	item_state = "rocket"
-	w_class = 4.0
+	w_class = ITEM_SIZE_LARGE
 	force = 5
-	flags =  FPRINT | TABLEPASS | CONDUCT | USEDELAY
+	flags =  CONDUCT
 	origin_tech = "combat=8;materials=5"
 	slot_flags = 0
 	mag_type = /obj/item/ammo_box/magazine/internal/cylinder/rocket
 	var/wielded = 0
+	can_be_holstered = FALSE
 	fire_sound = 'sound/effects/bang.ogg'
-
-/obj/item/weapon/gun/projectile/revolver/rocketlauncher/isHandgun()
-	return 0
 
 /obj/item/weapon/gun/projectile/revolver/rocketlauncher/proc/unwield()
 	wielded = 0
@@ -22,6 +20,27 @@
 /obj/item/weapon/gun/projectile/revolver/rocketlauncher/proc/wield()
 	wielded = 1
 	update_icon()
+
+/obj/item/weapon/gun/projectile/revolver/rocketlauncher/MouseDrop(obj/over_object)
+	if (ishuman(usr) || ismonkey(usr))
+		var/mob/M = usr
+		//makes sure that the clothing is equipped so that we can't drag it into our hand from miles away.
+		if (loc != usr)
+			return
+		if (!over_object)
+			return
+
+		if (!usr.incapacitated())
+			switch(over_object.name)
+				if("r_hand")
+					if(!M.unEquip(src))
+						return
+					M.put_in_r_hand(src)
+				if("l_hand")
+					if(!M.unEquip(src))
+						return
+					M.put_in_l_hand(src)
+			add_fingerprint(usr)
 
 /obj/item/weapon/gun/projectile/revolver/rocketlauncher/mob_can_equip(M, slot)
 	//Cannot equip wielded items.
@@ -42,7 +61,7 @@
 			O.unwield()
 	return	unwield()
 
-/obj/item/weapon/gun/projectile/revolver/rocketlauncher/pickup(mob/user)
+/obj/item/weapon/gun/projectile/revolver/rocketlauncher/pickup(mob/living/user)
 	unwield()
 
 /obj/item/weapon/gun/projectile/revolver/rocketlauncher/attack_self(mob/user)
@@ -60,22 +79,11 @@
 		return
 
 	else //Trying to wield it
-		if(user.get_inactive_hand())
-			to_chat(user, "<span class='warning'>You need your other hand to be empty</span>")
-			return
-		wield()
-		to_chat(user, "<span class='notice'>You grab the [initial(name)] with both hands.</span>")
-
-		if(user.hand)
-			user.update_inv_l_hand()
-		else
-			user.update_inv_r_hand()
-
-		var/obj/item/weapon/twohanded/offhand/O = new(user) ////Let's reserve his other hand~
-		O.name = "[initial(name)] - offhand"
-		O.desc = "Your second grip on the [initial(name)]."
-		user.put_in_inactive_hand(O)
-		return
+		if(ishuman(user))
+			var/mob/living/carbon/human/H = user
+			var/W = H.wield(src, initial(name))
+			if(W)
+				wield()
 
 /obj/item/weapon/gun/projectile/revolver/rocketlauncher/attack_hand(mob/user)
 	if(loc != user)
@@ -95,7 +103,7 @@
 	else
 		to_chat(user, "<span class='notice'>[src] is empty.</span>")
 
-/obj/item/weapon/gun/projectile/revolver/rocketlauncher/afterattack(atom/target, mob/living/user, flag, params) //what I tried to do here is just add a check to see if the cover is open or not and add an icon_state change because I can't figure out how c-20rs do it with overlays
+/obj/item/weapon/gun/projectile/revolver/rocketlauncher/afterattack(atom/target, mob/user, proximity, params) //what I tried to do here is just add a check to see if the cover is open or not and add an icon_state change because I can't figure out how c-20rs do it with overlays
 	if(!wielded)
 		to_chat(user, "<span class='notice'>You need wield [src] in both hands before firing!</span>")
 		return

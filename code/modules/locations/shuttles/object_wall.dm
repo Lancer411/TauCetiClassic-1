@@ -1,4 +1,4 @@
-//костыль, в будущем что-то сделать с этим
+//РєРѕСЃС‚С‹Р»СЊ, РІ Р±СѓРґСѓС‰РµРј С‡С‚Рѕ-С‚Рѕ СЃРґРµР»Р°С‚СЊ СЃ СЌС‚РёРј
 /obj/structure/object_wall
 	name = "shuttle wall"
 	desc = "A huge chunk of metal and electronics used to construct shuttle."
@@ -7,26 +7,20 @@
 	opacity = 1
 	icon = 'code/modules/locations/shuttles/shuttle.dmi'
 
-	New(location)
-		..()
-		update_nearby_tiles(need_rebuild=1)
+/obj/structure/object_wall/atom_init()
+	. = ..()
+	update_nearby_tiles(need_rebuild = 1)
 
-	CanPass(atom/movable/mover, turf/target, height=0, air_group=0)
-		if(air_group) return 0
-		if(istype(mover, /obj/effect/beam))
-			return !opacity
-		return !density
+/obj/structure/object_wall/CanPass(atom/movable/mover, turf/target, height=0, air_group=0)
+	if(air_group)
+		return 0
+	if(istype(mover, /obj/effect/beam))
+		return !opacity
+	return !density
 
-	Destroy()
-		update_nearby_tiles()
-		return ..()
-
-	proc/update_nearby_tiles(need_rebuild) //Copypasta from airlock code
-		if(!SSair)
-			return 0
-		//air_master.AddTurfToUpdate(get_turf(src))
-		SSair.mark_for_update(get_turf(src))
-		return 1
+/obj/structure/object_wall/Destroy()
+	update_nearby_tiles()
+	return ..()
 
 /obj/structure/object_wall/mining
 	icon = 'code/modules/locations/shuttles/shuttle_mining.dmi'

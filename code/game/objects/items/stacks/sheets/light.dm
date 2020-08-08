@@ -3,33 +3,29 @@
 	singular_name = "wired glass floor tile"
 	desc = "A glass tile, which is wired, somehow."
 	icon_state = "glass_wire"
-	w_class = 3.0
+	w_class = ITEM_SIZE_NORMAL
 	force = 3.0
 	throwforce = 5.0
 	throw_speed = 5
 	throw_range = 20
-	flags = FPRINT | TABLEPASS | CONDUCT
+	flags = CONDUCT
 	max_amount = 60
 
-/obj/item/stack/light_w/attackby(obj/item/O, mob/user)
-	..()
-	if(istype(O,/obj/item/weapon/wirecutters))
-		var/obj/item/weapon/cable_coil/CC = new/obj/item/weapon/cable_coil(user.loc)
-		CC.amount = 5
-		amount--
+/obj/item/stack/light_w/attackby(obj/item/I, mob/user, params)
+	if(iswirecutter(I))
+		if(!use(1))
+			return
+		new/obj/item/stack/cable_coil/random(user.loc, 5)
 		new/obj/item/stack/sheet/glass(user.loc)
-		if(amount <= 0)
-			user.drop_from_inventory(src)
-			qdel(src)
 
-	if(istype(O,/obj/item/stack/sheet/metal))
-		var/obj/item/stack/sheet/metal/M = O
-		M.amount--
-		if(M.amount <= 0)
-			user.drop_from_inventory(M)
-			qdel(M)
-		amount--
+	else if(istype(I,/obj/item/stack/sheet/metal))
+		var/list/resources_to_use = list()
+		resources_to_use[I] = 1
+		resources_to_use[src] = 1
+		if(!use_multi(user, resources_to_use))
+			return
+
 		new/obj/item/stack/tile/light(user.loc)
-		if(amount <= 0)
-			user.drop_from_inventory(src)
-			qdel(src)
+
+	else
+		return ..()

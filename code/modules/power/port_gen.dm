@@ -1,42 +1,3 @@
-//This file was auto-corrected by findeclaration.exe on 25.5.2012 20:42:33
-
-/* new portable generator - work in progress
-
-/obj/machinery/power/port_gen
-	name = "portable generator"
-	desc = "A portable generator used for emergency backup power."
-	icon = 'generator.dmi'
-	icon_state = "off"
-	density = 1
-	anchored = 0
-	directwired = 0
-	var/t_status = 0
-	var/t_per = 5000
-	var/filter = 1
-	var/tank = null
-	var/turf/inturf
-	var/starter = 0
-	var/rpm = 0
-	var/rpmtarget = 0
-	var/capacity = 1e6
-	var/turf/outturf
-	var/lastgen
-
-
-/obj/machinery/power/port_gen/process()
-ideally we're looking to generate 5000
-
-/obj/machinery/power/port_gen/attackby(obj/item/weapon/W, mob/user)
-tank [un]loading stuff
-
-/obj/machinery/power/port_gen/attack_hand(mob/user)
-turn on/off
-
-/obj/machinery/power/port_gen/examine()
-display round(lastgen) and phorontank amount
-
-*/
-
 //Previous code been here forever, adding new framework for portable generators
 
 
@@ -49,8 +10,7 @@ display round(lastgen) and phorontank amount
 	icon_state = "portgen0"
 	density = 1
 	anchored = 0
-	directwired = 0
-	use_power = 0
+	use_power = NO_POWER_USE
 
 	var/active = 0
 	var/power_gen = 5000
@@ -81,11 +41,9 @@ display round(lastgen) and phorontank amount
 		icon_state = initial(icon_state)
 		handleInactive()
 
-/obj/machinery/power/port_gen/attack_hand(mob/user)
-	if(..())
-		return
-	if(!anchored)
-		return
+/obj/machinery/power/port_gen/interact(mob/user)
+	if(anchored)
+		..()
 
 /obj/machinery/power/port_gen/examine(mob/user)
 	..()
@@ -103,21 +61,21 @@ display round(lastgen) and phorontank amount
 	var/time_per_sheet = 40
 	var/heat = 0
 
-/obj/machinery/power/port_gen/pacman/initialize()
-	..()
-	if(anchored)
-		connect_to_network()
-
-/obj/machinery/power/port_gen/pacman/New()
-	..()
+/obj/machinery/power/port_gen/pacman/atom_init()
+	. = ..()
 	component_parts = list()
 	component_parts += new /obj/item/weapon/stock_parts/matter_bin(src)
 	component_parts += new /obj/item/weapon/stock_parts/micro_laser(src)
-	component_parts += new /obj/item/weapon/cable_coil(src, 1)
-	component_parts += new /obj/item/weapon/cable_coil(src, 1)
+	component_parts += new /obj/item/stack/cable_coil/red(src, 1)
+	component_parts += new /obj/item/stack/cable_coil/red(src, 1)
 	component_parts += new /obj/item/weapon/stock_parts/capacitor(src)
 	component_parts += new board_path(src)
 	RefreshParts()
+
+/obj/machinery/power/port_gen/pacman/atom_init()
+	. = ..()
+	if(anchored)
+		connect_to_network()
 
 /obj/machinery/power/port_gen/pacman/Destroy()
 	DropFuel()
@@ -154,7 +112,7 @@ display round(lastgen) and phorontank amount
 			fail_safe += 1
 			var/obj/item/stack/sheet/S = new sheet_path(loc)
 			var/amount = min(sheets, S.max_amount)
-			S.amount = amount
+			S.set_amount(amount)
 			sheets -= amount
 
 /obj/machinery/power/port_gen/pacman/UseFuel()
@@ -200,7 +158,7 @@ display round(lastgen) and phorontank amount
 /obj/machinery/power/port_gen/pacman/attackby(obj/item/O, mob/user, params)
 	if(istype(O, sheet_path))
 		var/obj/item/stack/addstack = O
-		var/amount = min((max_sheets - sheets), addstack.amount)
+		var/amount = min((max_sheets - sheets), addstack.get_amount())
 		if(amount < 1)
 			to_chat(user, "<span class='notice'>The [src.name] is full!</span>")
 			return
@@ -209,15 +167,12 @@ display round(lastgen) and phorontank amount
 		addstack.use(amount)
 		updateUsrDialog()
 		return
-	else if (istype(O, /obj/item/weapon/card/emag))
-		emagged = 1
-		emp_act(1)
 	else if(!active)
 
 		if(exchange_parts(user, O))
 			return
 
-		if(istype(O, /obj/item/weapon/wrench))
+		if(iswrench(O))
 
 			if(!anchored && !isinspace())
 				connect_to_network()
@@ -228,39 +183,31 @@ display round(lastgen) and phorontank amount
 				to_chat(user, "<span class='notice'>You unsecure the generator from the floor.</span>")
 				anchored = 0
 
-			playsound(src.loc, 'sound/items/Deconstruct.ogg', 50, 1)
+			playsound(src, 'sound/items/Deconstruct.ogg', VOL_EFFECTS_MASTER)
 
-		else if(istype(O, /obj/item/weapon/screwdriver))
+		else if(isscrewdriver(O))
 			panel_open = !panel_open
-			playsound(src.loc, 'sound/items/Screwdriver.ogg', 50, 1)
+			playsound(src, 'sound/items/Screwdriver.ogg', VOL_EFFECTS_MASTER)
 			if(panel_open)
 				to_chat(user, "<span class='notice'>You open the access panel.</span>")
 			else
 				to_chat(user, "<span class='notice'>You close the access panel.</span>")
-		else if(istype(O, /obj/item/weapon/crowbar) && panel_open)
+		else if(iscrowbar(O) && panel_open)
 			default_deconstruction_crowbar(O)
 
-/obj/machinery/power/port_gen/pacman/attack_hand(mob/user)
-	..()
-	if (!anchored)
+/obj/machinery/power/port_gen/pacman/emag_act(mob/user)
+	if(emagged)
+		return FALSE
+	emagged = 1
+	user.SetNextMove(CLICK_CD_INTERACT)
+	emp_act(1)
+	return TRUE
+
+/obj/machinery/power/port_gen/pacman/ui_interact(mob/user)
+	if ((get_dist(src, user) > 1) && !issilicon(user) && !isobserver(user))
+		user.unset_machine(src)
+		user << browse(null, "window=port_gen")
 		return
-
-	interact(user)
-
-/obj/machinery/power/port_gen/pacman/attack_ai(mob/user)
-	interact(user)
-
-/obj/machinery/power/port_gen/pacman/attack_paw(mob/user)
-	interact(user)
-
-/obj/machinery/power/port_gen/pacman/interact(mob/user)
-	if (get_dist(src, user) > 1 )
-		if (!istype(user, /mob/living/silicon/ai))
-			user.unset_machine(src)
-			user << browse(null, "window=port_gen")
-			return
-
-	user.set_machine(src)
 
 	var/dat = text("<b>[name]</b><br>")
 	if (active)
@@ -321,8 +268,9 @@ display round(lastgen) and phorontank amount
 	power_gen = 15000
 	time_per_sheet = 65
 	board_path = "/obj/item/weapon/circuitboard/pacman/super"
-	overheat()
-		explosion(src.loc, 3, 3, 3, -1)
+
+/obj/machinery/power/port_gen/pacman/super/overheat()
+	explosion(src.loc, 3, 3, 3, -1)
 
 /obj/machinery/power/port_gen/pacman/mrs
 	name = "M.R.S.P.A.C.M.A.N.-type Portable Generator"
@@ -333,5 +281,6 @@ display round(lastgen) and phorontank amount
 	power_gen = 40000
 	time_per_sheet = 80
 	board_path = "/obj/item/weapon/circuitboard/pacman/mrs"
-	overheat()
-		explosion(src.loc, 4, 4, 4, -1)
+
+/obj/machinery/power/port_gen/pacman/mrs/overheat()
+	explosion(src.loc, 4, 4, 4, -1)

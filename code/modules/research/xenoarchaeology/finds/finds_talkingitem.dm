@@ -14,13 +14,14 @@
 	var/talk_interval = 50
 	var/talk_chance = 10
 
-/datum/talking_atom/proc/init()
+/datum/talking_atom/proc/init(atom/holder = null)
+	holder_atom = holder
 	if(holder_atom)
-		SSobj.processing |= src
+		START_PROCESSING(SSobj, src)
 
 /datum/talking_atom/process()
 	if(!holder_atom)
-		SSobj.processing.Remove(src)
+		STOP_PROCESSING(SSobj, src)
 
 	else if(heard_words.len >= 1 && world.time > last_talk_time + talk_interval && prob(talk_chance))
 		SaySomething()
@@ -57,7 +58,7 @@
 		var/list/options = list("[holder_atom] seems to be listening intently to [source]...",\
 			"[holder_atom] seems to be focussing on [source]...",\
 			"[holder_atom] seems to turn it's attention to [source]...")
-		holder_atom.loc.visible_message("\blue [bicon(holder_atom)] [pick(options)]")
+		holder_atom.loc.visible_message("<span class='notice'>[bicon(holder_atom)] [pick(options)]</span>")
 
 	if(prob(20))
 		spawn(2)
@@ -71,7 +72,6 @@
 		for(var/X in d)
 			to_chat(world, "[X]")*/
 
-// TODO:CYRILLIC
 /datum/talking_atom/proc/SaySomething(word = null)
 	if(!holder_atom)
 		return
@@ -83,13 +83,7 @@
 		text = "[pick(heard_words)]"
 	else
 		text = pick(splittext(word, " "))
-	if(lentext(text)==1)
-		text=uppertext(text)
-	else
-		var/cap = copytext(text,1,2)
-		cap = uppertext(cap)
-		cap += copytext(text,2,lentext(text)+1)
-		text=cap
+	text = capitalize(text)
 	var/q = 0
 	msg+=text
 	//TODO:CYRILLIC
@@ -114,15 +108,12 @@
 			msg+="!"
 
 	var/list/listening = viewers(holder_atom)
-	for(var/mob/M in mob_list)
+	for(var/mob/M in observer_list)
 		if (!M.client)
-			continue //skip monkeys and leavers
-		if (isnewplayer(M))
-			continue
-		if(M.stat == DEAD &&  M.client.prefs.chat_toggles & CHAT_GHOSTEARS)
-			listening|=M
+			continue //skip leavers
+		if(M.client.prefs.chat_toggles & CHAT_GHOSTEARS)
+			listening |= M
 
-	msg = sanitize_plus_chat(msg)
 	for(var/mob/M in listening)
-		to_chat(M, "[bicon(holder_atom)] <b>[holder_atom]</b> reverberates, \blue\"[msg]\"")
+		to_chat(M, "[bicon(holder_atom)] <b>[holder_atom]</b> reverberates, <span class='notice'>\"[msg]\"</span>")
 	last_talk_time = world.time

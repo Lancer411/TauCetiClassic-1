@@ -19,26 +19,24 @@
 	var/datum/radio_frequency/radio_connection
 	var/deadman = 0
 
-/obj/item/device/assembly/signaler/New()
-	..()
-	spawn(40)
-		set_frequency(frequency)
-	return
+/obj/item/device/assembly/signaler/atom_init()
+	. = ..()
+	addtimer(CALLBACK(src, .proc/set_frequency, frequency), 40)
 
 /obj/item/device/assembly/signaler/Destroy()
 	if(radio_controller)
 		radio_controller.remove_object(src,frequency)
 	frequency = 0
+	connected = null
 	return ..()
 
 /obj/item/device/assembly/signaler/activate()
-	if(cooldown > 0)	return 0
+	if(cooldown > 0)
+		return FALSE
 	cooldown = 2
-	spawn(10)
-		process_cooldown()
-
+	addtimer(CALLBACK(src, .proc/process_cooldown), 10)
 	signal()
-	return 1
+	return TRUE
 
 /obj/item/device/assembly/signaler/update_icon()
 	if(holder)
@@ -79,7 +77,7 @@ Code:
 /obj/item/device/assembly/signaler/Topic(href, href_list)
 	..()
 
-	if(!usr.canmove || usr.stat || usr.restrained() || !in_range(loc, usr))
+	if(usr.incapacitated() || !in_range(loc, usr))
 		usr << browse(null, "window=radio")
 		onclose(usr, "radio")
 		return
@@ -119,17 +117,17 @@ Code:
 	var/turf/T = get_turf(src)
 	if(usr)
 		lastsignalers.Add("[time] <B>:</B> [usr.key] used [src] @ location ([T.x],[T.y],[T.z]) <B>:</B> [format_frequency(frequency)]/[code]")
-		message_admins("[key_name_admin(usr)] used [src], location ([T.x],[T.y],[T.z]) <B>:</B> [format_frequency(frequency)]/[code] (<A HREF='?_src_=holder;adminplayerobservecoodjump=1;X=[usr.x];Y=[usr.y];Z=[usr.z]'>JMP</a>)")
+		message_admins("[key_name_admin(usr)] used [src], location ([T.x],[T.y],[T.z]) <B>:</B> [format_frequency(frequency)]/[code] [ADMIN_JMP(usr)]")
 		log_game("[usr.ckey]([usr]) used [src], location ([T.x],[T.y],[T.z]),frequency: [format_frequency(frequency)], code:[code]")
 	else
-		lastsignalers.Add("[time] <B>:</B> (\red NO USER FOUND) used [src] @ location ([T.x],[T.y],[T.z]) <B>:</B> [format_frequency(frequency)]/[code]")
-		message_admins("(\red NO USER FOUND)  used [src], location ([T.x],[T.y],[T.z]) <B>:</B> [format_frequency(frequency)]/[code]")
+		lastsignalers.Add("[time] <B>:</B> (<span class='warning'>NO USER FOUND</span>) used [src] @ location ([T.x],[T.y],[T.z]) <B>:</B> [format_frequency(frequency)]/[code]")
+		message_admins("(<span class='warning'>NO USER FOUND</span>) used [src], location ([T.x],[T.y],[T.z]) <B>:</B> [format_frequency(frequency)]/[code]")
 		log_game("(NO USER FOUND) used [src], location ([T.x],[T.y],[T.z]),frequency: [format_frequency(frequency)], code:[code]")
 
 	return
 
 /*
-		for(var/obj/item/device/assembly/signaler/S in world)
+		for(var/obj/item/device/assembly/signaler/S in not_world)
 			if(!S)	continue
 			if(S == src)	continue
 			if((S.frequency == src.frequency) && (S.code == src.code))
@@ -139,14 +137,19 @@ Code:
 
 
 /obj/item/device/assembly/signaler/pulse(radio = 0)
-	if(istype(src.loc, /obj/machinery/door/airlock) && src.airlock_wire && src.wires)
-		var/obj/machinery/door/airlock/A = src.loc
-		A.pulse(src.airlock_wire)
+	if(connected && wires)
+		connected.pulse_signaler(src)
 	else if(holder)
 		holder.process_activation(src, 1, 0)
 	else
 		..(radio)
 	return 1
+
+
+/obj/item/device/assembly/signaler/attach_assembly(obj/item/device/assembly/A, mob/user)
+	. = ..()
+	message_admins("[key_name_admin(user)] attached \the [A] to \the [src]. [ADMIN_JMP(user)]")
+	log_game("[key_name(user)] attached \the [A] to \the [src].")
 
 
 /obj/item/device/assembly/signaler/receive_signal(datum/signal/signal)
@@ -156,8 +159,7 @@ Code:
 	pulse(1)
 
 	if(!holder)
-		for(var/mob/O in hearers(1, src.loc))
-			O.show_message("[bicon(src)] *beep* *beep*", 3, "*beep* *beep*", 2)
+		audible_message("[bicon(src)] *beep* *beep*", hearing_distance = 1)
 	return
 
 
@@ -175,13 +177,13 @@ Code:
 
 /obj/item/device/assembly/signaler/process()
 	if(!deadman)
-		SSobj.processing.Remove(src)
+		STOP_PROCESSING(SSobj, src)
 	var/mob/M = src.loc
 	if(!M || !ismob(M))
 		if(prob(5))
 			signal()
 		deadman = 0
-		SSobj.processing.Remove(src)
+		STOP_PROCESSING(SSobj, src)
 	else if(prob(5))
 		M.visible_message("[M]'s finger twitches a bit over [src]'s signal button!")
 	return
@@ -191,8 +193,8 @@ Code:
 	set name = "Threaten to push the button!"
 	set desc = "BOOOOM!"
 	deadman = 1
-	SSobj.processing |= src
-	usr.visible_message("\red [usr] moves their finger over [src]'s signal button...")
+	START_PROCESSING(SSobj, src)
+	usr.visible_message("<span class='warning'>[usr] moves their finger over [src]'s signal button...</span>")
 
 // Embedded signaller used in anomalies.
 /obj/item/device/assembly/signaler/anomaly

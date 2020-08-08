@@ -7,7 +7,7 @@
 	cure_id = list("synaptizine","sulfur")
 	cure_chance = 15//higher chance to cure, since two reagents are required
 	agent = "Gravitokinetic Bipotential SADS+"
-	affected_species = list("Human")
+	affected_species = list(HUMAN)
 	curable = 0
 	permeability_mod = 1
 
@@ -26,14 +26,18 @@
 			else if(prob(5))
 				affected_mob.emote("gasp")
 			if(prob(10))
-				to_chat(affected_mob, "\red You're starting to feel very weak...")
+				to_chat(affected_mob, "<span class='warning'>You're starting to feel very weak...</span>")
 		if(4)
 			if(prob(10))
 				affected_mob.emote("cough")
 			affected_mob.adjustToxLoss(5)
 			affected_mob.updatehealth()
 		if(5)
-			to_chat(affected_mob, "\red Your body feels as if it's trying to rip itself open...")
+			if(QDELETED(affected_mob))
+				return
+			if(affected_mob.notransform)
+				return
+			to_chat(affected_mob, "<span class='warning'>Your body feels as if it's trying to rip itself open...</span>")
 			if(prob(50))
 				affected_mob.gib()
 		else

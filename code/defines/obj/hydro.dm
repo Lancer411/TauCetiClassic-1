@@ -1,14 +1,42 @@
 // Plant analyzer
 
-/obj/item/device/analyzer/plant_analyzer
+/obj/item/device/plant_analyzer
 	name = "plant analyzer"
 	desc = "A hand-held scanner which reports condition of the plant."
 	icon = 'icons/obj/device.dmi'
+	w_class = ITEM_SIZE_TINY
+	m_amt = 200
+	g_amt = 50
+	origin_tech = "materials=1;biotech=1"
 	icon_state = "hydro"
-	item_state = "analyzer"
+	item_state = "plantanalyzer"
 
-	attack_self(mob/user)
-		return 0
+	var/output_to_chat = TRUE
+
+/obj/item/device/plant_analyzer/attack_self(mob/user)
+	return FALSE
+
+/obj/item/device/plant_analyzer/verb/toggle_output()
+	set name = "Toggle Output"
+	set category = "Object"
+
+	output_to_chat = !output_to_chat
+	if(output_to_chat)
+		to_chat(usr, "The scanner now outputs data to chat.")
+	else
+		to_chat(usr, "The scanner now outputs data in a seperate window.")
+
+/obj/item/device/plant_analyzer/attack(mob/living/carbon/human/M, mob/living/user)
+	if(istype(M) && M.species.flags[IS_PLANT])
+		add_fingerprint(user)
+		var/dat = health_analyze(M, user, TRUE, output_to_chat) // TRUE means limb-scanning mode
+		if(output_to_chat)
+			var/datum/browser/popup = new(user, "window=[M.name]_scan_report", "Scan Report", 400, 400)
+			popup.set_content(dat)
+			popup.open()
+			onclose(user, "[M.name]_scan_report")
+		else
+			to_chat(user, dat)
 
 // ********************************************************
 // Here's all the seeds (plants) that can be used in hydro
@@ -16,11 +44,11 @@
 
 /obj/item/seeds
 	name = "pack of seeds"
-	icon = 'icons/obj/seeds.dmi'
+	icon = 'icons/obj/hydroponics/seeds.dmi'
 	icon_state = "seed" // unknown plant seed - these shouldn't exist in-game
-	flags = FPRINT | TABLEPASS
-	w_class = 2.0 // Makes them pocketable
+	w_class = ITEM_SIZE_SMALL // Makes them pocketable
 	var/mypath = "/obj/item/seeds"
+	var/hydroponictray_icon_path = 'icons/obj/hydroponics/growing.dmi'//this is now path to plant's overlays (in hydropinic tray)
 	var/plantname = "Plants"
 	var/productname = ""
 	var/species = ""
@@ -35,24 +63,44 @@
 	var/plant_type = 0 // 0 = 'normal plant'; 1 = weed; 2 = shroom
 	var/list/mutatelist = list()
 
-/obj/item/seeds/attackby(obj/item/O, mob/user)
-	if (istype(O, /obj/item/device/analyzer/plant_analyzer))
+/obj/item/seeds/attackby(obj/item/I, mob/user, params)
+	if(istype(I, /obj/item/device/plant_analyzer))
 		to_chat(user, "*** <B>[plantname]</B> ***")
-		to_chat(user, "-Plant Endurance: \blue [endurance]")
-		to_chat(user, "-Plant Lifespan: \blue [lifespan]")
+		to_chat(user, "-Plant Endurance: <span class='notice'>[endurance]</span>")
+		to_chat(user, "-Plant Lifespan: <span class='notice'>[lifespan]</span>")
 		if(yield != -1)
-			to_chat(user, "-Plant Yield: \blue [yield]")
-		to_chat(user, "-Plant Production: \blue [production]")
+			to_chat(user, "-Plant Yield: <span class='notice'>[yield]</span>")
+		to_chat(user, "-Plant Production: <span class='notice'>[production]</span>")
 		if(potency != -1)
-			to_chat(user, "-Plant Potency: \blue [potency]")
+			to_chat(user, "-Plant Potency: <span class='notice'>[potency]</span>")
+		user.SetNextMove(CLICK_CD_INTERACT)
 		return
-	..() // Fallthrough to item/attackby() so that bags can pick seeds up
+	return ..() // Fallthrough to item/attackby() so that bags can pick seeds up
+
+/obj/item/seeds/blackpepper
+	name = "pack of piper nigrum seeds"
+	desc = "These seeds grow into black pepper plants. Spicy."
+	icon_state = "seed-blackpepper"
+	mypath = "/obj/item/seeds/blackpepperseed"
+	hydroponictray_icon_path = 'icons/obj/hydroponics/growing_vegetables.dmi'
+	species = "blackpepper"
+	plantname = "Black Pepper"
+	productname = "/obj/item/weapon/reagent_containers/food/snacks/grown/blackpepper"
+	lifespan = 55
+	endurance = 35
+	maturation = 10
+	production = 10
+	yield = 3
+	potency = 10
+	plant_type = 0
+	growthstages = 5
 
 /obj/item/seeds/chiliseed
 	name = "pack of chili seeds"
 	desc = "These seeds grow into chili plants. HOT! HOT! HOT!"
 	icon_state = "seed-chili"
 	mypath = "/obj/item/seeds/chiliseed"
+	hydroponictray_icon_path = 'icons/obj/hydroponics/growing_vegetables.dmi'
 	species = "chili"
 	plantname = "Chili Plants"
 	productname = "/obj/item/weapon/reagent_containers/food/snacks/grown/chili"
@@ -67,10 +115,11 @@
 	mutatelist = list(/obj/item/seeds/icepepperseed)
 
 /obj/item/seeds/plastiseed
-	name = "plastellium mycelium"
+	name = "pack of plastellium mycelium"
 	desc = "This mycelium grows into Plastellium."
 	icon_state = "mycelium-plast"
 	mypath = "/obj/item/seeds/plastiseed"
+	hydroponictray_icon_path = 'icons/obj/hydroponics/growing_mushrooms.dmi'
 	species = "plastellium"
 	plantname = "Plastellium"
 	productname = "/obj/item/weapon/reagent_containers/food/snacks/grown/plastellium"
@@ -89,6 +138,7 @@
 	desc = "These seeds grow into grape vines."
 	icon_state = "seed-grapes"
 	mypath = "/obj/item/seeds/grapeseed"
+	hydroponictray_icon_path = 'icons/obj/hydroponics/growing_fruits.dmi'
 	species = "grape"
 	plantname = "Grape Vine"
 	productname = "/obj/item/weapon/reagent_containers/food/snacks/grown/grapes"
@@ -107,6 +157,7 @@
 	desc = "These seeds grow into green-grape vines."
 	icon_state = "seed-greengrapes"
 	mypath = "/obj/item/seeds/greengrapeseed"
+	hydroponictray_icon_path = 'icons/obj/hydroponics/growing_fruits.dmi'
 	species = "greengrape"
 	plantname = "Green-Grape Vine"
 	productname = "/obj/item/weapon/reagent_containers/food/snacks/grown/greengrapes"
@@ -124,6 +175,7 @@
 	desc = "These seeds grow into cabbages."
 	icon_state = "seed-cabbage"
 	mypath = "/obj/item/seeds/cabbageseed"
+	hydroponictray_icon_path = 'icons/obj/hydroponics/growing_vegetables.dmi'
 	species = "cabbage"
 	plantname = "Cabbages"
 	productname = "/obj/item/weapon/reagent_containers/food/snacks/grown/cabbage"
@@ -175,6 +227,7 @@
 	desc = "These seeds grow into berry bushes."
 	icon_state = "seed-berry"
 	mypath = "/obj/item/seeds/berryseed"
+	hydroponictray_icon_path = 'icons/obj/hydroponics/growing_fruits.dmi'
 	species = "berry"
 	plantname = "Berry Bush"
 	productname = "/obj/item/weapon/reagent_containers/food/snacks/grown/berries"
@@ -193,6 +246,7 @@
 	desc = "These seeds grow into glow-berry bushes."
 	icon_state = "seed-glowberry"
 	mypath = "/obj/item/seeds/glowberryseed"
+	hydroponictray_icon_path = 'icons/obj/hydroponics/growing_fruits.dmi'
 	species = "glowberry"
 	plantname = "Glow-Berry Bush"
 	productname = "/obj/item/weapon/reagent_containers/food/snacks/grown/glowberries"
@@ -210,9 +264,28 @@
 	desc = "They're seeds that grow into banana trees."
 	icon_state = "seed-banana"
 	mypath = "/obj/item/seeds/bananaseed"
+	hydroponictray_icon_path = 'icons/obj/hydroponics/growing_fruits.dmi'
 	species = "banana"
 	plantname = "Banana Tree"
 	productname = "/obj/item/weapon/reagent_containers/food/snacks/grown/banana"
+	lifespan = 50
+	endurance = 30
+	maturation = 6
+	production = 6
+	yield = 3
+	plant_type = 0
+	growthstages = 6
+	mutatelist = list(/obj/item/seeds/honkyseed)
+
+/obj/item/seeds/honkyseed
+	name = "pack of honk-banana seeds"
+	desc = "They're seeds that grow into banana trees."
+	icon_state = "seed-banana-honk"
+	mypath = "/obj/item/seeds/honkyseed"
+	hydroponictray_icon_path = 'icons/obj/hydroponics/growing_fruits.dmi'
+	species = "honk"
+	plantname = "Honk banana Tree"
+	productname = "/obj/item/weapon/reagent_containers/food/snacks/grown/banana/honk"
 	lifespan = 50
 	endurance = 30
 	maturation = 6
@@ -226,6 +299,7 @@
 	desc = "These seeds grow to produce berries that look nothing like eggs."
 	icon_state = "seed-eggplant"
 	mypath = "/obj/item/seeds/eggplantseed"
+	hydroponictray_icon_path = 'icons/obj/hydroponics/growing_vegetables.dmi'
 	species = "eggplant"
 	plantname = "Eggplants"
 	productname = "/obj/item/weapon/reagent_containers/food/snacks/grown/eggplant"
@@ -244,6 +318,7 @@
 	desc = "These seeds grow to produce berries that look a lot like eggs."
 	icon_state = "seed-eggy"
 	mypath = "/obj/item/seeds/eggy"
+	hydroponictray_icon_path = 'icons/obj/hydroponics/growing_vegetables.dmi'
 	species = "eggy"
 	plantname = "Eggplants"
 	productname = "/obj/item/weapon/reagent_containers/food/snacks/egg"
@@ -260,6 +335,7 @@
 	desc = "These seeds grow into blood-tomato plants."
 	icon_state = "seed-bloodtomato"
 	mypath = "/obj/item/seeds/bloodtomatoseed"
+	hydroponictray_icon_path = 'icons/obj/hydroponics/growing_fruits.dmi'
 	species = "bloodtomato"
 	plantname = "Blood-Tomato Plants"
 	productname = "/obj/item/weapon/reagent_containers/food/snacks/grown/bloodtomato"
@@ -277,6 +353,7 @@
 	desc = "These seeds grow into tomato plants."
 	icon_state = "seed-tomato"
 	mypath = "/obj/item/seeds/tomatoseed"
+	hydroponictray_icon_path = 'icons/obj/hydroponics/growing_fruits.dmi'
 	species = "tomato"
 	plantname = "Tomato Plants"
 	productname = "/obj/item/weapon/reagent_containers/food/snacks/grown/tomato"
@@ -295,6 +372,7 @@
 	desc = "These seeds grow into killer-tomato plants."
 	icon_state = "seed-killertomato"
 	mypath = "/obj/item/seeds/killertomatoseed"
+	hydroponictray_icon_path = 'icons/obj/hydroponics/growing_fruits.dmi'
 	species = "killertomato"
 	plantname = "Killer-Tomato Plants"
 	productname = "/obj/item/weapon/reagent_containers/food/snacks/grown/killertomato"
@@ -313,6 +391,7 @@
 	desc = "These seeds grow into blue-tomato plants."
 	icon_state = "seed-bluetomato"
 	mypath = "/obj/item/seeds/bluetomatoseed"
+	hydroponictray_icon_path = 'icons/obj/hydroponics/growing_fruits.dmi'
 	species = "bluetomato"
 	plantname = "Blue-Tomato Plants"
 	productname = "/obj/item/weapon/reagent_containers/food/snacks/grown/bluetomato"
@@ -331,6 +410,7 @@
 	desc = "These seeds grow into blue-space tomato plants."
 	icon_state = "seed-bluespacetomato"
 	mypath = "/obj/item/seeds/bluespacetomatoseed"
+	hydroponictray_icon_path = 'icons/obj/hydroponics/growing_fruits.dmi'
 	species = "bluespacetomato"
 	plantname = "Blue-Space Tomato Plants"
 	productname = "/obj/item/weapon/reagent_containers/food/snacks/grown/bluespacetomato"
@@ -348,6 +428,7 @@
 	desc = "I don't mean to sound corny..."
 	icon_state = "seed-corn"
 	mypath = "/obj/item/seeds/cornseed"
+	hydroponictray_icon_path = 'icons/obj/hydroponics/growing_vegetables.dmi'
 	species = "corn"
 	plantname = "Corn Stalks"
 	productname = "/obj/item/weapon/reagent_containers/food/snacks/grown/corn"
@@ -384,6 +465,7 @@
 	desc = "Boil 'em! Mash 'em! Stick 'em in a stew!"
 	icon_state = "seed-potato"
 	mypath = "/obj/item/seeds/potatoseed"
+	hydroponictray_icon_path = 'icons/obj/hydroponics/growing_vegetables.dmi'
 	species = "potato"
 	plantname = "Potato-Plants"
 	productname = "/obj/item/weapon/reagent_containers/food/snacks/grown/potato"
@@ -402,6 +484,7 @@
 	desc = "These seeds grow into ice-pepper plants."
 	icon_state = "seed-icepepper"
 	mypath = "/obj/item/seeds/icepepperseed"
+	hydroponictray_icon_path = 'icons/obj/hydroponics/growing_vegetables.dmi'
 	species = "chiliice"
 	plantname = "Ice-Pepper Plants"
 	productname = "/obj/item/weapon/reagent_containers/food/snacks/grown/icepepper"
@@ -419,6 +502,7 @@
 	desc = "These seeds grow into soybean plants."
 	icon_state = "seed-soybean"
 	mypath = "/obj/item/seeds/soyaseed"
+	hydroponictray_icon_path = 'icons/obj/hydroponics/growing_vegetables.dmi'
 	species = "soybean"
 	plantname = "Soybean Plants"
 	productname = "/obj/item/weapon/reagent_containers/food/snacks/grown/soybeans"
@@ -472,6 +556,7 @@
 	desc = "These seeds grow into carrots."
 	icon_state = "seed-carrot"
 	mypath = "/obj/item/seeds/carrotseed"
+	hydroponictray_icon_path = 'icons/obj/hydroponics/growing_vegetables.dmi'
 	species = "carrot"
 	plantname = "Carrots"
 	productname = "/obj/item/weapon/reagent_containers/food/snacks/grown/carrot"
@@ -490,6 +575,7 @@
 	desc = "This mycelium grows into something relaxing."
 	icon_state = "mycelium-reishi"
 	mypath = "/obj/item/seeds/reishimycelium"
+	hydroponictray_icon_path = 'icons/obj/hydroponics/growing_mushrooms.dmi'
 	species = "reishi"
 	plantname = "Reishi"
 	productname = "/obj/item/weapon/reagent_containers/food/snacks/grown/mushroom/reishi"
@@ -508,6 +594,7 @@
 	desc = "This mycelium grows into something horrible."
 	icon_state = "mycelium-amanita"
 	mypath = "/obj/item/seeds/amanitamycelium"
+	hydroponictray_icon_path = 'icons/obj/hydroponics/growing_vegetables.dmi'
 	species = "amanita"
 	plantname = "Fly Amanitas"
 	productname = "/obj/item/weapon/reagent_containers/food/snacks/grown/mushroom/amanita"
@@ -527,6 +614,7 @@
 	desc = "This mycelium grows into something devestating."
 	icon_state = "mycelium-angel"
 	mypath = "/obj/item/seeds/angelmycelium"
+	hydroponictray_icon_path = 'icons/obj/hydroponics/growing_mushrooms.dmi'
 	species = "angel"
 	plantname = "Destroying Angels"
 	productname = "/obj/item/weapon/reagent_containers/food/snacks/grown/mushroom/angel"
@@ -545,6 +633,7 @@
 	desc = "This mycelium grows into liberty-cap mushrooms."
 	icon_state = "mycelium-liberty"
 	mypath = "/obj/item/seeds/libertymycelium"
+	hydroponictray_icon_path = 'icons/obj/hydroponics/growing_mushrooms.dmi'
 	species = "liberty"
 	plantname = "Liberty-Caps"
 	productname = "/obj/item/weapon/reagent_containers/food/snacks/grown/mushroom/libertycap"
@@ -563,6 +652,7 @@
 	desc = "This mycelium grows into chanterelle mushrooms."
 	icon_state = "mycelium-chanter"
 	mypath = "/obj/item/seeds/chantermycelium"
+	hydroponictray_icon_path = 'icons/obj/hydroponics/growing_mushrooms.dmi'
 	species = "chanter"
 	plantname = "Chanterelle Mushrooms"
 	productname = "/obj/item/weapon/reagent_containers/food/snacks/grown/mushroom/chanterelle"
@@ -581,6 +671,7 @@
 	desc = "This mycelium grows into tower-cap mushrooms."
 	icon_state = "mycelium-tower"
 	mypath = "/obj/item/seeds/towermycelium"
+	hydroponictray_icon_path = 'icons/obj/hydroponics/growing_mushrooms.dmi'
 	species = "towercap"
 	plantname = "Tower Caps"
 	productname = "/obj/item/weapon/grown/log"
@@ -599,6 +690,7 @@
 	desc = "This mycelium -glows- into mushrooms!"
 	icon_state = "mycelium-glowshroom"
 	mypath = "/obj/item/seeds/glowshroom"
+	hydroponictray_icon_path = 'icons/obj/hydroponics/growing_mushrooms.dmi'
 	species = "glowshroom"
 	plantname = "Glowshrooms"
 	productname = "/obj/item/weapon/reagent_containers/food/snacks/grown/mushroom/glowshroom"
@@ -617,6 +709,7 @@
 	desc = "This mycelium grows into helmets... maybe."
 	icon_state = "mycelium-plump"
 	mypath = "/obj/item/seeds/plumpmycelium"
+	hydroponictray_icon_path = 'icons/obj/hydroponics/growing_mushrooms.dmi'
 	species = "plump"
 	plantname = "Plump-Helmet Mushrooms"
 	productname = "/obj/item/weapon/reagent_containers/food/snacks/grown/mushroom/plumphelmet"
@@ -636,6 +729,7 @@
 	desc = "This mycelium will grow into huge stuff!"
 	icon_state = "mycelium-walkingmushroom"
 	mypath = "/obj/item/seeds/walkingmushroommycelium"
+	hydroponictray_icon_path = 'icons/obj/hydroponics/growing_mushrooms.dmi'
 	species = "walkingmushroom"
 	plantname = "Walking Mushrooms"
 	productname = "/obj/item/weapon/reagent_containers/food/snacks/grown/mushroom/walkingmushroom"
@@ -763,6 +857,7 @@
 	desc = "These seeds grow into apple trees."
 	icon_state = "seed-apple"
 	mypath = "/obj/item/seeds/appleseed"
+	hydroponictray_icon_path = 'icons/obj/hydroponics/growing_fruits.dmi'
 	species = "apple"
 	plantname = "Apple Tree"
 	productname = "/obj/item/weapon/reagent_containers/food/snacks/grown/apple"
@@ -774,13 +869,14 @@
 	potency = 10
 	plant_type = 0
 	growthstages = 6
-	mutatelist = list(/obj/item/seeds/goldappleseed)
+	mutatelist = list(/obj/item/seeds/goldappleseed, /obj/item/seeds/poisonedappleseed)
 
 /obj/item/seeds/poisonedappleseed
 	name = "pack of apple seeds"
 	desc = "These seeds grow into apple trees."
 	icon_state = "seed-apple"
 	mypath = "/obj/item/seeds/poisonedappleseed"
+	hydroponictray_icon_path = 'icons/obj/hydroponics/growing_fruits.dmi'
 	species = "apple"
 	plantname = "Apple Tree"
 	productname = "/obj/item/weapon/reagent_containers/food/snacks/grown/apple/poisoned"
@@ -798,6 +894,7 @@
 	desc = "These seeds grow into golden apple trees. Good thing there are no firebirds in space."
 	icon_state = "seed-goldapple"
 	mypath = "/obj/item/seeds/goldappleseed"
+	hydroponictray_icon_path = 'icons/obj/hydroponics/growing_fruits.dmi'
 	species = "goldapple"
 	plantname = "Golden Apple Tree"
 	productname = "/obj/item/weapon/reagent_containers/food/snacks/grown/goldapple"
@@ -850,6 +947,7 @@
 	desc = "These seeds grow into sugary beet producing plants."
 	icon_state = "seed-whitebeet"
 	mypath = "/obj/item/seeds/whitebeetseed"
+	hydroponictray_icon_path = 'icons/obj/hydroponics/growing_vegetables.dmi'
 	species = "whitebeet"
 	plantname = "White-Beet Plants"
 	productname = "/obj/item/weapon/reagent_containers/food/snacks/grown/whitebeet"
@@ -885,6 +983,7 @@
 	desc = "These seeds grow into watermelon plants."
 	icon_state = "seed-watermelon"
 	mypath = "/obj/item/seeds/watermelonseed"
+	hydroponictray_icon_path = 'icons/obj/hydroponics/growing_fruits.dmi'
 	species = "watermelon"
 	plantname = "Watermelon Vines"
 	productname = "/obj/item/weapon/reagent_containers/food/snacks/grown/watermelon"
@@ -902,6 +1001,7 @@
 	desc = "These seeds grow into pumpkin vines."
 	icon_state = "seed-pumpkin"
 	mypath = "/obj/item/seeds/pumpkinseed"
+	hydroponictray_icon_path = 'icons/obj/hydroponics/growing_fruits.dmi'
 	species = "pumpkin"
 	plantname = "Pumpkin Vines"
 	productname = "/obj/item/weapon/reagent_containers/food/snacks/grown/pumpkin"
@@ -920,6 +1020,7 @@
 	desc = "These are very sour seeds."
 	icon_state = "seed-lime"
 	mypath = "/obj/item/seeds/limeseed"
+	hydroponictray_icon_path = 'icons/obj/hydroponics/growing_fruits.dmi'
 	species = "lime"
 	plantname = "Lime Tree"
 	productname = "/obj/item/weapon/reagent_containers/food/snacks/grown/lime"
@@ -937,6 +1038,7 @@
 	desc = "These are sour seeds."
 	icon_state = "seed-lemon"
 	mypath = "/obj/item/seeds/lemonseed"
+	hydroponictray_icon_path = 'icons/obj/hydroponics/growing_fruits.dmi'
 	species = "lemon"
 	plantname = "Lemon Tree"
 	productname = "/obj/item/weapon/reagent_containers/food/snacks/grown/lemon"
@@ -955,6 +1057,7 @@
 	desc = "When life gives you lemons, mutate them into cash."
 	icon_state = "seed-cash"
 	mypath = "/obj/item/seeds/cashseed"
+	hydroponictray_icon_path = 'icons/obj/hydroponics/growing_fruits.dmi'
 	species = "cashtree"
 	plantname = "Money Tree"
 	productname = "/obj/item/weapon/reagent_containers/food/snacks/grown/money"
@@ -972,6 +1075,7 @@
 	desc = "Sour seeds."
 	icon_state = "seed-orange"
 	mypath = "/obj/item/seeds/orangeseed"
+	hydroponictray_icon_path = 'icons/obj/hydroponics/growing_fruits.dmi'
 	species = "orange"
 	plantname = "Orange Tree"
 	productname = "/obj/item/weapon/reagent_containers/food/snacks/grown/orange"
@@ -989,6 +1093,7 @@
 	desc = "These seeds grow into poison-berry bushes."
 	icon_state = "seed-poisonberry"
 	mypath = "/obj/item/seeds/poisonberryseed"
+	hydroponictray_icon_path = 'icons/obj/hydroponics/growing_fruits.dmi'
 	species = "poisonberry"
 	plantname = "Poison-Berry Bush"
 	productname = "/obj/item/weapon/reagent_containers/food/snacks/grown/poisonberries"
@@ -1007,6 +1112,7 @@
 	desc = "These seeds grow into death berries."
 	icon_state = "seed-deathberry"
 	mypath = "/obj/item/seeds/deathberryseed"
+	hydroponictray_icon_path = 'icons/obj/hydroponics/growing_fruits.dmi'
 	species = "deathberry"
 	plantname = "Death Berry Bush"
 	productname = "/obj/item/weapon/reagent_containers/food/snacks/grown/deathberries"
@@ -1040,8 +1146,9 @@
 	desc = "These seeds grow into cacao trees. They look fattening." //SIC: cocoa is the seeds. The tress ARE spelled cacao.
 	icon_state = "seed-cocoapod"
 	mypath = "/obj/item/seeds/cocoapodseed"
+	hydroponictray_icon_path = 'icons/obj/hydroponics/growing_fruits.dmi'
 	species = "cocoapod"
-	plantname = "Cocao Tree" //SIC: see above
+	plantname = "Cocoa Tree" //SIC: see above
 	productname = "/obj/item/weapon/reagent_containers/food/snacks/grown/cocoapod"
 	lifespan = 20
 	endurance = 15
@@ -1057,6 +1164,7 @@
 	desc = "Careful not to crack a tooth on one... That'd be the pits."
 	icon_state = "seed-cherry"
 	mypath = "/obj/item/seeds/cherryseed"
+	hydroponictray_icon_path = 'icons/obj/hydroponics/growing_fruits.dmi'
 	species = "cherry"
 	plantname = "Cherry Tree"
 	productname = "/obj/item/weapon/reagent_containers/food/snacks/grown/cherries"
@@ -1094,51 +1202,6 @@
 	new /obj/effect/spacevine_controller(user.loc)
 	qdel(src)
 
-
-
-/*  // Maybe one day when I get it to work like a grenade which exlodes gibs.
-/obj/item/seeds/gibtomatoseed
-	name = "Gib Tomato seeds"
-	desc = "Used to grow gib tomotoes."
-	icon_state = "seed-gibtomato"
-	mypath = "/obj/item/seeds/gibtomatoseed"
-	species = "gibtomato"
-	plantname = "Gib Tomato plant"
-	productname = "/obj/item/weapon/grown/gibtomato"
-	lifespan = 35
-	endurance = 25
-	maturation = 6
-	production = 6
-	yield = 3
-	potency = 10
-	plant_type = 0
-	growthstages = 6
-*/
-
-/*
-/obj/item/seeds/
-	name = ""
-	icon_state = "seed"
-	mypath = "/obj/item/seeds/"
-	species = ""
-	plantname = ""
-	productname = "/obj/item/weapon/reagent_containers/food/snacks/grown/"
-	lifespan = 25
-	endurance = 15
-	maturation = 10
-	production = 1
-	yield = -1
-	potency = 0
-	oneharvest = 1
-	growthstages = 3
-	plant_type = 0
-
-*/
-
-// *****************oolokitthesefancystars********
-// Grown FOOD types moved to reagents
-// **********************
-
 // **********************
 // Other harvested materials from plants (that are not food)
 // **********************
@@ -1158,23 +1221,23 @@
 	var/potency = 1
 	var/plant_type = 0
 
-/obj/item/weapon/grown/New()
+/obj/item/weapon/grown/atom_init()
 	var/datum/reagents/R = new/datum/reagents(50)
 	reagents = R
 	R.my_atom = src
+	. = ..()
 
-/obj/item/weapon/grown/proc/changePotency(newValue) //-QualityVan
+/obj/item/weapon/grown/proc/changePotency(newValue)
 	potency = newValue
 
 /obj/item/weapon/grown/log
 	name = "tower-cap log"
 	desc = "It's better than bad, it's good!"
-	icon = 'icons/obj/harvest.dmi'
+	icon = 'icons/obj/hydroponics/harvest.dmi'
 	icon_state = "logs"
 	force = 5
-	flags = TABLEPASS
 	throwforce = 5
-	w_class = 3.0
+	w_class = ITEM_SIZE_NORMAL
 	throw_speed = 3
 	throw_range = 3
 	plant_type = 2
@@ -1182,94 +1245,62 @@
 	seed = "/obj/item/seeds/towermycelium"
 	attack_verb = list("bashed", "battered", "bludgeoned", "whacked")
 
-/obj/item/weapon/grown/log/attackby(obj/item/weapon/W, mob/user)
-	if(istype(W, /obj/item/weapon/circular_saw) || istype(W, /obj/item/weapon/hatchet) || (istype(W, /obj/item/weapon/twohanded/fireaxe) && W:wielded) || istype(W, /obj/item/weapon/melee/energy))
-		user.show_message("<span class='notice'>You make planks out of \the [src]!</span>", 1)
-		for(var/i=0,i<2,i++)
-			var/obj/item/stack/sheet/wood/NG = new (user.loc)
-			for (var/obj/item/stack/sheet/wood/G in user.loc)
-				if(G==NG)
-					continue
-				if(G.amount>=G.max_amount)
-					continue
-				G.attackby(NG, user)
-				to_chat(usr, "You add the newly-formed wood to the stack. It now contains [NG.amount] planks.")
+/obj/item/weapon/grown/log/attackby(obj/item/I, mob/user, params)
+	if(I.sharp && I.edge && I.force > 10)
+		user.SetNextMove(CLICK_CD_INTERACT)
+		to_chat(user, "<span class='notice'>You make planks out of \the [src]!</span>")
+		for(var/i in 1 to 2)
+			new/obj/item/stack/sheet/wood(user.loc)
 		qdel(src)
 		return
+	return ..()
 
 
-/obj/item/weapon/grown/sunflower // FLOWER POWER!
+/obj/item/weapon/grown/sunflower
 	name = "sunflower"
 	desc = "It's beautiful! A certain person might beat you to death if you trample these."
-	icon = 'icons/obj/harvest.dmi'
+	icon = 'icons/obj/hydroponics/harvest.dmi'
 	icon_state = "sunflower"
 	damtype = "fire"
 	force = 0
-	flags = TABLEPASS
 	throwforce = 1
-	w_class = 1.0
+	w_class = ITEM_SIZE_TINY
 	throw_speed = 1
 	throw_range = 3
 	plant_type = 1
 	seed = "/obj/item/seeds/sunflower"
-/*
-/obj/item/weapon/grown/gibtomato
-	desc = "A plump tomato."
-	icon = 'icons/obj/harvest.dmi'
-	name = "Gib Tomato"
-	icon_state = "gibtomato"
-	damtype = "fire"
-	force = 0
-	flags = TABLEPASS
-	throwforce = 1
-	w_class = 2.0
-	throw_speed = 1
-	throw_range = 3
-	plant_type = 1
-	seed = "/obj/item/seeds/gibtomato"
-	New()
-		..()
 
-
-/obj/item/weapon/grown/gibtomato/New()
-	..()
-	src.gibs = new /obj/effect/gibspawner/human(get_turf(src))
-	src.gibs.attach(src)
-	src.smoke.set_up(10, 0, usr.loc)
-*/
-/obj/item/weapon/grown/nettle // -- Skie
+/obj/item/weapon/grown/nettle
 	desc = "It's probably <B>not</B> wise to touch it with bare hands..."
 	icon = 'icons/obj/weapons.dmi'
 	name = "nettle"
 	icon_state = "nettle"
 	damtype = "fire"
 	force = 15
-	flags = TABLEPASS
 	throwforce = 1
-	w_class = 2.0
+	w_class = ITEM_SIZE_SMALL
 	throw_speed = 1
 	throw_range = 3
 	plant_type = 1
 	origin_tech = "combat=1"
 	seed = "/obj/item/seeds/nettleseed"
 
-/obj/item/weapon/grown/nettle/New()
-	..()
-	spawn(5)	//So potency can be set in the proc that creates these crops
-		reagents.add_reagent("nutriment", 1+round((potency / 50), 1))
+/obj/item/weapon/grown/nettle/atom_init()
+	. = ..()
+	spawn(5)
+		reagents.add_reagent("nutriment", 1 + round((potency / 50), 1))
 		reagents.add_reagent("sacid", round(potency, 1))
-		force = round((5+potency/5), 1)
+		force = round((5 + potency / 5), 1)
 
-/obj/item/weapon/grown/deathnettle // -- Skie
-	desc = "The \red glowing \black nettle incites \red<B>rage</B>\black in you just from looking at it!"
+/obj/item/weapon/grown/deathnettle
+	desc = "The <span class='warning'>glowing</span> nettle incites <span class='warning'><B>rage</B></span> in you just from looking at it!"
 	icon = 'icons/obj/weapons.dmi'
 	name = "deathnettle"
 	icon_state = "deathnettle"
 	damtype = "fire"
 	force = 30
-	flags = TABLEPASS
 	throwforce = 1
-	w_class = 2.0
+	w_class = ITEM_SIZE_SMALL
 	throw_speed = 1
 	throw_range = 3
 	plant_type = 1
@@ -1277,16 +1308,16 @@
 	origin_tech = "combat=3"
 	attack_verb = list("stung")
 
-/obj/item/weapon/grown/deathnettle/New()
-	..()
-	spawn(5)	//So potency can be set in the proc that creates these crops
-		reagents.add_reagent("nutriment", 1+round((potency / 50), 1))
+/obj/item/weapon/grown/deathnettle/atom_init()
+	. = ..()
+	spawn(5)
+		reagents.add_reagent("nutriment", 1 + round((potency / 50), 1))
 		reagents.add_reagent("pacid", round(potency, 1))
-		force = round((5+potency/2.5), 1)
+		force = round((5 + potency / 2.5), 1)
 
 /obj/item/weapon/grown/deathnettle/suicide_act(mob/user)
-	to_chat(viewers(user), "\red <b>[user] is eating some of the [src.name]! It looks like \he's trying to commit suicide.</b>")
-	return (BRUTELOSS|TOXLOSS)
+	to_chat(viewers(user), "<span class='warning'><b>[user] is eating some of the [src.name]! It looks like \he's trying to commit suicide.</b></span>")
+	return (BRUTELOSS | TOXLOSS)
 
 // *************************************
 // Pestkiller defines for hydroponics
@@ -1296,90 +1327,75 @@
 	name = "bottle of pestkiller"
 	icon = 'icons/obj/chemical.dmi'
 	icon_state = "bottle16"
-	flags = FPRINT |  TABLEPASS
 	var/toxicity = 0
 	var/PestKillStr = 0
 
-/obj/item/pestkiller/New()
-	src.pixel_x = rand(-5.0, 5)
-	src.pixel_y = rand(-5.0, 5)
+/obj/item/pestkiller/atom_init()
+	. = ..()
+	pixel_x = rand(-5.0, 5)
+	pixel_y = rand(-5.0, 5)
 
 /obj/item/pestkiller/carbaryl
 	name = "bottle of carbaryl"
 	icon = 'icons/obj/chemical.dmi'
 	icon_state = "bottle16"
-	flags = FPRINT |  TABLEPASS
 	toxicity = 4
 	PestKillStr = 2
-
-/obj/item/pestkiller/carbaryl/New()
-	src.pixel_x = rand(-5.0, 5)
-	src.pixel_y = rand(-5.0, 5)
 
 /obj/item/pestkiller/lindane
 	name = "bottle of lindane"
 	icon = 'icons/obj/chemical.dmi'
 	icon_state = "bottle18"
-	flags = FPRINT |  TABLEPASS
 	toxicity = 6
 	PestKillStr = 4
-
-/obj/item/pestkiller/lindane/New()
-	src.pixel_x = rand(-5.0, 5)
-	src.pixel_y = rand(-5.0, 5)
 
 /obj/item/pestkiller/phosmet
 	name = "bottle of phosmet"
 	icon = 'icons/obj/chemical.dmi'
 	icon_state = "bottle15"
-	flags = FPRINT |  TABLEPASS
 	toxicity = 8
 	PestKillStr = 7
-
-/obj/item/pestkiller/phosmet/New()
-	src.pixel_x = rand(-5.0, 5)
-	src.pixel_y = rand(-5.0, 5)
 
 // *************************************
 // Hydroponics Tools
 // *************************************
 
-/obj/item/weapon/weedspray // -- Skie
+/obj/item/weapon/weedspray
 	desc = "It's a toxic mixture, in spray form, to kill small weeds."
-	icon = 'icons/obj/hydroponics.dmi'
+	icon = 'icons/obj/hydroponics/equipment.dmi'
 	name = "weed-spray"
 	icon_state = "weedspray"
 	item_state = "spray"
-	flags = TABLEPASS | OPENCONTAINER | FPRINT | NOBLUDGEON
-	slot_flags = SLOT_BELT
+	flags = OPENCONTAINER | NOBLUDGEON
+	slot_flags = SLOT_FLAGS_BELT
 	throwforce = 4
-	w_class = 2.0
+	w_class = ITEM_SIZE_SMALL
 	throw_speed = 2
 	throw_range = 10
 	var/toxicity = 4
 	var/WeedKillStr = 2
 
 /obj/item/weapon/weedspray/suicide_act(mob/user)
-	to_chat(viewers(user), "\red <b>[user] is huffing the [src.name]! It looks like \he's trying to commit suicide.</b>")
+	to_chat(viewers(user), "<span class='warning'><b>[user] is huffing the [src.name]! It looks like \he's trying to commit suicide.</b></span>")
 	return (TOXLOSS)
 
 /obj/item/weapon/pestspray // -- Skie
 	desc = "It's some pest eliminator spray! <I>Do not inhale!</I>"
-	icon = 'icons/obj/hydroponics.dmi'
+	icon = 'icons/obj/hydroponics/equipment.dmi'
 	name = "pest-spray"
 	icon_state = "pestspray"
 	item_state = "spraycan"
-	flags = TABLEPASS | OPENCONTAINER | FPRINT | NOBLUDGEON
-	slot_flags = SLOT_BELT
+	flags = OPENCONTAINER | NOBLUDGEON
+	slot_flags = SLOT_FLAGS_BELT
 	throwforce = 4
-	w_class = 2.0
+	w_class = ITEM_SIZE_SMALL
 	throw_speed = 2
 	throw_range = 10
 	var/toxicity = 4
 	var/PestKillStr = 2
 
 /obj/item/weapon/pestspray/suicide_act(mob/user)
-	to_chat(viewers(user), "\red <b>[user] is huffing the [src.name]! It looks like \he's trying to commit suicide.</b>")
+	to_chat(viewers(user), "<span class='warning'><b>[user] is huffing the [src.name]! It looks like \he's trying to commit suicide.</b></span>")
 	return (TOXLOSS)
 
 /obj/item/weapon/minihoe // -- Numbers
@@ -1388,11 +1404,12 @@
 	icon = 'icons/obj/weapons.dmi'
 	icon_state = "hoe"
 	item_state = "hoe"
-	flags = FPRINT | TABLEPASS | CONDUCT | NOBLUDGEON
+	flags = CONDUCT | NOBLUDGEON
 	force = 5.0
 	throwforce = 7.0
-	w_class = 2.0
-	m_amt = 50
+	w_class = ITEM_SIZE_SMALL
+	m_amt = 2550
+	origin_tech = "materials=1;biotech=1"
 	attack_verb = list("slashed", "sliced", "cut", "clawed")
 
 // *************************************
@@ -1403,7 +1420,6 @@
 	name = "bottle of weedkiller"
 	icon = 'icons/obj/chemical.dmi'
 	icon_state = "bottle16"
-	flags = FPRINT |  TABLEPASS
 	var/toxicity = 0
 	var/WeedKillStr = 0
 
@@ -1411,7 +1427,6 @@
 	name = "bottle of glyphosate"
 	icon = 'icons/obj/chemical.dmi'
 	icon_state = "bottle16"
-	flags = FPRINT |  TABLEPASS
 	toxicity = 4
 	WeedKillStr = 2
 
@@ -1419,7 +1434,6 @@
 	name = "bottle of triclopyr"
 	icon = 'icons/obj/chemical.dmi'
 	icon_state = "bottle18"
-	flags = FPRINT |  TABLEPASS
 	toxicity = 6
 	WeedKillStr = 4
 
@@ -1427,7 +1441,6 @@
 	name = "bottle of 2,4-D"
 	icon = 'icons/obj/chemical.dmi'
 	icon_state = "bottle15"
-	flags = FPRINT |  TABLEPASS
 	toxicity = 8
 	WeedKillStr = 7
 
@@ -1439,49 +1452,32 @@
 	name = "bottle of nutrient"
 	icon = 'icons/obj/chemical.dmi'
 	icon_state = "bottle16"
-	flags = FPRINT |  TABLEPASS
-	w_class = 2.0
+	w_class = ITEM_SIZE_SMALL
 	var/mutmod = 0
 	var/yieldmod = 0
 
-/obj/item/nutrient/New()
-	src.pixel_x = rand(-5.0, 5)
-	src.pixel_y = rand(-5.0, 5)
+/obj/item/nutrient/atom_init()
+	. = ..()
+	pixel_x = rand(-5.0, 5)
+	pixel_y = rand(-5.0, 5)
 
 /obj/item/nutrient/ez
 	name = "bottle of E-Z-Nutrient"
 	icon = 'icons/obj/chemical.dmi'
 	icon_state = "bottle16"
-	flags = FPRINT |  TABLEPASS
 	mutmod = 1
 	yieldmod = 1
-
-/obj/item/nutrient/ez/New()
-	src.pixel_x = rand(-5.0, 5)
-	src.pixel_y = rand(-5.0, 5)
 
 /obj/item/nutrient/l4z
 	name = "bottle of Left 4 Zed"
 	icon = 'icons/obj/chemical.dmi'
 	icon_state = "bottle18"
-	flags = FPRINT |  TABLEPASS
 	mutmod = 2
 	yieldmod = 0
-
-/obj/item/nutrient/l4z/New()
-	src.pixel_x = rand(-5.0, 5)
-	src.pixel_y = rand(-5.0, 5)
 
 /obj/item/nutrient/rh
 	name = "bottle of Robust Harvest"
 	icon = 'icons/obj/chemical.dmi'
 	icon_state = "bottle15"
-	flags = FPRINT |  TABLEPASS
 	mutmod = 0
 	yieldmod = 2
-
-/obj/item/nutrient/rh/New()
-	src.pixel_x = rand(-5.0, 5)
-	src.pixel_y = rand(-5.0, 5)
-
-

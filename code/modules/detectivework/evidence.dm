@@ -6,14 +6,18 @@
 	icon = 'icons/obj/storage.dmi'
 	icon_state = "evidenceobj"
 	item_state = ""
-	w_class = 2
+	w_class = ITEM_SIZE_SMALL
 
-/obj/item/weapon/evidencebag/afterattack(obj/item/I, mob/user, proximity)
+/obj/item/weapon/evidencebag/afterattack(atom/target, mob/user, proximity, params)
 	if(!proximity) return
-	if(!in_range(I, user))
+	if(!in_range(target, user))
 		return
 
-	if(!istype(I) || I.anchored == 1)
+	if(!istype(target, /obj/item))
+		return ..()
+
+	var/obj/item/I = target
+	if(I.anchored)
 		return ..()
 
 	if(istype(I, /obj/item/weapon/evidencebag))
@@ -26,7 +30,7 @@
 	if(istype(I, /obj/item/device/core_sampler)) //core sampler interacts with evidence bags in another way
 		return
 
-	if(I.w_class > 3)
+	if(I.w_class > ITEM_SIZE_NORMAL)
 		to_chat(user, "<span class='notice'>[I] won't fit in [src].</span>")
 		return
 
@@ -46,37 +50,47 @@
 		else
 			return
 
-	user.visible_message("[user] puts [I] into [src]", "You put [I] inside [src].",\
-	"You hear a rustle as someone puts something into a plastic bag.")
+	user.visible_message(
+		"[user] puts [I] into [src]",
+		"You put [I] inside [src].",
+		"You hear a rustle as someone puts something into a plastic bag."
+	)
 
+	put_item_in(I)
+
+/obj/item/weapon/evidencebag/proc/put_item_in(obj/item/I)
 	icon_state = "evidence"
-
-	var/xx = I.pixel_x	//save the offset of the item
-	var/yy = I.pixel_y
-	I.pixel_x = 0		//then remove it so it'll stay within the evidence bag
-	I.pixel_y = 0
-	var/image/img = image("icon"=I, "layer"=FLOAT_LAYER)	//take a snapshot. (necessary to stop the underlays appearing under our inventory-HUD slots ~Carn
-	I.pixel_x = xx		//and then return it
-	I.pixel_y = yy
-	overlays += img
-	overlays += "evidence"	//should look nicer for transparent stuff. not really that important, but hey.
-
-	desc = "An evidence bag containing [I]. [I.desc]"
-	I.loc = src
 	w_class = I.w_class
-	return
+	desc = "\An [name] containing [I]. [I.desc]"
 
+	var/temp_x = I.pixel_x
+	var/temp_y = I.pixel_y
+	I.pixel_x = 0
+	I.pixel_y = 0
+
+	var/image/img = image("icon" = I)
+	img.layer = FLOAT_LAYER
+	img.plane = FLOAT_PLANE
+
+	underlays += img
+
+	I.pixel_x = temp_x
+	I.pixel_y = temp_y
+	I.loc = src
 
 /obj/item/weapon/evidencebag/attack_self(mob/user)
 	if(contents.len)
 		var/obj/item/I = contents[1]
-		user.visible_message("[user] takes [I] out of [src]", "You take [I] out of [src].",\
-		"You hear someone rustle around in a plastic bag, and remove something.")
-		overlays.Cut()	//remove the overlays
+		user.visible_message(
+			"[user] takes [I] out of [src]",
+			"You take [I] out of [src].",
+			"You hear someone rustle around in a plastic bag, and remove something."
+		)
+		underlays.Cut()
 		user.put_in_hands(I)
 		w_class = initial(w_class)
 		icon_state = "evidenceobj"
-		desc = "An empty evidence bag."
+		desc = "An empty [name]."
 
 	else
 		to_chat(user, "[src] is empty.")
@@ -91,7 +105,7 @@
 	var/amount = 10.0
 	item_state = "paper"
 	throwforce = 1
-	w_class = 1.0
+	w_class = ITEM_SIZE_TINY
 	throw_speed = 3
 	throw_range = 5
 

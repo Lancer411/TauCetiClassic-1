@@ -27,9 +27,9 @@
 	var/last_found = null
 	var/last_seen = null
 
-/obj/item/device/camera_bug/New()
-	..()
-	SSobj.processing |= src
+/obj/item/device/camera_bug/atom_init()
+	. = ..()
+	START_PROCESSING(SSobj, src)
 
 /obj/item/device/camera_bug/Destroy()
 	get_cameras()
@@ -40,7 +40,7 @@
 	bugged_cameras.Cut()
 	if(tracking)
 		tracking = null
-	SSobj.processing -= src
+	STOP_PROCESSING(SSobj, src)
 	return ..()
 
 
@@ -54,7 +54,7 @@
 	interact(user)
 
 /obj/item/device/camera_bug/check_eye(mob/user)
-	if (user.stat || loc != user || !user.canmove || user.blinded || !current)
+	if (user.incapacitated() || loc != user || user.blinded || !current)
 		user.reset_view(null)
 		user.unset_machine()
 		return 0
@@ -206,7 +206,7 @@
 	if("emp" in href_list)
 		var/obj/machinery/camera/C = locate(href_list["emp"])
 		if(istype(C) && C.bug == src)
-			C.emp_act(1)
+			C.emplode(1)
 			C.bug = null
 			bugged_cameras -= C.c_tag
 		interact()
@@ -237,7 +237,6 @@
 					usr << browse(null, "window=camerabug")
 			return
 		else
-			usr.unset_machine()
 			usr.reset_view(null)
 
 	interact()
@@ -246,7 +245,7 @@
 	if(track_mode == BUGMODE_LIST || (world.time < (last_tracked + refresh_interval)))
 		return
 	last_tracked = world.time
-	if(track_mode == BUGMODE_TRACK ) // search for user
+	if(track_mode == BUGMODE_TRACK) // search for user
 		// Note that it will be tricked if your name appears to change.
 		// This is not optimal but it is better than tracking you relentlessly despite everything.
 		if(!tracking)

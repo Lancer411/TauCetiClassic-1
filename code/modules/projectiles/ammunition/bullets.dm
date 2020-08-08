@@ -30,18 +30,35 @@
 
 /obj/item/ammo_casing/c9mmr
 	desc = "A 9mm rubber bullet casing."
+	icon_state = "st-casing"
 	caliber = "9mm"
 	projectile_type = "/obj/item/projectile/bullet/weakbullet/rubber"
 
 /obj/item/ammo_casing/c45
 	desc = "A .45 bullet casing."
 	caliber = ".45"
-	projectile_type = "/obj/item/projectile/bullet/midbullet"
+	projectile_type = "/obj/item/projectile/bullet/smg"
+
+/obj/item/ammo_casing/c45hp
+	desc = "A .45 HP bullet casing."
+	caliber = ".45S"
+	projectile_type = "/obj/item/projectile/bullet/smg_hp"
+
+/obj/item/ammo_casing/c45hv
+	desc = "A .45 HV bullet casing."
+	caliber = ".45S"
+	projectile_type = "/obj/item/projectile/bullet/smg_hv"
+
+/obj/item/ammo_casing/c45imp
+	desc = "A .45 IMP bullet casing."
+	caliber = ".45S"
+	projectile_type = "/obj/item/projectile/bullet/smg_imp"
 
 /obj/item/ammo_casing/c45r
 	desc = "A .45 rubber bullet casing."
+	icon_state = "st-casing"
 	caliber = ".45"
-	projectile_type = "/obj/item/projectile/bullet/weakbullet/rubber"
+	projectile_type = "/obj/item/projectile/bullet/weakbullet/rubber45"
 
 /obj/item/ammo_casing/a12mm
 	desc = "A 12mm bullet casing."
@@ -60,9 +77,8 @@
 	name = "shotgun shell"
 	desc = "A 12 gauge shell."
 	icon_state = "gshell"
-	projectile_type = /obj/item/projectile/bullet/pellet
-	pellets = 5
-	variance = 0.8
+	projectile_type = /obj/item/projectile/bullet/buckpellet
+	pellets = 7
 
 /obj/item/ammo_casing/shotgun/beanbag
 	name = "beanbag shell"
@@ -106,10 +122,14 @@
 
 /obj/item/ammo_casing/r4046
 	name = "A 40x46mm grenade"
-	desc = "A 40x46mm grenade (rubber)."
+	desc = "A 40x46mm grenade."
 	icon_state = "40x46"
 	caliber = "40x46"
 	projectile_type = /obj/item/projectile/bullet/grenade/r4046
+
+/obj/item/ammo_casing/r4046/rubber
+	desc = "A 40x46mm grenade (rubber)."
+	projectile_type = /obj/item/projectile/bullet/grenade/r4046/rubber
 
 /obj/item/ammo_casing/r4046/chem/teargas
 	desc = "A 40x46mm grenade (teargas)."
@@ -164,10 +184,6 @@
 	caliber = "a3006"
 	projectile_type = "/obj/item/projectile/bullet/midbullet3"
 
-/obj/item/ammo_casing/l10
-	caliber = "energy"
-	projectile_type = "/obj/item/projectile/l10"
-
 /obj/item/ammo_casing/flare
 	desc = "A flare for flare gun."
 	caliber = "flare"
@@ -180,7 +196,7 @@
 	projectile_type = /obj/item/projectile/bullet/midbullet2
 
 /obj/item/ammo_box/c38m
-	name = "speed loader (.38)"
+	name = "speedloader (.38)"
 	icon_state = "38"
 	ammo_type = /obj/item/ammo_casing/c38m
 	max_ammo = 6
@@ -195,3 +211,8 @@
 	desc = "A 5.56mm incendiary bullet casing."
 	caliber = "5.56mm"
 	projectile_type = /obj/item/projectile/bullet/incendiary
+
+/obj/item/ammo_casing/a74
+	desc = "A 7.74mm bullet casing."
+	caliber = "7.74mm"
+	projectile_type = /obj/item/projectile/bullet/rifle3

@@ -17,15 +17,16 @@
 /obj/item/weapon/rocksliver
 	name = "rock sliver"
 	desc = "It looks extremely delicate."
-	icon = 'icons/obj/xenoarchaeology.dmi'
+	icon = 'icons/obj/xenoarchaeology/tools.dmi'
 	icon_state = "sliver1"	//0-4
-	w_class = 1
+	w_class = ITEM_SIZE_TINY
 	sharp = 1
 	//item_state = "electronic"
 	var/source_rock = "/turf/simulated/mineral/"
 	var/datum/geosample/geological_data
 
-/obj/item/weapon/rocksliver/New()
+/obj/item/weapon/rocksliver/atom_init()
+	. = ..()
 	icon_state = "sliver[rand(1,3)]"
 	pixel_x = rand(0,16)-8
 	pixel_y = rand(0,8)-8
@@ -128,15 +129,14 @@
 		artifact_distance = rand()
 		artifact_id = container.artifact_find.artifact_id
 	else
-		if(Master)
-			for(var/turf/simulated/mineral/T in Master.artifact_spawning_turfs)
-				if(T.artifact_find)
-					var/cur_dist = get_dist(container, T) * 2
-					if( (artifact_distance < 0 || cur_dist < artifact_distance) && cur_dist <= T.artifact_find.artifact_detect_range )
-						artifact_distance = cur_dist + rand() * 2 - 1
-						artifact_id = T.artifact_find.artifact_id
-				else
-					Master.artifact_spawning_turfs.Remove(T)
+		for(var/turf/simulated/mineral/T in SSxenoarch.turfs_with_artifacts)
+			if(T.artifact_find)
+				var/cur_dist = get_dist(container, T) * 2
+				if( (artifact_distance < 0 || cur_dist < artifact_distance) && cur_dist <= T.artifact_find.artifact_detect_range )
+					artifact_distance = cur_dist + rand() * 2 - 1
+					artifact_id = T.artifact_find.artifact_id
+			else
+				SSxenoarch.turfs_with_artifacts.Remove(T)
 
 /*
 #undef FIND_PLANT

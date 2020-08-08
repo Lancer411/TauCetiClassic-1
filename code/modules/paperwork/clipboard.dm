@@ -1,18 +1,19 @@
 /obj/item/weapon/clipboard
-	name = "clipboard"
+	name = "Clipboard"
 	icon = 'icons/obj/bureaucracy.dmi'
+	hitsound = list('sound/items/misc/folder-slap.ogg')
 	icon_state = "clipboard"
 	item_state = "clipboard"
 	throwforce = 0
-	w_class = 2.0
+	w_class = ITEM_SIZE_SMALL
 	throw_speed = 3
 	throw_range = 10
 	var/obj/item/weapon/pen/haspen		//The stored pen.
 	var/obj/item/weapon/toppaper	//The topmost piece of paper.
-	flags = FPRINT | TABLEPASS
-	slot_flags = SLOT_BELT
+	slot_flags = SLOT_FLAGS_BELT
 
-/obj/item/weapon/clipboard/New()
+/obj/item/weapon/clipboard/atom_init()
+	. = ..()
 	update_icon()
 
 /obj/item/weapon/clipboard/MouseDrop(obj/over_object as obj) //Quick clipboard fix. -Agouri
@@ -21,7 +22,7 @@
 		if(!(istype(over_object, /obj/screen) ))
 			return ..()
 
-		if(!M.restrained() && !M.stat)
+		if(!M.incapacitated())
 			switch(over_object.name)
 				if("r_hand")
 					if(!M.unEquip(src))
@@ -35,30 +36,32 @@
 			return
 
 /obj/item/weapon/clipboard/update_icon()
-	overlays.Cut()
+	cut_overlays()
 	if(toppaper)
-		overlays += toppaper.icon_state
-		overlays += toppaper.overlays
+		add_overlay(toppaper.icon_state)
+		add_overlay(toppaper.overlays)
 	if(haspen)
-		overlays += "clipboard_pen"
-	overlays += "clipboard_over"
+		add_overlay("clipboard_pen")
+	add_overlay("clipboard_over")
 	return
 
-/obj/item/weapon/clipboard/attackby(obj/item/weapon/W, mob/user)
-	if(istype(W, /obj/item/weapon/paper) || istype(W, /obj/item/weapon/photo))
-		user.drop_item()
-		W.loc = src
-		if(istype(W, /obj/item/weapon/paper))
-			toppaper = W
-		to_chat(user, "<span class='notice'>You clip the [W] onto \the [src].</span>")
+/obj/item/weapon/clipboard/attackby(obj/item/I, mob/user, params)
+	if(istype(I, /obj/item/weapon/paper) || istype(I, /obj/item/weapon/photo))
+		user.drop_from_inventory(I, src)
+		if(istype(I, /obj/item/weapon/paper))
+			toppaper = I
+		to_chat(user, "<span class='notice'>You clip the [I] onto \the [src].</span>")
 		update_icon()
+
 	else if(toppaper)
-		toppaper.attackby(usr.get_active_hand(), usr)
+		toppaper.attackby(usr.get_active_hand(), usr, params)
 		update_icon()
-	return
+
+	else
+		return ..()
 
 /obj/item/weapon/clipboard/attack_self(mob/user)
-	var/dat = "<title>Clipboard</title>"
+	var/dat = ""
 	if(haspen)
 		dat += "<A href='?src=\ref[src];pen=1'>Remove Pen</A><BR><HR>"
 	else
@@ -67,23 +70,25 @@
 	//The topmost paper. I don't think there's any way to organise contents in byond, so this is what we're stuck with.	-Pete
 	if(toppaper)
 		var/obj/item/weapon/paper/P = toppaper
-		dat += "<A href='?src=\ref[src];write=\ref[P]'>Write</A> <A href='?src=\ref[src];remove=\ref[P]'>Remove</A> - <A href='?src=\ref[src];read=\ref[P]'>[sanitize_popup(P.name)]</A><BR><HR>"
+		dat += "<A href='?src=\ref[src];write=\ref[P]'>Write</A> <A href='?src=\ref[src];remove=\ref[P]'>Remove</A> - <A href='?src=\ref[src];read=\ref[P]'>[sanitize(P.name)]</A><BR><HR>"
 
 	for(var/obj/item/weapon/paper/P in src)
 		if(P==toppaper)
 			continue
-		dat += "<A href='?src=\ref[src];remove=\ref[P]'>Remove</A> - <A href='?src=\ref[src];read=\ref[P]'>[sanitize_popup(P.name)]</A><BR>"
+		dat += "<A href='?src=\ref[src];remove=\ref[P]'>Remove</A> - <A href='?src=\ref[src];read=\ref[P]'>[sanitize(P.name)]</A><BR>"
 	for(var/obj/item/weapon/photo/Ph in src)
-		dat += "<A href='?src=\ref[src];remove=\ref[Ph]'>Remove</A> - <A href='?src=\ref[src];look=\ref[Ph]'>[sanitize_popup(Ph.name)]</A><BR>"
+		dat += "<A href='?src=\ref[src];remove=\ref[Ph]'>Remove</A> - <A href='?src=\ref[src];look=\ref[Ph]'>[sanitize(Ph.name)]</A><BR>"
 
-	user << browse(dat, "window=clipboard")
-	onclose(user, "clipboard")
+	var/datum/browser/popup = new(user, "window=clipboard", src,name)
+	popup.set_content(dat)
+	popup.open()
+
 	add_fingerprint(usr)
 	return
 
 /obj/item/weapon/clipboard/Topic(href, href_list)
 	..()
-	if((usr.stat || usr.restrained()))
+	if(usr.incapacitated())
 		return
 
 	if(usr.contents.Find(src))
@@ -125,12 +130,7 @@
 		if(href_list["read"])
 			var/obj/item/weapon/paper/P = locate(href_list["read"])
 			if(P)
-				if(!(istype(usr, /mob/living/carbon/human) || istype(usr, /mob/dead/observer) || istype(usr, /mob/living/silicon)))
-					usr << browse("<HTML><HEAD><TITLE>[sanitize_popup(P.name)]</TITLE></HEAD><BODY>[sanitize_plus_popup(stars(revert_ja(P.info)))][P.stamps]</BODY></HTML>", "window=[P.name]")
-					onclose(usr, "[P.name]")
-				else
-					usr << browse("<HTML><HEAD><TITLE>[sanitize_popup(P.name)]</TITLE></HEAD><BODY>[P.info][P.stamps]</BODY></HTML>", "window=[P.name]")
-					onclose(usr, "[P.name]")
+				P.show_content(usr)
 
 		if(href_list["look"])
 			var/obj/item/weapon/photo/P = locate(href_list["look"])

@@ -1,21 +1,22 @@
-var/datum/subsystem/machines/SSmachine
-
-/datum/subsystem/machines
+SUBSYSTEM_DEF(machines)
+/datum/controller/subsystem/machines
 	name = "Machines"
-	priority = 9
-	display = 3
+
+	init_order    = SS_INIT_MACHINES
+	display_order = SS_DISPLAY_MACHINES
+
+	flags = SS_KEEP_TIMING
 
 	var/list/processing = list()
 	var/list/currentrun = list()
-	var/list/powernets = list()
+	var/list/powernets  = list()
 
-
-/datum/subsystem/machines/Initialize()
+/datum/controller/subsystem/machines/Initialize()
 	makepowernets()
 	fire()
 	..()
 
-/datum/subsystem/machines/proc/makepowernets(zlevel)
+/datum/controller/subsystem/machines/proc/makepowernets()
 	for(var/datum/powernet/PN in powernets)
 		qdel(PN)
 	powernets.Cut()
@@ -26,15 +27,12 @@ var/datum/subsystem/machines/SSmachine
 			NewPN.add_cable(PC)
 			propagate_network(PC,PC.powernet)
 
-/datum/subsystem/machines/New()
-	NEW_SS_GLOBAL(SSmachine)
 
-
-/datum/subsystem/machines/stat_entry()
+/datum/controller/subsystem/machines/stat_entry()
 	..("M:[processing.len]|PN:[powernets.len]")
 
 
-/datum/subsystem/machines/fire(resumed = 0)
+/datum/controller/subsystem/machines/fire(resumed = 0)
 	if (!resumed)
 		for(var/datum/powernet/Powernet in powernets)
 			Powernet.reset() //reset the power state.
@@ -45,20 +43,24 @@ var/datum/subsystem/machines/SSmachine
 
 	var/seconds = wait * 0.1
 	while(currentrun.len)
-		var/datum/thing = currentrun[1]
-		currentrun.Cut(1, 2)
-		if(thing && thing.process(seconds) != PROCESS_KILL)
-			if(thing:use_power)
-				thing:auto_use_power() //add back the power state
-		else
-			processing.Remove(thing)
+		var/obj/machinery/thing = currentrun[currentrun.len]
+		currentrun.len--
+		if (QDELETED(thing) || thing.process(seconds) == PROCESS_KILL)
+			processing -= thing
+			thing.isprocessing = FALSE
 		if (MC_TICK_CHECK)
 			return
 
-/datum/subsystem/machines/proc/setup_template_powernets(list/cables)
+/datum/controller/subsystem/machines/proc/setup_template_powernets(list/cables)
 	for(var/A in cables)
 		var/obj/structure/cable/PC = A
 		if(!PC.powernet)
 			var/datum/powernet/NewPN = new()
 			NewPN.add_cable(PC)
 			propagate_network(PC,PC.powernet)
+
+/datum/controller/subsystem/machines/Recover()
+	if (istype(SSmachines.processing))
+		processing = SSmachines.processing
+	if (istype(SSmachines.powernets))
+		powernets = SSmachines.powernets

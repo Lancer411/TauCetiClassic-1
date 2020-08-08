@@ -13,13 +13,17 @@ A list of items and costs is stored under the datum of every game mode, alongsid
 	var/list/purchase_log = list()
 	var/show_description = null
 	var/active = 0
-	var/uplink_type = "traitor" //0 - триторский аплинк, 1 - нюкерский
+	var/uplink_type = "traitor" //0 - traitor uplink, 1 - nuke
 	var/list/uplink_items = list()
 
-/obj/item/device/uplink/New()
-	..()
-	welcome = ticker.mode.uplink_welcome
-	uses = ticker.mode.uplink_uses
+/obj/item/device/uplink/atom_init()
+	. = ..()
+	if(SSticker && SSticker.mode)
+		welcome = SSticker.mode.uplink_welcome
+		uses = SSticker.mode.uplink_uses
+	else
+		welcome = "Syndicate Uplink Console:"
+		uses = 20
 
 //Let's build a menu!
 /obj/item/device/uplink/proc/generate_menu()
@@ -164,22 +168,27 @@ A list of items and costs is stored under the datum of every game mode, alongsid
 	return 0
 
 //Refund proc for the borg teleporter (later I'll make a general refund proc if there is demand for it)
-/obj/item/device/radio/uplink/attackby(obj/item/weapon/W, mob/user)
-	if(istype(W, /obj/item/weapon/antag_spawner/borg_tele))
-		var/obj/item/weapon/antag_spawner/borg_tele/S = W
+/obj/item/device/radio/uplink/attackby(obj/item/I, mob/user, params)
+	if(istype(I, /obj/item/weapon/antag_spawner/borg_tele))
+		var/obj/item/weapon/antag_spawner/borg_tele/S = I
 		if(!S.used)
 			hidden_uplink.uses += S.TC_cost
 			qdel(S)
 			to_chat(user, "<span class='notice'>Teleporter refunded.</span>")
 		else
 			to_chat(user, "<span class='notice'>This teleporter is already used.</span>")
+
+	else
+		return ..()
+
 // PRESET UPLINKS
 // A collection of preset uplinks.
 //
 // Includes normal radio uplink, multitool uplink,
 // implant uplink (not the implant tool) and a preset headset uplink.
 
-/obj/item/device/radio/uplink/New()
+/obj/item/device/radio/uplink/atom_init()
+	. = ..()
 	hidden_uplink = new(src)
 	icon_state = "radio"
 	hidden_uplink.uplink_type = "nuclear"
@@ -188,7 +197,8 @@ A list of items and costs is stored under the datum of every game mode, alongsid
 	if(hidden_uplink)
 		hidden_uplink.trigger(user)
 
-/obj/item/device/multitool/uplink/New()
+/obj/item/device/multitool/uplink/atom_init()
+	. = ..()
 	hidden_uplink = new(src)
 
 /obj/item/device/multitool/uplink/attack_self(mob/user)
@@ -198,7 +208,7 @@ A list of items and costs is stored under the datum of every game mode, alongsid
 /obj/item/device/radio/headset/uplink
 	traitor_frequency = 1445
 
-/obj/item/device/radio/headset/uplink/New()
-	..()
+/obj/item/device/radio/headset/uplink/atom_init()
+	. = ..()
 	hidden_uplink = new(src)
-	hidden_uplink.uses = 10
+	hidden_uplink.uses = 20

@@ -8,16 +8,18 @@
 	icon_state = "sleeperconsole"
 	anchored = 1 //About time someone fixed this.
 	density = 0
-	light_color = "#7BF9FF"
+	light_color = "#7bf9ff"
 
 /obj/machinery/sleeper
 	name = "Sleeper"
+	desc = "Used for the rapid introduction of chemicals from the internal storage."
 	icon = 'icons/obj/Cryogenic3.dmi'
 	icon_state = "sleeper-open"
 	density = 0
 	anchored = 1
 	state_open = 1
-	light_color = "#7BF9FF"
+	light_color = "#7bf9ff"
+	allowed_checks = ALLOWED_CHECK_TOPIC
 	var/obj/item/weapon/reagent_containers/glass/beaker = null
 	var/filtering = 0
 	var/efficiency = 1
@@ -29,18 +31,27 @@
 		list("anti_toxin", "ryetalyn" ,"dermaline", "arithrazine"),
 		list("dexalinp", "alkysine")
 	)
+	var/upgraded = FALSE
 
-/obj/machinery/sleeper/New()
-	..()
-	beaker = new /obj/item/weapon/reagent_containers/glass/beaker/large(src)
+/obj/machinery/sleeper/upgraded
+	upgraded = TRUE
+
+/obj/machinery/sleeper/atom_init(mapload)
+	. = ..()
 	component_parts = list()
 	component_parts += new /obj/item/weapon/circuitboard/sleeper(null)
-	component_parts += new /obj/item/weapon/stock_parts/matter_bin(null)
-	component_parts += new /obj/item/weapon/stock_parts/manipulator(null)
+	if(upgraded)
+		component_parts += new /obj/item/weapon/stock_parts/matter_bin/bluespace(null)
+		component_parts += new /obj/item/weapon/stock_parts/manipulator/femto(null)
+	else
+		component_parts += new /obj/item/weapon/stock_parts/matter_bin(null)
+		component_parts += new /obj/item/weapon/stock_parts/manipulator(null)
 	component_parts += new /obj/item/weapon/stock_parts/console_screen(null)
 	component_parts += new /obj/item/weapon/stock_parts/console_screen(null)
-	component_parts += new /obj/item/weapon/cable_coil(null, 1)
+	component_parts += new /obj/item/stack/cable_coil/red(null, 1)
 	RefreshParts()
+	if(mapload)
+		beaker = new /obj/item/weapon/reagent_containers/glass/beaker/large(src)
 
 /obj/machinery/sleeper/RefreshParts()
 	var/E
@@ -53,14 +64,17 @@
 	efficiency = initial(efficiency)* E
 	min_health = initial(min_health) * E
 	available_chems = list()
-	for(var/i in 1 to I)
+	for(var/i in 1 to min(I, possible_chems.len))
 		available_chems |= possible_chems[i]
 
 /obj/machinery/sleeper/allow_drop()
 	return 0
 
 /obj/machinery/sleeper/MouseDrop_T(mob/target, mob/user)
-	if(user.stat || user.lying || !Adjacent(user) || !target.Adjacent(user) || !iscarbon(target) || target.buckled)
+	if(user.incapacitated() || !Adjacent(user) || !target.Adjacent(user) || !iscarbon(target) || target.buckled)
+		return
+	if(!user.IsAdvancedToolUser())
+		to_chat(user, "<span class='warning'>You can not comprehend what to do with this.</span>")
 		return
 	close_machine(target)
 
@@ -84,6 +98,7 @@
 		qdel(src)
 
 /obj/machinery/sleeper/attack_animal(mob/living/simple_animal/M)//Stop putting hostile mobs in things guise
+	..()
 	if(M.environment_smash)
 		visible_message("<span class='danger'>[M.name] smashes [src] apart!</span>")
 		qdel(src)
@@ -99,7 +114,7 @@
 			src.updateUsrDialog()
 			return
 		else
-			to_chat(user, "\red The sleeper has a beaker already.")
+			to_chat(user, "<span class='warning'>The sleeper has a beaker already.</span>")
 			return
 
 	if(!state_open && !occupant)
@@ -187,7 +202,7 @@
 	set name = "Remove Beaker"
 	set category = "Object"
 	set src in oview(1)
-	if(usr.stat != 0)
+	if(usr.incapacitated())
 		return
 	if(beaker)
 		filtering = 0
@@ -196,9 +211,7 @@
 	add_fingerprint(usr)
 	return
 
-/obj/machinery/sleeper/attack_hand(mob/user)
-	if(..())
-		return
+/obj/machinery/sleeper/ui_interact(mob/user)
 	var/dat = "<h3>Sleeper Status</h3>"
 
 	dat += "<div class='statusDisplay'>"
@@ -293,12 +306,6 @@
 		to_chat(usr, "<span class='notice'>ERROR: Subject cannot metabolise chemicals.</span>")
 	updateUsrDialog()
 
-/obj/machinery/sleeper/attack_ai(mob/user)
-	return attack_hand(user)
-
-/obj/machinery/sleeper/attack_paw(mob/user)
-	return attack_hand(user)
-
 /obj/machinery/sleeper/open_machine()
 	if(!state_open && !panel_open)
 		..()
@@ -307,13 +314,13 @@
 
 /obj/machinery/sleeper/close_machine(mob/target)
 	if(state_open && !panel_open)
-		to_chat(target, "\blue <b>You feel cool air surround you. You go numb as your senses turn inward.</b>")
+		to_chat(target, "<span class='notice'><b>You feel cool air surround you. You go numb as your senses turn inward.</b></span>")
 		..(target)
 
 /obj/machinery/sleeper/proc/inject_chem(mob/user, chem)
 	if(occupant && occupant.reagents)
-		if(occupant.reagents.get_reagent_amount(chem) + 5 <= 20 * efficiency)
-			occupant.reagents.add_reagent(chem, 5)
+		if(occupant.reagents.get_reagent_amount(chem) + 10 <= 20 * efficiency)
+			occupant.reagents.add_reagent(chem, 10)
 		var/units = round(occupant.reagents.get_reagent_amount(chem))
 		to_chat(user, "<span class='notice'>Occupant now has [units] unit\s of [chem] in their bloodstream.</span>")
 

@@ -1,17 +1,21 @@
-var/datum/subsystem/parallax/SSparallax
+SUBSYSTEM_DEF(parallax)
+	name = "Parallax"
 
-/datum/subsystem/parallax
-	name = "parallax"
-	wait = 2
-//  needs new TG controllers
-//	flags = SS_POST_FIRE_TIMING | SS_FIRE_IN_LOBBY | SS_BACKGROUND | SS_NO_INIT
-	priority = 65
+	priority = SS_PRIORITY_PARALAX
+	wait     = SS_WAIT_PARALAX
+
+	flags = SS_POST_FIRE_TIMING | SS_FIRE_IN_LOBBY | SS_BACKGROUND | SS_NO_INIT
+
 	var/list/currentrun
+	var/planet_x_offset = 128
+	var/planet_y_offset = 128
 
-/datum/subsystem/parallax/New()
-	NEW_SS_GLOBAL(SSparallax)
+/datum/controller/subsystem/parallax/Initialize(timeofday)
+	planet_y_offset = rand(100, 160)
+	planet_x_offset = rand(100, 160)
+	..()
 
-/datum/subsystem/parallax/fire(resumed = 0)
+/datum/controller/subsystem/parallax/fire(resumed = 0)
 	if (!resumed)
 		src.currentrun = clients.Copy()
 
@@ -21,6 +25,7 @@ var/datum/subsystem/parallax/SSparallax
 	while(length(currentrun))
 		var/client/C = currentrun[currentrun.len]
 		currentrun.len--
+
 		if (!C || !C.eye)
 			if (MC_TICK_CHECK)
 				return

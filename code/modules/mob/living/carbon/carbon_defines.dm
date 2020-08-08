@@ -1,7 +1,7 @@
-/mob/living/carbon/
+/mob/living/carbon
 	gender = MALE
 	var/list/stomach_contents = list()
-	var/brain_op_stage = 0.0
+	var/chest_brain_op_stage = 0
 	var/list/datum/disease2/disease/virus2 = list()
 	var/antibodies = 0
 	var/last_eating = 0 	//Not sure what this does... I found it hidden in food.dm
@@ -19,3 +19,20 @@
 	var/pose = null
 
 	var/pulse = PULSE_NORM	//current pulse level
+
+	var/oxygen_alert = 0
+	var/phoron_alert = 0
+	var/fire_alert = 0
+	var/pressure_alert = 0
+	var/temperature_alert = 0
+	var/co2overloadtime = null
+	var/temperature_resistance = T0C+75
+
+	var/metabolism_factor = METABOLISM_FACTOR
+
+	var/obj/item/head
+	var/obj/item/shoes
+	var/obj/item/neck
+	var/obj/item/mouth
+
+	var/stamina = 100 //Ian uses this for now.

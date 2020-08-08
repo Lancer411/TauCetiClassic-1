@@ -2,7 +2,7 @@
 	name = "rock"
 	icon = 'icons/obj/mining.dmi'
 	icon_state = "ore2"
-	w_class = 2
+	w_class = ITEM_SIZE_SMALL
 	var/datum/geosample/geologic_data
 	var/oretag
 	var/points = 0
@@ -95,14 +95,16 @@
 	icon_state = "slag"
 	oretag = "slag"
 
-/obj/item/weapon/ore/New()
+/obj/item/weapon/ore/atom_init()
+	. = ..()
 	pixel_x = rand(0,16)-8
 	pixel_y = rand(0,8)-8
-	if(src.z == ZLEVEL_ASTEROID) score["oremined"]++ //When ore spawns, increment score.  Only include ore spawned on mining asteroid.
+	if(is_mining_level(z))
+		score["oremined"]++ //When ore spawns, increment score.  Only include ore spawned on mining asteroid.
 
-/obj/item/weapon/ore/attackby(obj/item/weapon/W, mob/user)
-	if(istype(W,/obj/item/device/core_sampler))
-		var/obj/item/device/core_sampler/C = W
+/obj/item/weapon/ore/attackby(obj/item/I, mob/user, params)
+	if(istype(I, /obj/item/device/core_sampler))
+		var/obj/item/device/core_sampler/C = I
 		C.sample_item(src, user)
 	else
 		return ..()

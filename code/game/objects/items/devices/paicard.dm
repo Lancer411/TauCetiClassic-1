@@ -3,23 +3,40 @@
 	icon = 'icons/obj/pda.dmi'
 	icon_state = "pai"
 	item_state = "electronic"
-	w_class = 2.0
-	flags = FPRINT | TABLEPASS
-	slot_flags = SLOT_BELT
+	w_class = ITEM_SIZE_SMALL
+	slot_flags = SLOT_FLAGS_BELT
 	origin_tech = "programming=2"
 	var/obj/item/device/radio/radio
 	var/looking_for_personality = 0
 	var/mob/living/silicon/pai/pai
 
-/obj/item/device/paicard/New()
-	..()
-	overlays += "pai-off"
+/obj/item/device/paicard/atom_init()
+	. = ..()
+	paicard_list += src
+	add_overlay("pai-off")
 
 /obj/item/device/paicard/Destroy()
+	paicard_list -= src
 	//Will stop people throwing friend pAIs into the singularity so they can respawn
 	if(!isnull(pai))
 		pai.death(0)
 	return ..()
+
+/obj/item/device/paicard/attackby(obj/item/I, mob/user, params)
+	if(istype(I, /obj/item/weapon/paper))
+		var/obj/item/weapon/paper/paper = I
+		if(paper.crumpled)
+			to_chat(usr, "Paper to crumpled for anything.")
+			return
+		var/itemname = paper.name
+		var/info = paper.info
+		to_chat(user, "You hold \the [itemname] up to the pAI...")
+		if(pai.client && !(pai.stat == DEAD))
+			to_chat(pai, "[user.name] holds \a [itemname] up to one of your camera...")
+			pai << browse(text("<HTML><HEAD><TITLE>[]</TITLE></HEAD><BODY><TT>[]</TT></BODY></HTML>", itemname, info), text("window=[]", itemname))
+
+	else
+		return ..()
 
 /obj/item/device/paicard/attack_self(mob/user)
 	if (!in_range(src, user))
@@ -131,11 +148,11 @@
 				</tr>
 				<tr>
 					<td class="request">Prime directive:</td>
-					<td>[pai.pai_law0]</td>
+					<td>[pai.laws.zeroth]</td>
 				</tr>
 				<tr>
 					<td class="request">Additional directives:</td>
-					<td>[pai.pai_laws]</td>
+					<td>[jointext(pai.laws.supplied, "<br>")]</td>
 				</tr>
 			</table>
 			<br>
@@ -147,7 +164,7 @@
 				</td>
 			</table>
 		"}
-		if(pai && (!pai.master_dna || !pai.master))
+		if(!pai.master_dna || !pai.master)
 			dat += {"
 				<table>
 					<td class="button">
@@ -156,25 +173,25 @@
 				</table>
 			"}
 		dat += "<br>"
-		if(radio)
+		if(radio && radio.wires)
 			dat += "<b>Radio Uplink</b>"
 			dat += {"
 				<table class="request">
 					<tr>
 						<td class="radio">Transmit:</td>
-						<td><a href='byond://?src=\ref[src];wires=4'>[(radio.wires & 4) ? "<font color=#55FF55>En" : "<font color=#FF5555>Dis" ]abled</font></a>
+						<td><a href='byond://?src=\ref[src];wires=4'>[!radio.wires.is_index_cut(RADIO_WIRE_TRANSMIT) ? "<font color=#55FF55>Enabled</font>" : "<font color=#FF5555>Disabled</font>" ]</a>
 
 						</td>
 					</tr>
 					<tr>
 						<td class="radio">Receive:</td>
-						<td><a href='byond://?src=\ref[src];wires=2'>[(radio.wires & 2) ? "<font color=#55FF55>En" : "<font color=#FF5555>Dis" ]abled</font></a>
+						<td><a href='byond://?src=\ref[src];wires=2'>[!radio.wires.is_index_cut(RADIO_WIRE_RECEIVE) ? "<font color=#55FF55>Enabled</font>" : "<font color=#FF5555>Disabled</font>" ]</a>
 
 						</td>
 					</tr>
 					<tr>
 						<td class="radio">Signal Pulser:</td>
-						<td><a href='byond://?src=\ref[src];wires=1'>[(radio.wires & 1) ? "<font color=#55FF55>En" : "<font color=#FF5555>Dis" ]abled</font></a>
+						<td><a href='byond://?src=\ref[src];wires=1'>[!radio.wires.is_index_cut(RADIO_WIRE_SIGNAL) ? "<font color=#55FF55>Enabled</font>" : "<font color=#FF5555>Disabled</font>" ]</a>
 
 						</td>
 					</tr>
@@ -196,7 +213,7 @@
 			dat += {"
 				<b><font size='3px'>pAI Request Module</font></b><br><br>
 				<p>Requesting AI personalities from central database... If there are no entries, or if a suitable entry is not listed, check again later as more personalities may be added.</p>
-				<img src='loading.gif' /> Searching for personalities<br><br>
+				Searching for personalities, please wait...<br><br>
 
 				<table>
 					<tr>
@@ -225,7 +242,7 @@
 
 /obj/item/device/paicard/Topic(href, href_list)
 
-	if(!usr || usr.stat)
+	if(!usr || usr.incapacitated())
 		return
 
 	if(href_list["setdna"])
@@ -254,17 +271,14 @@
 			removePersonality()
 	if(href_list["wires"])
 		var/t1 = text2num(href_list["wires"])
-		if (radio.wires & t1)
-			radio.wires &= ~t1
-		else
-			radio.wires |= t1
+		radio.wires.cut_wire_index(t1)
 	if(href_list["setlaws"])
-		var/newlaws = sanitize_alt(copytext(input("Enter any additional directives you would like your pAI personality to follow. Note that these directives will not override the personality's allegiance to its imprinted master. Conflicting directives will be ignored.", "pAI Directive Configuration", revert_ja(pai.pai_laws)) as message,1,MAX_MESSAGE_LEN))
+		var/newlaws = sanitize(input("Enter any additional directives you would like your pAI personality to follow. Note that these directives will not override the personality's allegiance to its imprinted master. Conflicting directives will be ignored.", "pAI Directive Configuration", pai.laws.supplied.len ? pai.laws.supplied[1] : "") as message)
 		if(newlaws)
-			pai.pai_laws = newlaws
+			pai.laws.add_supplied_law(0, newlaws)
 			to_chat(pai, "Your supplemental directives have been updated. Your new directives are:")
-			to_chat(pai, "Prime Directive: <br>[sanitize_chat(pai.pai_law0)]")
-			to_chat(pai, "Supplemental Directives: <br>[sanitize_chat(pai.pai_laws)]")
+			to_chat(pai, "Prime Directive: <br>[pai.laws.zeroth]")
+			to_chat(pai, "Supplemental Directives: <br>[jointext(pai.laws.supplied, "<br>")]")
 	attack_self(usr)
 
 // 		WIRE_SIGNAL = 1
@@ -273,33 +287,31 @@
 
 /obj/item/device/paicard/proc/setPersonality(mob/living/silicon/pai/personality)
 	src.pai = personality
-	src.overlays += "pai-happy"
+	src.add_overlay("pai-happy")
 
 /obj/item/device/paicard/proc/removePersonality()
 	src.pai = null
-	src.overlays.Cut()
-	src.overlays += "pai-off"
+	src.cut_overlays()
+	src.add_overlay("pai-off")
 
 /obj/item/device/paicard/proc/setEmotion(emotion)
 	if(pai)
-		src.overlays.Cut()
+		src.cut_overlays()
 		switch(emotion)
-			if(1) src.overlays += "pai-happy"
-			if(2) src.overlays += "pai-cat"
-			if(3) src.overlays += "pai-extremely-happy"
-			if(4) src.overlays += "pai-face"
-			if(5) src.overlays += "pai-laugh"
-			if(6) src.overlays += "pai-off"
-			if(7) src.overlays += "pai-sad"
-			if(8) src.overlays += "pai-angry"
-			if(9) src.overlays += "pai-what"
+			if(1) src.add_overlay("pai-happy")
+			if(2) src.add_overlay("pai-cat")
+			if(3) src.add_overlay("pai-extremely-happy")
+			if(4) src.add_overlay("pai-face")
+			if(5) src.add_overlay("pai-laugh")
+			if(6) src.add_overlay("pai-off")
+			if(7) src.add_overlay("pai-sad")
+			if(8) src.add_overlay("pai-angry")
+			if(9) src.add_overlay("pai-what")
 
 /obj/item/device/paicard/proc/alertUpdate()
-	var/turf/T = get_turf_or_move(src.loc)
-	for (var/mob/M in viewers(T))
-		M.show_message("\blue [src] flashes a message across its screen, \"Additional personalities available for download.\"", 3, "\blue [src] bleeps electronically.", 2)
+	visible_message("<span class='notice'>[src] flashes a message across its screen, \"Additional personalities available for download.\"</span>", "<span class='notice'>[src] bleeps electronically.</span>")
 
 /obj/item/device/paicard/emp_act(severity)
 	for(var/mob/M in src)
-		M.emp_act(severity)
+		M.emplode(severity)
 	..()

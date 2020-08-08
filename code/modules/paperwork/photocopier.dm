@@ -4,10 +4,9 @@
 	icon_state = "bigscanner"
 	anchored = 1
 	density = 1
-	use_power = 1
+	use_power = IDLE_POWER_USE
 	idle_power_usage = 30
 	active_power_usage = 200
-	power_channel = EQUIP
 	var/obj/item/weapon/paper/copy = null	//what's in the copier!
 	var/obj/item/weapon/photo/photocopy = null
 	var/obj/item/weapon/paper_bundle/bundle = null
@@ -15,15 +14,7 @@
 	var/toner = 30 //how much toner is left! woooooo~
 	var/maxcopies = 10	//how many copies can be copied at once- idea shamelessly stolen from bs12's copier!
 
-/obj/machinery/photocopier/attack_ai(mob/user)
-	return attack_hand(user)
-
-/obj/machinery/photocopier/attack_paw(mob/user)
-	return attack_hand(user)
-
-/obj/machinery/photocopier/attack_hand(mob/user)
-	user.set_machine(src)
-
+/obj/machinery/photocopier/ui_interact(mob/user)
 	var/dat = "Photocopier<BR><BR>"
 	if(copy || photocopy || bundle)
 		dat += "<a href='byond://?src=\ref[src];remove=1'>Remove Paper</a><BR>"
@@ -41,7 +32,6 @@
 		dat +="<BR>Please insert a new toner cartridge!"
 	user << browse(dat, "window=copier")
 	onclose(user, "copier")
-	return
 
 /obj/machinery/photocopier/is_operational_topic()
 	return TRUE
@@ -54,7 +44,7 @@
 	if(href_list["copy"])
 		if(copy)
 			for(var/i = 1 to copies)
-				if(toner > 0)
+				if(toner > 0 && copy)
 					copy(copy)
 					sleep(15)
 				else
@@ -62,14 +52,14 @@
 			updateUsrDialog()
 		else if(photocopy)
 			for(var/i = 1 to copies)
-				if(toner > 0)
+				if(toner > 0 && photocopy)
 					photocopy(photocopy)
 					sleep(15)
 				else
 					break
 		else if(bundle)
 			for(var/i = 1 to copies)
-				if(toner <= 0)
+				if(toner <= 0 || !bundle)
 					break
 				var/obj/item/weapon/paper_bundle/p = new /obj/item/weapon/paper_bundle (src)
 				var/j = 0
@@ -133,7 +123,6 @@
 			else
 				p.desc += " - Copied by [tempAI.name]"
 			toner -= 5
-			sleep(15)
 
 	updateUsrDialog()
 
@@ -175,11 +164,9 @@
 			updateUsrDialog()
 		else
 			to_chat(user, "<span class='notice'>This cartridge is not yet ready for replacement! Use up the rest of the toner.</span>")
-	else if(istype(O, /obj/item/weapon/wrench))
-		playsound(loc, 'sound/items/Ratchet.ogg', 50, 1)
-		anchored = !anchored
-		to_chat(user, "<span class='notice'>You [anchored ? "wrench" : "unwrench"] \the [src].</span>")
-	return
+	else if(iswrench(O))
+		default_unfasten_wrench(user, O)
+
 
 /obj/machinery/photocopier/ex_act(severity)
 	switch(severity)
@@ -210,38 +197,44 @@
 
 
 /obj/machinery/photocopier/proc/copy(obj/item/weapon/paper/copy)
-	var/obj/item/weapon/paper/c = new /obj/item/weapon/paper (loc)
+	var/obj/item/weapon/paper/P = new(loc)
 	if(toner > 10)	//lots of toner, make it dark
-		c.info = "<font color = #101010>"
+		P.info = "<font color = #101010>"
 	else			//no toner? shitty copies for you!
-		c.info = "<font color = #808080>"
+		P.info = "<font color = #808080>"
 	var/copied = html_decode(copy.info)
-	copied = replacetext(copied, "<font face=\"[c.deffont]\" color=", "<font face=\"[c.deffont]\" nocolor=")	//state of the art techniques in action
-	copied = replacetext(copied, "<font face=\"[c.crayonfont]\" color=", "<font face=\"[c.crayonfont]\" nocolor=")	//This basically just breaks the existing color tag, which we need to do because the innermost tag takes priority.
-	c.info += copied
-	c.info += "</font>"
-	c.name = copy.name // -- Doohl
-	c.fields = copy.fields
-	c.stamps = copy.stamps
-	c.stamped = copy.stamped
-	c.ico = copy.ico
-	c.offset_x = copy.offset_x
-	c.offset_y = copy.offset_y
-	var/list/temp_overlays = copy.overlays       //Iterates through stamps
-	var/image/img                                //and puts a matching
-	for (var/j = 1, j <= temp_overlays.len, j++) //gray overlay onto the copy
-		if (findtext(copy.ico[j], "cap") || findtext(copy.ico[j], "cent"))
+	copied = replacetext(copied, "<font face=\"[P.deffont]\" color=", "<font face=\"[P.deffont]\" nocolor=")	//state of the art techniques in action
+	copied = replacetext(copied, "<font face=\"[P.crayonfont]\" color=", "<font face=\"[P.crayonfont]\" nocolor=")	//This basically just breaks the existing color tag, which we need to do because the innermost tag takes priority.
+	copied = replacetext(copied, "<img ", "<img style=\"filter: gray;\"")	//IE is still IE
+	copied = replacetext(copied, "<font color=", "<font nocolor=")
+	copied = replacetext(copied, "<table border=3px cellpadding=5px bordercolor=", "<table border=3px cellpadding=5px bordernocolor=")
+	P.info += copied
+	P.info += "</font>"//</font>
+	P.name = copy.name // -- Doohl
+	P.fields = copy.fields
+	P.sfields = copy.sfields
+	P.stamp_text = replacetext(copy.stamp_text, "color:", "nocolor:") // Russian server? I hope nobody will write this on paper
+	P.stamped = LAZYCOPY(copy.stamped)
+	P.ico = LAZYCOPY(copy.ico)
+	P.offset_x = LAZYCOPY(copy.offset_x)
+	P.offset_y = LAZYCOPY(copy.offset_y)
+	var/image/img
+	for (var/i in 1 to copy.overlays.len)        //Iterates through stamps gray and puts a matching overlay onto the copy
+		if (findtext(copy.ico[i], "cap") || findtext(copy.ico[i], "cent"))
 			img = image('icons/obj/bureaucracy.dmi', "paper_stamp-circle")
-		else if (findtext(copy.ico[j], "deny"))
+		else if (findtext(copy.ico[i], "deny"))
 			img = image('icons/obj/bureaucracy.dmi', "paper_stamp-x")
+		else if (findtext(copy.ico[i], "approve"))
+			img = image('icons/obj/bureaucracy.dmi', "paper_stamp-check")
 		else
 			img = image('icons/obj/bureaucracy.dmi', "paper_stamp-dots")
-		img.pixel_x = copy.offset_x[j]
-		img.pixel_y = copy.offset_y[j]
-		c.overlays += img
-	c.updateinfolinks()
+		img.pixel_x = copy.offset_x[i]
+		img.pixel_y = copy.offset_y[i]
+		P.add_overlay(img)
+	P.updateinfolinks()
+	P.update_icon()
 	toner--
-	return c
+	return P
 
 
 /obj/machinery/photocopier/proc/photocopy(obj/item/weapon/photo/photocopy)
@@ -272,5 +265,6 @@
 /obj/item/device/toner
 	name = "toner cartridge"
 	icon_state = "tonercartridge"
+	w_class = ITEM_SIZE_SMALL
 	var/charges = 50
 	var/max_charges = 50
