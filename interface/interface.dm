@@ -1,94 +1,65 @@
 //Please use mob or src (not usr) in these procs. This way they can be called in the same fashion as procs.
 /client/verb/wiki()
 	set name = "wiki"
-	set desc = "Visit the wiki."
-	set hidden = 1
-	if( config.wikiurl )
-		if(alert("This will open the wiki in your browser. Are you sure?",,"Yes","No")=="No")
-			return
-		src << link(config.wikiurl)
-	else
-		to_chat(src, "<span class='danger'>The wiki URL is not set in the server configuration.</span>")
-	return
+	set desc = "Посетить Википедию."
+	set hidden = TRUE
+	link_with_alert(src, config.wikiurl)
 
 /client/verb/forum()
 	set name = "forum"
-	set desc = "Visit the forum."
-	set hidden = 1
-	if( config.forumurl )
-		if(alert("This will open the forum in your browser. Are you sure?",,"Yes","No")=="No")
-			return
-		src << link(config.forumurl)
-	else
-		to_chat(src, "<span class='danger'>The forum URL is not set in the server configuration.</span>")
-	return
+	set desc = "Посетить форум."
+	set hidden = TRUE
+	link_with_alert(src, config.forumurl)
 
 /client/verb/rules()
 	set name = "Rules"
-	set desc = "Show Server Rules."
+	set desc = "Ознакомиться с правилами сервера."
+	set hidden = TRUE
+	link_with_alert(src, config.server_rules_url)
+
+/client/verb/reportissue()
+	set name = "report-issue"
+	set desc = "Сообщить о баге или проблеме."
 	set hidden = 1
-	src << link("http://tauceti.ru/wiki/Rules")
 
-/client/verb/hotkeys_help()
-	set name = "hotkeys-help"
-	set category = "OOC"
+	var/githuburl = config.repository_link
+	if(!githuburl)
+		to_chat(src, "<span class='danger'>Данная ссылка не встроена в конфигурацию сервера. Пожалуйста, оповестите об этом хоста.</span>")
+		return
 
-	var/hotkey_mode = {"<font color='purple'>
-Hotkey-Mode: (hotkey-mode must be on)
-\tTAB = toggle hotkey-mode
-\ta = left
-\ts = down
-\td = right
-\tw = up
-\tq = drop
-\te = equip
-\tr = throw
-\tt = say
-\tx = swap-hand
-\tz = activate held object (or y)
-\tf = cycle-intents-left
-\tg = cycle-intents-right
-\t1 = help-intent
-\t2 = disarm-intent
-\t3 = grab-intent
-\t4 = harm-intent
-</font>"}
+	var/message = "Вы откроете GitHub в вашем браузере. Вы уверены?"
+	if(tgui_alert(usr, message, "Report Issue", list("Да", "Нет")) != "Да")
+		return
 
-	var/other = {"<font color='purple'>
-Any-Mode: (hotkey doesn't need to be on)
-\tCtrl+a = left
-\tCtrl+s = down
-\tCtrl+d = right
-\tCtrl+w = up
-\tCtrl+q = drop
-\tCtrl+e = equip
-\tCtrl+r = throw
-\tCtrl+x = swap-hand
-\tCtrl+z = activate held object (or Ctrl+y)
-\tCtrl+f = cycle-intents-left
-\tCtrl+g = cycle-intents-right
-\tCtrl+1 = help-intent
-\tCtrl+2 = disarm-intent
-\tCtrl+3 = grab-intent
-\tCtrl+4 = harm-intent
-\tDEL = pull
-\tINS = cycle-intents-right
-\tHOME = drop
-\tPGUP = swap-hand
-\tPGDN = activate held object
-\tEND = throw
-</font>"}
+	var/servername = config.server_name
+	var/url_params = ""
+	if(global.round_id || config.server_name)
+		url_params += "Issue reported from [global.round_id ? " Round ID: [global.round_id][servername ? " ([servername])" : ""]" : servername]\n"
+	url_params += "Testmerges: ```[test_merges ? "#" + jointext(test_merges, " #") : "No test merges"]```\n"
+	url_params += "Reporting client version: [byond_version].[byond_build]\n"
+	DIRECT_OUTPUT(src, link("[githuburl]/issues/new?template=bug_report.yml&additional=[url_encode(url_params)]"))
 
-	var/admin = {"<font color='purple'>
-Admin:
-\tF5 = Asay
-\tF6 = player-panel-new
-\tF7 = admin-pm
-\tF8 = Invisimin
-\tF9 = Mentorhelp
-</font>"}
+/client/verb/changes()
+	set name = "Changelog"
+	set desc = "Ознакомиться со списком недавних изменений."
+	set hidden = 1
 
-	to_chat(src, hotkey_mode)
-	to_chat(src, other)
-	if(holder)
-		to_chat(src, admin)
+	link_with_alert(src, config.changelog_link)
+
+	if(prefs.lastchangelog != changelog_hash)
+		prefs.lastchangelog = changelog_hash
+		prefs.save_preferences()
+		winset(src, "rpane.changelog", "font-style=")
+
+/client/verb/discord()
+	set name = "Discord"
+	set desc = "Посетить Discord сервер."
+	set hidden = TRUE
+	link_with_alert(src, config.discord_invite_url)
+
+/proc/link_with_alert(client/user, link_url)
+	if(link_url)
+		if(tgui_alert(usr, "Будет открыт ваш браузер. Вы уверены?",, list("Да", "Нет")) == "Да")
+			user << link(link_url)
+	else
+		to_chat(user, "<span class='danger'>Данная ссылка не встроена в конфигурацию сервера. Пожалуйста, оповестите об этом хоста.</span>")

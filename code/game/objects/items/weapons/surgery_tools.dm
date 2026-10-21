@@ -16,12 +16,14 @@
 	desc = "Retracts stuff."
 	icon = 'icons/obj/surgery.dmi'
 	icon_state = "retractor"
+	item_state_world = "retractor_w"
 	m_amt = 10000
 	g_amt = 5000
-	flags = FPRINT | TABLEPASS | CONDUCT
-	w_class = 2.0
+	flags = CONDUCT
+	w_class = SIZE_TINY
 	origin_tech = "materials=1;biotech=1"
-
+	usesound = 'sound/items/surgery/Retract.ogg'
+	required_skills = list(/datum/skill/surgery = SKILL_LEVEL_TRAINED)
 /*
  * Hemostat
  */
@@ -30,13 +32,15 @@
 	desc = "You think you have seen this before."
 	icon = 'icons/obj/surgery.dmi'
 	icon_state = "hemostat"
+	item_state_world = "hemostat_w"
 	m_amt = 5000
 	g_amt = 2500
-	flags = FPRINT | TABLEPASS | CONDUCT
-	w_class = 2.0
+	flags = CONDUCT
+	w_class = SIZE_TINY
 	origin_tech = "materials=1;biotech=1"
 	attack_verb = list("attacked", "pinched")
-
+	usesound = 'sound/items/surgery/Hemostat.ogg'
+	required_skills = list(/datum/skill/surgery = SKILL_LEVEL_TRAINED)
 /*
  * Cautery
  */
@@ -45,12 +49,15 @@
 	desc = "This stops bleeding."
 	icon = 'icons/obj/surgery.dmi'
 	icon_state = "cautery"
+	item_state_world = "cautery_w"
 	m_amt = 5000
 	g_amt = 2500
-	flags = FPRINT | TABLEPASS | CONDUCT
-	w_class = 2.0
+	flags = CONDUCT
+	w_class = SIZE_TINY
 	origin_tech = "materials=1;biotech=1"
 	attack_verb = list("burnt")
+	usesound = 'sound/items/surgery/cautery.ogg'
+	required_skills = list(/datum/skill/surgery = SKILL_LEVEL_TRAINED)
 
 /*
  * Surgical Drill
@@ -60,19 +67,22 @@
 	desc = "You can drill using this item. You dig?"
 	icon = 'icons/obj/surgery.dmi'
 	icon_state = "drill"
-	hitsound = 'sound/weapons/circsawhit.ogg'
+	item_state_world = "drill_w"
+	hitsound = list('sound/weapons/circsawhit.ogg')
 	m_amt = 15000
 	g_amt = 10000
-	flags = FPRINT | TABLEPASS | CONDUCT
+	flags = CONDUCT
 	force = 15.0
-	w_class = 2.0
+	w_class = SIZE_TINY
 	origin_tech = "materials=1;biotech=1"
 	attack_verb = list("drilled")
+	usesound = 'sound/items/surgery/SurgDrill.ogg'
+	required_skills = list(/datum/skill/surgery = SKILL_LEVEL_TRAINED)
 
-	suicide_act(mob/user)
-		to_chat(viewers(user), pick("\red <b>[user] is pressing the [src.name] to \his temple and activating it! It looks like \he's trying to commit suicide.</b>", \
-							"\red <b>[user] is pressing [src.name] to \his chest and activating it! It looks like \he's trying to commit suicide.</b>"))
-		return (BRUTELOSS)
+/obj/item/weapon/surgicaldrill/suicide_act(mob/user)
+	to_chat(viewers(user), pick("<span class='warning'><b>[user] is pressing the [src.name] to \his temple and activating it! It looks like \he's trying to commit suicide.</b></span>", \
+						"<span class='warning'><b>[user] is pressing [src.name] to \his chest and activating it! It looks like \he's trying to commit suicide.</b></span>"))
+	return (BRUTELOSS)
 
 /*
  * Scalpel
@@ -82,11 +92,13 @@
 	desc = "Cut, cut, and once more cut."
 	icon = 'icons/obj/surgery.dmi'
 	icon_state = "scalpel"
-	flags = FPRINT | TABLEPASS | CONDUCT
+	item_state_world = "scalpel_w"
+	flags = CONDUCT
 	force = 10.0
 	sharp = 1
 	edge = 1
-	w_class = 2.0
+	hitsound = list('sound/weapons/bladeslice.ogg')
+	w_class = SIZE_TINY
 	throwforce = 5.0
 	throw_speed = 3
 	throw_range = 5
@@ -94,12 +106,16 @@
 	g_amt = 5000
 	origin_tech = "materials=1;biotech=1"
 	attack_verb = list("attacked", "slashed", "stabbed", "sliced", "torn", "ripped", "diced", "cut")
+	required_skills = list(/datum/skill/surgery = SKILL_LEVEL_TRAINED)
+	qualities = list(
+		QUALITY_CUTTING = 1
+	)
 
-	suicide_act(mob/user)
-		to_chat(viewers(user), pick("\red <b>[user] is slitting \his wrists with the [src.name]! It looks like \he's trying to commit suicide.</b>", \
-							"\red <b>[user] is slitting \his throat with the [src.name]! It looks like \he's trying to commit suicide.</b>", \
-							"\red <b>[user] is slitting \his stomach open with the [src.name]! It looks like \he's trying to commit seppuku.</b>"))
-		return (BRUTELOSS)
+/obj/item/weapon/scalpel/suicide_act(mob/user)
+	to_chat(viewers(user), pick("<span class='warning'><b>[user] is slitting \his wrists with the [src.name]! It looks like \he's trying to commit suicide.</b></span>", \
+						"<span class='warning'><b>[user] is slitting \his throat with the [src.name]! It looks like \he's trying to commit suicide.</b></span>", \
+						"<span class='warning'><b>[user] is slitting \his stomach open with the [src.name]! It looks like \he's trying to commit seppuku.</b></span>"))
+	return (BRUTELOSS)
 
 /*
  * Researchable Scalpels
@@ -108,28 +124,38 @@
 	name = "laser scalpel"
 	desc = "A scalpel augmented with a directed laser, for more precise cutting without blood entering the field.  This one looks basic and could be improved."
 	icon_state = "scalpel_laser1_on"
-	damtype = "fire"
+	item_state_world = "scalpel_laser1_on_w"
+	damtype = BURN
+	usesound = 'sound/items/surgery/laserscalp.ogg'
+	toolspeed = 1.2
 
 /obj/item/weapon/scalpel/laser2
 	name = "laser scalpel"
 	desc = "A scalpel augmented with a directed laser, for more precise cutting without blood entering the field.  This one looks somewhat advanced."
 	icon_state = "scalpel_laser2_on"
-	damtype = "fire"
+	item_state_world = "scalpel_laser2_on_w"
+	damtype = BURN
 	force = 12.0
+	usesound = 'sound/items/surgery/laserscalp.ogg'
 
 /obj/item/weapon/scalpel/laser3
 	name = "laser scalpel"
 	desc = "A scalpel augmented with a directed laser, for more precise cutting without blood entering the field.  This one looks to be the pinnacle of precision energy cutlery!"
 	icon_state = "scalpel_laser3_on"
-	damtype = "fire"
+	item_state_world = "scalpel_laser3_on_w"
+	damtype = BURN
 	force = 15.0
+	usesound = 'sound/items/surgery/laserscalp.ogg'
+	toolspeed = 0.6
 
 /obj/item/weapon/scalpel/manager
 	name = "incision management system"
 	desc = "A true extension of the surgeon's body, this marvel instantly and completely prepares an incision allowing for the immediate commencement of therapeutic steps."
 	icon_state = "scalpel_manager_on"
+	item_state_world = "scalpel_manager_on_w"
 	force = 7.5
-
+	toolspeed = 0.6
+	qualities = null
 /*
  * Circular Saw
  */
@@ -137,11 +163,12 @@
 	name = "circular saw"
 	desc = "For heavy duty cutting."
 	icon = 'icons/obj/surgery.dmi'
-	icon_state = "saw3"
-	hitsound = 'sound/weapons/circsawhit.ogg'
-	flags = FPRINT | TABLEPASS | CONDUCT
+	icon_state = "saw"
+	item_state_world = "saw_w"
+	hitsound = list('sound/weapons/circsawhit.ogg')
+	flags = CONDUCT
 	force = 15.0
-	w_class = 2.0
+	w_class = SIZE_TINY
 	throwforce = 9.0
 	throw_speed = 3
 	throw_range = 5
@@ -151,33 +178,47 @@
 	attack_verb = list("attacked", "slashed", "sawed", "cut")
 	sharp = 1
 	edge = 1
+	usesound = 'sound/items/surgery/Bone_Saw.ogg'
+	required_skills = list(/datum/skill/surgery = SKILL_LEVEL_TRAINED)
+
 
 //misc, formerly from code/defines/weapons.dm
 /obj/item/weapon/bonegel
 	name = "bone gel"
 	icon = 'icons/obj/surgery.dmi'
 	icon_state = "bone-gel"
+	item_state_world = "bone-gel_w"
 	force = 0
-	w_class = 2.0
+	w_class = SIZE_TINY
 	throwforce = 1.0
+	usesound = 'sound/items/surgery/Bone_Gel.ogg'
+	required_skills = list(/datum/skill/surgery = SKILL_LEVEL_TRAINED)
 
 /obj/item/weapon/FixOVein
 	name = "FixOVein"
 	icon = 'icons/obj/surgery.dmi'
 	icon_state = "fixovein"
+	item_state_world = "fixovein_w"
 	force = 0
 	throwforce = 1.0
 	origin_tech = "materials=1;biotech=3"
-	w_class = 2.0
+	w_class = SIZE_TINY
 	var/usage_amount = 10
+	usesound = 'sound/items/surgery/Fix-O-vein.ogg'
+	required_skills = list(/datum/skill/surgery = SKILL_LEVEL_TRAINED)
 
 /obj/item/weapon/bonesetter
 	name = "bone setter"
 	icon = 'icons/obj/surgery.dmi'
 	icon_state = "bone setter"
+	item_state_world = "bone setter_w"
 	force = 8.0
 	throwforce = 9.0
 	throw_speed = 3
 	throw_range = 5
-	w_class = 2.0
+	w_class = SIZE_TINY
 	attack_verb = list("attacked", "hit", "bludgeoned")
+	usesound = 'sound/items/surgery/BonSet.ogg'
+	required_skills = list(/datum/skill/surgery = SKILL_LEVEL_TRAINED)
+
+

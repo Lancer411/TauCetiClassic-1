@@ -96,7 +96,7 @@ On the map:
 1455 for AI access
 */
 
-var/list/radiochannels = list(
+var/global/list/radiochannels = list(
 	"Common" = 1459,
 	"Science" = 1351,
 	"Command" = 1353,
@@ -104,39 +104,43 @@ var/list/radiochannels = list(
 	"Engineering" = 1357,
 	"Security" = 1359,
 	"Response Team" = 1345,
+	"Velocity" = 1245,
 	"Deathsquad" = 1341,
 	"Syndicate" = 1213,
+	"Heist" = 1206,
 	"Supply" = 1347,
 )
 //depenging helpers
-var/list/DEPT_FREQS = list(1351, 1355, 1357, 1359, 1213, 1345, 1341, 1347)
+var/global/list/DEPT_FREQS = list(1351, 1355, 1357, 1359, 1213, 1206, 1345, 1341, 1347)
 
-// central command channels, i.e deathsquid & response teams
-var/list/CENT_FREQS = list(1345, 1341)
+// central command channels, i.e deathsquid & response teams & Velocity.
+var/global/list/CENT_FREQS = list(1345, 1341, 1245)
 
-var/const/COMM_FREQ = 1353 //command, colored gold in chat window
-var/const/SYND_FREQ = 1213
+var/global/const/COMM_FREQ = 1353 //command, colored gold in chat window
+var/global/const/SYND_FREQ = 1213
+var/global/const/HEIST_FREQ = 1206
+var/global/const/VELOCITY_FREQ = 1245
 
 // department channels
-var/const/SEC_FREQ = 1359
-var/const/ENG_FREQ = 1357
-var/const/SCI_FREQ = 1351
-var/const/MED_FREQ = 1355
-var/const/SUP_FREQ = 1347
+var/global/const/SEC_FREQ = 1359
+var/global/const/ENG_FREQ = 1357
+var/global/const/SCI_FREQ = 1351
+var/global/const/MED_FREQ = 1355
+var/global/const/SUP_FREQ = 1347
 
 #define TRANSMISSION_WIRE	0
 #define TRANSMISSION_RADIO	1
 
 /* filters */
-var/const/RADIO_TO_AIRALARM = "1"
-var/const/RADIO_FROM_AIRALARM = "2"
-var/const/RADIO_CHAT = "3"
-var/const/RADIO_ATMOSIA = "4"
-var/const/RADIO_NAVBEACONS = "5"
-var/const/RADIO_AIRLOCK = "6"
-var/const/RADIO_SECBOT = "7"
-var/const/RADIO_MULEBOT = "8"
-var/const/RADIO_MAGNETS = "9"
+var/global/const/RADIO_TO_AIRALARM = "1"
+var/global/const/RADIO_FROM_AIRALARM = "2"
+var/global/const/RADIO_CHAT = "3"
+var/global/const/RADIO_ATMOSIA = "4"
+var/global/const/RADIO_NAVBEACONS = "5"
+var/global/const/RADIO_AIRLOCK = "6"
+var/global/const/RADIO_SECBOT = "7"
+var/global/const/RADIO_MULEBOT = "8"
+var/global/const/RADIO_MAGNETS = "9"
 
 var/global/datum/controller/radio/radio_controller
 
@@ -181,7 +185,7 @@ var/global/datum/controller/radio/radio_controller
 
 /datum/radio_frequency
 	var/frequency as num
-	var/list/list/obj/devices = list()
+	var/list/obj/devices = list()
 
 /datum/radio_frequency/proc/post_signal(obj/source, datum/signal/signal, filter = null, range = null)
 	//log_admin("DEBUG \[[world.timeofday]\]: post_signal {source=\"[source]\", [signal.debug_print()], filter=[filter]}")
@@ -235,7 +239,7 @@ var/global/datum/controller/radio/radio_controller
 				device.receive_signal(signal, TRANSMISSION_RADIO, frequency)
 //						N_nf++
 
-//	log_admin("DEBUG: post_signal(source=[source] ([source.x], [source.y], [source.z]),filter=[filter]) frequency=[frequency], N_f=[N_f], N_nf=[N_nf]")
+//	log_admin("DEBUG: post_signal(source=[source] [COORD(source)],filter=[filter]) frequency=[frequency], N_f=[N_f], N_nf=[N_nf]")
 
 
 //	qdel(signal)

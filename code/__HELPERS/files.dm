@@ -2,12 +2,12 @@
 //returns text as a string if these conditions are met
 /proc/return_file_text(filename)
 	if(fexists(filename) == 0)
-		error("File not found ([filename])")
+		info("File not found ([filename])")
 		return
 
 	var/text = file2text(filename)
 	if(!text)
-		error("File empty ([filename])")
+		info("File empty ([filename])")
 		return
 
 	return text
@@ -17,15 +17,14 @@
 	for(var/file in args)
 		src << browse_rsc(file)
 
-/client/proc/browse_files(root="data/logs/", max_iterations=10, list/valid_extensions=list(".txt",".log",".htm"))
+/client/proc/browse_files(root="data/logs/", max_iterations=10, list/valid_extensions=list("txt","log","html","json","zip"))
 	var/path = root
 
 	for(var/i=0, i<max_iterations, i++)
 		var/list/choices = sortList(flist(path))
 		if(path != root)
 			choices.Insert(1,"/")
-
-		var/choice = input(src,"Choose a file to access:","Download",null) as null|anything in choices
+		var/choice = tgui_input_list(src,"Choose a file to access:","Download", choices)
 		switch(choice)
 			if(null)
 				return
@@ -37,9 +36,14 @@
 		if(copytext(path,-1,0) != "/")		//didn't choose a directory, no need to iterate again
 			break
 
-	var/extension = copytext(path,-4,0)
-	if( !fexists(path) || !(extension in valid_extensions) )
-		src << "<font color='red'>Error: browse_files(): File not found/Invalid file([path]).</font>"
+	var/extensions
+	for(var/i in valid_extensions)
+		if(extensions)
+			extensions += "|"
+		extensions += "[i]"
+	var/regex/valid_ext = new("\\.([extensions])$", "i")
+	if( !fexists(path) || !(valid_ext.Find(path)) )
+		to_chat(src, "<font color='red'>Error: browse_files(): File not found/Invalid file([path]).</font>")
 		return
 
 	return path
@@ -54,7 +58,7 @@
 	var/time_to_wait = fileaccess_timer - world.time
 	if(time_to_wait > 0)
 		to_chat(src, "<font color='red'>Error: file_spam_check(): Spam. Please wait [round(time_to_wait/10)] seconds.</font>")
-		return 1
+		return TRUE
 	fileaccess_timer = world.time + FTPDELAY
-	return 0
+	return FALSE
 #undef FTPDELAY

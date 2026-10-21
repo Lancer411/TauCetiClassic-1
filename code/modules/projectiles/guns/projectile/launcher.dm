@@ -1,64 +1,88 @@
-/obj/item/weapon/gun/projectile/m79
-	name = "\improper m79 grenade launcher"
-	desc = "Uses 40x46 ammunition."
+/obj/item/weapon/gun/projectile/grenade_launcher
+	name = "grenade launcher"
 	icon = 'icons/obj/gun.dmi'
 	icon_state = "m79"
-	item_state = "m79"
-	w_class = 4
-	force = 10
-	slot_flags = SLOT_BACK
-	origin_tech = "combat=5;materials=3"
-	recoil = 0 //extra kickback
-	mag_type = /obj/item/ammo_box/magazine/internal/m79
-	fire_sound = 'sound/weapons/guns/m79_shot.ogg'
-	var/open = 0
+	initial_mag = /obj/item/ammo_box/magazine/internal/m79
+	can_be_holstered = FALSE
+	two_hand_weapon = ONLY_TWOHAND
 
-/obj/item/weapon/gun/projectile/m79/isHandgun()
-	return 0
-
-/obj/item/weapon/gun/projectile/m79/update_icon()
-	if(open)
-		icon_state = "m79-open"
-	else
-		icon_state = "m79"
-
-/obj/item/weapon/gun/projectile/m79/process_chamber()
-	return ..(0, 0)
-
-/obj/item/weapon/gun/projectile/m79/attackby(obj/item/A, mob/user)
-	if(!open)
-		return
+/obj/item/weapon/gun/projectile/grenade_launcher/proc/unchamber()
+	playsound(src, 'sound/weapons/guns/m79_out.ogg', VOL_EFFECTS_MASTER)
 	if(chambered)
-		to_chat(user, "<span class='warning'>There is a shell inside \the [src]!</span>")
+		addtimer(CALLBACK(GLOBAL_PROC, GLOBAL_PROC_REF(playsound), loc, 'sound/weapons/guns/shell_drop.ogg', 50, 1), 3)
+		chambered.loc = get_turf(src)//Eject casing
+		chambered.SpinAnimation(5, 1)
+		chambered = null
+	update_icon()
+
+/obj/item/weapon/gun/projectile/grenade_launcher/proc/try_chambering(obj/item/I, mob/user)
+	if(chambered)
+		to_chat(user, "<span class='warning'>Внутри [src] уже есть снаряд!</span>")
 		return
-	var/num_loaded = magazine.attackby(A, user, 1)
+	var/num_loaded = magazine.attackby(I, user, 1)
 	if(num_loaded)
-		playsound(src.loc, 'sound/weapons/guns/m79_reload.ogg', 50, 1)
-		to_chat(user, "<span class='notice'>You load [num_loaded] shell\s into \the [src]!</span>")
+		playsound(src, 'sound/weapons/guns/reload_m79.ogg', VOL_EFFECTS_MASTER)
 		var/obj/item/ammo_casing/AC = magazine.get_round() //load next casing.
 		chambered = AC
 		update_icon()	//I.E. fix the desc
-		A.update_icon()
+		I.update_icon()
 
-/obj/item/weapon/gun/projectile/m79/attack_self(mob/user)
+/obj/item/weapon/gun/projectile/grenade_launcher/attackby(obj/item/I, mob/user, params)
+	try_chambering(I, user)
+
+/obj/item/weapon/gun/projectile/grenade_launcher/attack_self(mob/user)
+	unchamber()
+	add_fingerprint(user)
+
+/obj/item/weapon/gun/projectile/grenade_launcher/m79
+	name = "m79 grenade launcher"
+	desc = "Используются снаряды 40х46."
+	icon = 'icons/obj/gun.dmi'
+	icon_state = "m79"
+	item_state = "m79"
+	w_class = SIZE_NORMAL
+	force = 10
+	slot_flags = SLOT_FLAGS_BACK
+	origin_tech = "combat=5;materials=3"
+	recoil = LOW_RECOIL //extra kickback
+	fire_sound = 'sound/weapons/guns/gunshot_m79.ogg'
+	var/open
+
+/obj/item/weapon/gun/projectile/grenade_launcher/m79/process_chamber()
+	return ..(eject_casing = FALSE, empty_chamber = FALSE)
+
+/obj/item/weapon/gun/projectile/grenade_launcher/m79/update_icon()
+	icon_state = "[initial(icon_state)][open ? "-open" : ""]"
+
+/obj/item/weapon/gun/projectile/grenade_launcher/m79/attack_self(mob/user)
 	open = !open
 	if(open)
-		playsound(src.loc, 'sound/weapons/guns/m79_out.ogg', 50, 1)
-		if(chambered)
-			spawn(3)
-				playsound(src.loc, 'sound/weapons/shell_drop.ogg', 50, 1)
-			chambered.loc = get_turf(src)//Eject casing
-			chambered.SpinAnimation(5, 1)
-			chambered = null
-		else
+		unchamber()
 	else
-		playsound(src.loc, 'sound/weapons/guns/m79_in.ogg', 50, 1)
-		open = 0
-	add_fingerprint(user)
+		playsound(src, 'sound/weapons/guns/m79_in.ogg', VOL_EFFECTS_MASTER)
+		add_fingerprint(user)
 	update_icon()
 
-/obj/item/weapon/gun/projectile/m79/special_check(mob/user)
+/obj/item/weapon/gun/projectile/grenade_launcher/m79/attackby(obj/item/I, mob/user, params)
 	if(open)
-		to_chat(user, "<span class='warning'>You can't fire [src] while it is open!</span>")
-		return 0
+		try_chambering(I, user)
+
+/obj/item/weapon/gun/projectile/grenade_launcher/m79/special_check(mob/user)
+	if(open)
+		to_chat(user, "<span class='warning'>Вы не можете стрелять из [src] пока оно открыто!</span>")
+		return FALSE
 	return ..()
+
+/obj/item/weapon/gun/projectile/grenade_launcher/underslung
+	name = "underslung grenade launcher"
+	cases = list("подствольный гранатомёт", "подствольного гранатомёта", "подствольному гранатомёту", "подствольный гранатомёт", "подствольным гранатомётом", "подствольном гранатомёте")
+	desc = "Это маленькая крошечная пусковая установка. Вам не следовало этого видеть."
+	initial_mag = /obj/item/ammo_box/magazine/internal/m79/underslung
+	fire_sound = 'sound/weapons/guns/gunshot_m79.ogg'
+	two_hand_weapon = FALSE
+
+/obj/item/weapon/gun/projectile/grenade_launcher/underslung/marines
+	initial_mag = /obj/item/ammo_box/magazine/internal/m79/underslung/marines
+
+/obj/item/weapon/gun/projectile/grenade_launcher/underslung/marines/process_chamber()
+	return ..(1, 1, 1)

@@ -10,8 +10,8 @@
 	var/turf/T = get_turf(O)
 
 	if(T)
-		log_admin("[key_name(usr)] has possessed [O] ([O.type]) at ([T.x], [T.y], [T.z])")
-		message_admins("[key_name(usr)] has possessed [O] ([O.type]) at ([T.x], [T.y], [T.z])")
+		log_admin("[key_name(usr)] has possessed [O] ([O.type]) at [COORD(T)]")
+		message_admins("[key_name(usr)] has possessed [O] ([O.type]) at [COORD(T)]")
 	else
 		log_admin("[key_name(usr)] has possessed [O] ([O.type]) at an unknown location")
 		message_admins("[key_name(usr)] has possessed [O] ([O.type]) at an unknown location")
@@ -37,7 +37,6 @@
 		if(ishuman(usr))
 			var/mob/living/carbon/human/H = usr
 			H.name = H.get_visible_name()
-//		usr.regenerate_icons() //So the name is updated properly
 
 	usr.loc = O.loc // Appear where the object you were controlling is -- TLE
 	usr.client.eye = usr

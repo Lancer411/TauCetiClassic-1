@@ -6,15 +6,15 @@
 	/*name = "Lockdown Control"
 	desc = "Used to control blast doors."
 	icon_state = "lockdown"
-	circuit = "/obj/item/weapon/circuitboard/lockdown"
+	circuit = /obj/item/weapon/circuitboard/lockdown
 	var/connected_doors
 	var/department*/
 	var/list/displayedNetworks
 
-/obj/machinery/computer/lockdown/New()
+/obj/machinery/computer/lockdown/atom_init()
 	..()
-	connected_doors = new/list()
-	displayedNetworks  = new/list()
+	connected_doors = list()
+	displayedNetworks  = list()
 	//only load blast doors for map-defined departments for the moment
 	//door networks are hardcoded here.
 	switch(department)
@@ -43,39 +43,28 @@
 			connected_doors.Add("Patient Room 3 Shutters")
 
 	for(var/net in connected_doors)
-		connected_doors[net] = new/list()
+		connected_doors[net] = list()
 
-	//loop through the world, grabbing all the relevant doors
-	spawn(1)
-		ConnectDoors()
+	return INITIALIZE_HINT_LATELOAD
+
+/obj/machinery/computer/lockdown/atom_init_late()
+	//loop through the machines, grabbing all the relevant doors
+	ConnectDoors()
 
 /obj/machinery/computer/lockdown/proc/ConnectDoors()
 	for(var/list/L in connected_doors)
 		for(var/item in L)
 			L.Remove(item)
 	//
-	for(var/obj/machinery/door/poddoor/D in world)
+	for(var/obj/machinery/door/poddoor/D in machines)
 		if(D.network in connected_doors)
 			var/list/L = connected_doors[D.network]
 			L.Add(D)
 
-/obj/machinery/computer/lockdown/attack_ai(mob/user)
-	attack_hand(user)
-
-/obj/machinery/computer/lockdown/attack_hand(mob/user)
-	add_fingerprint(user)
-	if(stat & (BROKEN|NOPOWER))
-		return
-
-	if ( (get_dist(src, user) > 1 ) || (stat & (BROKEN|NOPOWER)) )
-		if (!istype(user, /mob/living/silicon))
-			user.machine = null
-			user << browse(null, "window=lockdown")
-			return
-
-	var/t = "<B>Lockdown Control</B><BR>"
-	t += "<A href='?src=\ref[src];refresh=1'>Refresh</A><BR>"
-	t += "<A href='?src=\ref[src];close=1'>Close</A><BR>"
+/obj/machinery/computer/lockdown/ui_interact(mob/user)
+	var/t = ""
+	t += "<A href='byond://?src=\ref[src];refresh=1'>Refresh</A><BR>"
+	t += "<A href='byond://?src=\ref[src];close=1'>Close</A><BR>"
 	t += "<table border=1>"
 	var/empty = 1
 	for(var/curNetId in connected_doors)
@@ -85,8 +74,8 @@
 		empty = 0
 		t += "<tr>"
 		if(curNetId in displayedNetworks)
-			t += "<td><a href='?src=\ref[src];hide_net=[curNetId]'>\[-\]</a><b> " + curNetId + "<b></td>"
-			t += "<td colspan=\"2\"><b><a href='?src=\ref[src];open_net=[curNetId]'>Open all</a> / <a href='?src=\ref[src];close_net=[curNetId]'>Close all</a></b></td>"
+			t += "<td><a href='byond://?src=\ref[src];hide_net=[curNetId]'>-</a><b> " + curNetId + "</b></td>"
+			t += "<td colspan=\"2\"><b><a href='byond://?src=\ref[src];open_net=[curNetId]'>Open all</a> / <a href='byond://?src=\ref[src];close_net=[curNetId]'>Close all</a></b></td>"
 			t += "</tr>"
 
 			for(var/obj/machinery/door/poddoor/D in connected_doors[curNetId])
@@ -97,24 +86,20 @@
 					t += "<td>Shutter ([D.density ? "Closed" : "Open"])</td>"
 				else
 					t += "<td>Blast door ([D.density ? "Closed" : "Open"])</td>"
-				t += "<td><b><a href='?src=\ref[D];toggle=1'>Toggle</a></b></td>"
+				t += "<td><b><a href='byond://?src=\ref[D];toggle=1'>Toggle</a></b></td>"
 				t += "</tr>"
 		else
-			t += "<td><a href='?src=\ref[src];show_net=[curNetId]'>\[+\]</a> <b>" + curNetId + "<b></td>"
+			t += "<td><a href='byond://?src=\ref[src];show_net=[curNetId]'>+</a> <b>" + curNetId + "</b></td>"
 	t += "</table>"
 	if(empty)
-		t += "\red No networks connected.<br>"
-	t += "<A href='?src=\ref[src];refresh=1'>Refresh</A><BR>"
-	t += "<A href='?src=\ref[src];close=1'>Close</A><BR>"
-	user << browse(t, "window=lockdown;size=550x600")
-	onclose(user, "lockdown")
+		t += "<span class='warning'>No networks connected.<br></span>"
+	t += "<A href='byond://?src=\ref[src];refresh=1'>Refresh</A><BR>"
+
+	var/datum/browser/popup = new(user, "lockdown", "Lockdown Control", 550, 600)
+	popup.set_content(t)
+	popup.open()
 
 /obj/machinery/computer/lockdown/Topic(href, href_list)
-	if(href_list["close"])
-		usr << browse(null, "window=lockdown")
-		usr.unset_machine(src)
-		return
-
 	. = ..()
 	if(!.)
 		return
@@ -153,4 +138,4 @@
 				spawn(0)
 					D.close()
 
-	src.updateDialog()
+	updateDialog()

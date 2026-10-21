@@ -3,36 +3,30 @@
 	desc = "It's made of AUTHENTIC faux-leather and has a price-tag still attached. Its owner must be a real professional."
 	icon_state = "briefcase"
 	item_state = "briefcase"
-	flags = FPRINT | TABLEPASS| CONDUCT
+	flags = CONDUCT
 	force = 8.0
 	throw_speed = 1
 	throw_range = 4
-	w_class = 4.0
-	max_w_class = 3
-	max_combined_w_class = 16
-
-/obj/item/weapon/storage/briefcase/New()
-	..()
+	w_class = SIZE_NORMAL
+	max_w_class = SIZE_SMALL
+	max_storage_space = DEFAULT_BACKPACK_STORAGE
 
 /obj/item/weapon/storage/briefcase/attack(mob/living/M, mob/living/user)
 	//..()
 
-	if ((CLUMSY in user.mutations) && prob(50))
-		to_chat(user, "\red The [src] slips out of your hand and hits your head.")
-		user.take_organ_damage(10)
+	if (user.ClumsyProbabilityCheck(50))
+		to_chat(user, "<span class='warning'>The [src] slips out of your hand and hits your head.</span>")
+		user.take_bodypart_damage(10)
 		user.Paralyse(2)
 		return
 
+	M.log_combat(user, "attacked with [name] (INTENT: [uppertext(user.a_intent)])")
 
-	M.attack_log += text("\[[time_stamp()]\] <font color='orange'>Has been attacked with [src.name] by [user.name] ([user.ckey])</font>")
-	user.attack_log += text("\[[time_stamp()]\] <font color='red'>Used the [src.name] to attack [M.name] ([M.ckey])</font>")
-	msg_admin_attack("[user.name] ([user.ckey]) attacked [M.name] ([M.ckey]) with [src.name] (INTENT: [uppertext(user.a_intent)]) (<A HREF='?_src_=holder;adminmoreinfo=\ref[user]'>?</A>)")
-
-	if (M.stat < 2 && M.health < 50 && prob(90))
+	if (M.stat < DEAD && M.health < 50 && prob(90))
 		var/mob/H = M
 		// ******* Check
-		if ((istype(H, /mob/living/carbon/human) && istype(H, /obj/item/clothing/head) && H.flags & 8 && prob(80)))
-			to_chat(M, "\red The helmet protects you from being hit hard in the head!")
+		if ((ishuman(H) && istype(H, /obj/item/clothing/head) && H.flags & 8 && prob(80)))
+			to_chat(M, "<span class='warning'>The helmet protects you from being hit hard in the head!</span>")
 			return
 		var/time = rand(2, 6)
 		if (prob(75))
@@ -40,14 +34,31 @@
 		else
 			M.Stun(time)
 		if(M.stat != DEAD)	M.stat = UNCONSCIOUS
-		for(var/mob/O in viewers(M, null))
-			O.show_message(text("\red <B>[] has been knocked unconscious!</B>", M), 1, "\red You hear someone fall.", 2)
+
+		visible_message("<span class='warning'><B>[M] has been knocked unconscious!</B></span>", blind_message = "<span class='warning'>You hear someone fall.</span>")
 	else
-		to_chat(M, text("\red [] tried to knock you unconcious!",user))
-		M.eye_blurry += 3
+		to_chat(M, text("<span class='warning'>[] tried to knock you unconcious!</span>",user))
+		M.blurEyes(3)
 
 	return
 
 /obj/item/weapon/storage/briefcase/centcomm
 	icon_state = "briefcase-centcomm"
 	item_state = "briefcase-centcomm"
+
+/obj/item/weapon/storage/briefcase/crimekit
+	name = "Crime inspection kit"
+	desc = "A stainless steel-coated suitcase for all your forensic needs. It feels heavy."
+	icon_state = "crimekit"
+	item_state_inventory = "crimekit"
+	item_state_world = "crimekit_world"
+	item_state = "crimekit"
+	w_class = SIZE_SMALL
+
+/obj/item/weapon/storage/briefcase/crimekit/atom_init()
+	. = ..()
+	new /obj/item/clothing/gloves/forensics(src)
+	new /obj/item/weapon/forensic_sample_kit/powder(src)
+	new /obj/item/weapon/forensic_sample_kit(src)
+	for(var/i in 1 to 10)
+		new /obj/item/weapon/swab(src)

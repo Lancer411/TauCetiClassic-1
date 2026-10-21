@@ -4,7 +4,6 @@
 	icon_state = "infrared"
 	m_amt = 1000
 	g_amt = 500
-	w_amt = 100
 	origin_tech = "magnets=2"
 
 	wires = WIRE_PULSE
@@ -32,20 +31,25 @@
 /obj/item/device/assembly/infra/toggle_secure()
 	secured = !secured
 	if(secured)
-		SSobj.processing |= src
+		START_PROCESSING(SSobj, src)
 	else
 		on = 0
 		if(first)
 			qdel(first)
-		SSobj.processing.Remove(src)
+		STOP_PROCESSING(SSobj, src)
 	update_icon()
 	return secured
 
+/obj/item/device/assembly/infra/attach_assembly(obj/item/device/assembly/A, mob/user)
+	. = ..()
+	message_admins("[key_name_admin(user)] attached \the [A] to \the [src]. [ADMIN_JMP(user)]")
+	log_game("[key_name(user)] attached \the [A] to \the [src].")
+
 /obj/item/device/assembly/infra/update_icon()
-	overlays.Cut()
+	cut_overlays()
 	attached_overlays = list()
 	if(on)
-		overlays += "infrared_on"
+		add_overlay("infrared_on")
 		attached_overlays += "infrared_on"
 
 	if(holder)
@@ -66,12 +70,12 @@
 	if(T && holder && isturf(holder.loc))
 		var/obj/effect/beam/i_beam/I = new /obj/effect/beam/i_beam(T)
 		I.master = src
-		I.density = 1
-		I.dir = dir
+		I.density = TRUE
+		I.set_dir(dir)
 		first = I
 		step(I, I.dir)
 		if(first)
-			I.density = 0
+			I.density = FALSE
 			I.vis_spread(visible)
 			I.limit = 8
 			I.process()
@@ -81,12 +85,11 @@
 	..()
 	return
 
-/obj/item/device/assembly/infra/Move()
+/obj/item/device/assembly/infra/Move(NewLoc, Dir = 0, step_x = 0, step_y = 0)
 	var/t = dir
-	..()
-	dir = t
+	. = ..()
+	set_dir(t)
 	qdel(first)
-	return
 
 /obj/item/device/assembly/infra/holder_movement()
 	if(!holder)
@@ -106,24 +109,25 @@
 		process_cooldown()
 	var/time_pulse = time2text(world.realtime,"hh:mm:ss")
 	var/turf/T = get_turf(src)
-	lastsignalers.Add("[time_pulse] <B>:</B> [src] activated  @ location ([T.x],[T.y],[T.z])")
-	message_admins("[src] activated  @ location ([T.x],[T.y],[T.z]) (<A HREF='?_src_=holder;adminplayerobservecoodjump=1;X=[T.x];Y=[T.y];Z=[T.z]'>JMP</a>)")
-	log_game("[src] activated  @ location ([T.x],[T.y],[T.z])")
+	lastsignalers.Add("[time_pulse] <B>:</B> [src] activated  @ location [COORD(T)]")
+	message_admins("[src] activated  @ location [COORD(T)] [ADMIN_JMP(T)]")
+	log_game("[src] activated  @ location [COORD(T)]")
 	return
 
 /obj/item/device/assembly/infra/interact(mob/user)//TODO: change this this to the wire control panel
 	if(is_secured(user))
 		user.set_machine(src)
-		var/dat = "<TT><B>Infrared Laser</B>\n<B>Status</B>: [on ? "<A href='?src=\ref[src];state=0'>On</A>" : "<A href='?src=\ref[src];state=1'>Off</A>"]<BR>\n<B>Visibility</B>: [visible ? "<A href='?src=\ref[src];visible=0'>Visible</A>" : "<A href='?src=\ref[src];visible=1'>Invisible</A>"]<BR>\n</TT>"
-		dat += "<BR><BR><A href='?src=\ref[src];refresh=1'>Refresh</A>"
-		dat += "<BR><BR><A href='?src=\ref[src];close=1'>Close</A>"
-		user << browse(dat, "window=infra")
-		onclose(user, "infra")
+		var/dat = "<TT><B>Status</B>: [on ? "<A href='byond://?src=\ref[src];state=0'>On</A>" : "<A href='byond://?src=\ref[src];state=1'>Off</A>"]<BR>\n<B>Visibility</B>: [visible ? "<A href='byond://?src=\ref[src];visible=0'>Visible</A>" : "<A href='byond://?src=\ref[src];visible=1'>Invisible</A>"]<BR>\n</TT>"
+		dat += "<BR><BR><A href='byond://?src=\ref[src];refresh=1'>Refresh</A>"
+
+		var/datum/browser/popup = new(user, "infra", "Infrared Laser")
+		popup.set_content(dat)
+		popup.open()
 		return
 
 /obj/item/device/assembly/infra/Topic(href, href_list)
 	..()
-	if(usr.incapacitated() || !in_range(loc, usr))
+	if(usr.incapacitated() || !Adjacent(usr))
 		usr << browse(null, "window=infra")
 		onclose(usr, "infra")
 		return
@@ -134,13 +138,13 @@
 		var/time_start = time2text(world.realtime,"hh:mm:ss")
 		var/turf/T = get_turf(src)
 		if(usr)
-			lastsignalers.Add("[time_start] <B>:</B> [usr.key] set [src] [on?"On":"Off"] @ location ([T.x],[T.y],[T.z])")
-			message_admins("[key_name_admin(usr)] set [src] [on?"On":"Off"], location ([T.x],[T.y],[T.z]) (<A HREF='?_src_=holder;adminplayerobservecoodjump=1;X=[usr.x];Y=[usr.y];Z=[usr.z]'>JMP</a>)")
-			log_game("[usr.ckey]([usr]) set [src] [on?"On":"Off"], location ([T.x],[T.y],[T.z])")
+			lastsignalers.Add("[time_start] <B>:</B> [usr.key] set [src] [on?"On":"Off"] @ location [COORD(T)]")
+			message_admins("[key_name_admin(usr)] set [src] [on?"On":"Off"], location [COORD(T)] [ADMIN_JMP(usr)]")
+			log_game("[usr.ckey]([usr]) set [src] [on?"On":"Off"], location [COORD(T)]")
 		else
-			lastsignalers.Add("[time_start] <B>:</B> (NO USER FOUND) set [src] [on?"On":"Off"] @ location ([T.x],[T.y],[T.z])")
-			message_admins("( NO USER FOUND) set [src] [on?"On":"Off"], location ([T.x],[T.y],[T.z])")
-			log_game("(NO USER FOUND) set [src] [on?"On":"Off"], location ([T.x],[T.y],[T.z])")
+			lastsignalers.Add("[time_start] <B>:</B> (NO USER FOUND) set [src] [on?"On":"Off"] @ location [COORD(T)]")
+			message_admins("( NO USER FOUND) set [src] [on?"On":"Off"], location [COORD(T)]")
+			log_game("(NO USER FOUND) set [src] [on?"On":"Off"], location [COORD(T)]")
 
 	if(href_list["visible"])
 		visible = !(visible)
@@ -161,7 +165,7 @@
 	if(usr.incapacitated())
 		return
 
-	dir = turn(dir, 90)
+	set_dir(turn(dir, 90))
 	return
 
 
@@ -178,9 +182,7 @@
 	var/limit = null
 	var/visible = 0
 	var/left = null
-	anchored = 1
-	flags = TABLEPASS
-
+	anchored = TRUE
 
 /obj/effect/beam/i_beam/proc/hit()
 	if(master)
@@ -210,13 +212,13 @@
 	if(!next && (limit > 0))
 		var/obj/effect/beam/i_beam/I = new /obj/effect/beam/i_beam(loc)
 		I.master = master
-		I.density = 1
-		I.dir = dir
+		I.density = TRUE
+		I.set_dir(dir)
 		I.previous = src
 		next = I
 		step(I, I.dir)
 		if(next)
-			I.density = 0
+			I.density = FALSE
 			I.vis_spread(visible)
 			I.limit = limit - 1
 			master.last = I
@@ -229,7 +231,8 @@
 /obj/effect/beam/i_beam/Bumped()
 	hit()
 
-/obj/effect/beam/i_beam/Crossed(atom/movable/AM as mob|obj)
+/obj/effect/beam/i_beam/Crossed(atom/movable/AM)
+	. = ..()
 	if(istype(AM, /obj/effect/beam))
 		return
 	hit()

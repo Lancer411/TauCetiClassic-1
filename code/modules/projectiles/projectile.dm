@@ -1,46 +1,41 @@
-/*
-#define BRUTE "brute"
-#define BURN "burn"
-#define TOX "tox"
-#define OXY "oxy"
-#define CLONE "clone"
-
-#define ADD "add"
-#define SET "set"
-*/
+// keep in mind that projectile is mutable object and should not be used to shot multiple objects at the same time
 
 /obj/item/projectile
 	name = "projectile"
 	icon = 'icons/obj/projectiles.dmi'
 	icon_state = "bullet"
-	density = 1
+	density = TRUE
 	unacidable = 1
-	anchored = 1 //There's a reason this is here, Mport. God fucking damn it -Agouri. Find&Fix by Pete. The reason this is here is to stop the curving of emitter shots.
-//	flags = FPRINT | TABLEPASS
+	anchored = TRUE //There's a reason this is here, Mport. God fucking damn it -Agouri. Find&Fix by Pete. The reason this is here is to stop the curving of emitter shots.
 	pass_flags = PASSTABLE
-	mouse_opacity = 0
+	mouse_opacity = MOUSE_OPACITY_TRANSPARENT
+	appearance_flags = 0
 	var/bumped = 0		//Prevents it from hitting more than one guy at once
 	var/def_zone = ""	//Aiming at
-	var/mob/firer = null//Who shot it
+	var/mob/firer = null // who shot it, can be changed after reflecs/redirects
+	var/redirected = FALSE // if projectile was redirected and firer changed
 	var/silenced = 0	//Attack message
 	var/yo = null
 	var/xo = null
 	var/current = null
 	var/obj/shot_from = null // the object which shot us
-	var/atom/original = null // the original target clicked
+	var/atom/original = null // the original target clicked, may not exist
 	var/turf/starting = null // the projectile's starting turf
 	var/list/permutated = list() // we've passed through these atoms, don't try to hit them again
 
 	var/p_x = 16
 	var/p_y = 16 // the pixel location of the tile that the player clicked. Default is the center
 
+	var/dispersion = 0.0
+
 	var/damage = 10
 	var/damage_type = BRUTE //BRUTE, BURN, TOX, OXY, CLONE are the only things that should be in here
+	var/armor_multiplier = 1 //armor multiplier when a projectile hits it. values greater than 1 mean worse armor penetration
 	var/nodamage = 0 //Determines if the projectile will skip any damage inflictions
 	var/fake = 0 //Fake projectile won't spam chat for admins with useless logs
-	var/flag = "bullet" //Defines what armor to use when it hits things.  Must be set to bullet, laser, energy,or bomb	//Cael - bio and rad are also valid
-	var/projectile_type = "/obj/item/projectile"
+	var/flag = BULLET //Defines what armor to use when it hits things.  Must be set to bullet, laser, energy,or bomb	//Cael - bio and rad are also valid
 	var/kill_count = 50 //This will de-increment every process(). When 0, it will delete the projectile.
+	var/paused = FALSE //for suspending the projectile midair
 		//Effects
 	var/stun = 0
 	var/weaken = 0
@@ -50,13 +45,16 @@
 	var/eyeblur = 0
 	var/drowsy = 0
 	var/agony = 0
+	var/incendiary = 0
 	var/embed = 0 // whether or not the projectile can embed itself in the mob
 	var/impact_force = 0
+	var/close_range_impact_force = 0 // impact_force at a distance of two tiles, for shotguns projectiles
 
 	var/hitscan = 0	// whether the projectile should be hitscan
 	var/step_delay = 1	// the delay between iterations if not a hitscan projectile
 
 	// effect types to be used
+	var/list/tracer_list = null // if set to list, it will be gathering all projectile effects into list and delete them after impact(unless they ask to not be deleted)
 	var/muzzle_type
 	var/tracer_type
 	var/impact_type
@@ -66,33 +64,78 @@
 	var/matrix/effect_transform			// matrix to rotate and scale projectile effects - putting it here so it doesn't
 										//  have to be recreated multiple times
 
-/obj/item/projectile/New()
-	..()
+	var/list/proj_act_sound = null // this probably could be merged into the one below, because bullet_act is too specific, while on_impact (Bump) handles bullet_act too.
+	// ^ the one above used in bullet_act for mobs, while this one below used in on_hit() which happens after Bump() or killed by process. v
+	var/proj_impact_sound = null // originally made for big plasma ball hit sound, and its okay when both proj_act_sound and this one plays at the same time.
+
+/obj/item/projectile/atom_init()
+	damtype = damage_type // TODO unify these vars properly (Bay12)
+	if(timestop_count)
+		var/obj/effect/timestop/T = locate() in loc
+		if(T)
+			T.timestop(src)
+	. = ..()
 	if(light_color)
 		set_light(light_range,light_power,light_color)
 
-/obj/item/projectile/proc/on_hit(atom/target, blocked = 0)
-	if(!isliving(target))	return 0
-	if(isanimal(target))	return 0
+/obj/item/projectile/Destroy()
+	for(var/obj/effect/projectile/P in tracer_list)
+		if(!P.deletes_itself)
+			qdel(P)
+	permutated.Cut()
+	tracer_list = null
+	firer = null
+	starting = null
+	original = null
+	shot_from = null
+	return ..()
+
+
+/obj/item/projectile/proc/check_living_shield(mob/living/carbon/human/H)
+	var/obj/item/weapon/grab/grab = null
+	if(istype(H.r_hand,/obj/item/weapon/grab))
+		grab = H.r_hand
+	else if(istype(H.l_hand,/obj/item/weapon/grab))
+		grab = H.l_hand
+	if(!grab)
+		return H
+	if(grab.state >= GRAB_NECK && !grab.affecting.lying)
+		if(is_the_opposite_dir(H.dir, dir))
+			return grab.affecting
+	return H
+
+/obj/item/projectile/proc/on_hit(atom/target, def_zone = BP_CHEST, blocked = 0)
+	impact_effect(effect_transform)		// generate impact effect
+	if(!isliving(target))
+		return 0
+	if(isanimal(target))
+		return 0
 	var/mob/living/L = target
+	if(incendiary && blocked <= 100)
+		L.adjust_fire_stacks(incendiary)
+		L.IgniteMob(target)
+	if(proj_impact_sound)
+		playsound(src, proj_impact_sound, VOL_EFFECTS_MASTER)
+
 	return L.apply_effects(stun, weaken, paralyze, irradiate, stutter, eyeblur, drowsy, agony, blocked) // add in AGONY!
 
-	//called when the projectile stops flying because it collided with something
-/obj/item/projectile/proc/on_impact(atom/A)
-	impact_effect(effect_transform)		// generate impact effect
-	return
-
 /obj/item/projectile/proc/check_fire(mob/living/target, mob/living/user)  //Checks if you can hit them or not.
-	if(!istype(target) || !istype(user))
-		return 0
-	var/obj/item/projectile/test/in_chamber = new /obj/item/projectile/test(get_step_to(user,target)) //Making the test....
-	in_chamber.target = target
-	in_chamber.flags = flags //Set the flags...
-	in_chamber.pass_flags = pass_flags //And the pass flags to that of the real projectile...
-	in_chamber.firer = user
-	var/output = in_chamber.process() //Test it!
-	qdel(in_chamber) //No need for it anymore
-	return output //Send it back to the gun!
+	return check_trajectory(target, src, pass_flags, flags)
+
+/proc/check_trajectory(atom/target, atom/gun, pass_flags = PASSTABLE|PASSGLASS|PASSGRILLE, flags = 0) //Spherical test in vacuum
+	if(!istype(target) || !istype(gun))
+		return FALSE
+
+	var/obj/item/projectile/test/trace = new /obj/item/projectile/test(get_turf(gun)) //Making the test....
+
+	//Set the flags and pass flags to that of the real projectile...
+	trace.flags = flags
+	trace.target = target
+	trace.pass_flags = pass_flags
+
+	var/atom/output = trace.process() //Test it!
+	qdel(trace) //No need for it anymore
+	return target == output //Send it back to the gun!
 
 //Used to change the direction of the projectile in flight.
 /obj/item/projectile/proc/redirect(new_x, new_y, atom/starting_loc, mob/new_firer=null)
@@ -100,7 +143,8 @@
 	starting = starting_loc
 	current = starting_loc
 	if(new_firer)
-		firer = src
+		firer = new_firer
+		redirected = TRUE
 
 	yo = new_y - starting_loc.y
 	xo = new_x - starting_loc.x
@@ -109,131 +153,70 @@
 /obj/item/projectile/proc/After_hit()
 	return
 
+/obj/item/projectile/proc/get_miss_modifier(mob/living/L)
+	var/distance = get_dist(starting, loc) //More distance = less damage, except for high fire power weapons.
+	var/miss_modifier = 0
+	if(distance <= 1) // cant miss almost pointblank (1 or 2 tiles between target and start)
+		return -100
+	if(damage && (distance > 7))
+		if(damage >= 50)
+			return -100 // so sniper rifle and PTR-rifle projectiles cannot miss
+		else
+			damage = max(1, damage - round(damage * (((distance-6)*3)/100)))
+	if(istype(shot_from,/obj/item/weapon/gun))	//If you aim at someone beforehead, it'll hit more often.
+		var/obj/item/weapon/gun/daddy = shot_from //Kinda balanced by fact you need like 2 seconds to aim
+		if(daddy.target && (L in daddy.target)) //As opposed to no-delay pew pew
+			miss_modifier -= 60
+	return miss_modifier
+
+/obj/item/projectile/proc/check_miss(mob/living/L)
+	if(L.prob_miss(src))
+		L.visible_message("<span class = 'notice'>\The [src] misses [L] narrowly!</span>")
+		playsound(L.loc, pick(SOUNDIN_BULLETMISSACT), VOL_EFFECTS_MASTER)
+		permutated.Add(L)
+		return TRUE
+	return FALSE
+
 /obj/item/projectile/Bump(atom/A, forced=0)
-	if(A == src)
-		return 0 //no
-
-	if(A == firer)
-		loc = A.loc
-		return 0 //cannot shoot yourself
-
-	if((bumped && !forced) || (A in permutated))
+	if((bumped && !forced))
 		return 0
 
-	var/forcedodge = 0 // force the projectile to pass
+	var/turf/A_loc = isturf(A) ?  A : A.loc
+	bumped = TRUE
+	var/forcedodge = A.bullet_act(src, def_zone) // try to shot something
 
-	bumped = 1
-	if(firer && istype(A, /mob))
-		var/mob/M = A
-		if(!istype(A, /mob/living))
-			loc = A.loc
-			return 0// nope.avi
+	if(forcedodge == PROJECTILE_WEAKENED)
+		damage = damage / 2
+		forcedodge = PROJECTILE_FORCE_MISS
 
-		var/distance = get_dist(starting,loc) //More distance = less damage, except for high fire power weapons.
-		if(damage && (distance > 7))
-			if(damage < 55)
-				damage = max(1, damage - round(damage * (((distance-6)*3)/100)))
-		//var/miss_modifier = -30
+	if(forcedodge == PROJECTILE_FORCE_MISS) // the bullet passes through a dense object!
+		forceMove(A_loc)
+		bumped = FALSE // reset bumped variable!
+		permutated.Add(A)
 
-		//if (istype(shot_from,/obj/item/weapon/gun))	//If you aim at someone beforehead, it'll hit more often.
-		//	var/obj/item/weapon/gun/daddy = shot_from //Kinda balanced by fact you need like 2 seconds to aim
-		//	if (daddy.target && original in daddy.target) //As opposed to no-delay pew pew
-		//		miss_modifier += -30
-		//if(distance > 1)
-		//	def_zone = get_zone_with_miss_chance(def_zone, M)
-		def_zone = get_zone_with_probabilty(def_zone)
+		return FALSE
 
-		if(!def_zone)
-			visible_message("<span class = 'notice'>\The [src] misses [M] narrowly!</span>")
-			forcedodge = -1
-		else
-			if(silenced)
-				to_chat(M, "<span class = 'red'>You've been shot in the [parse_zone(def_zone)] by the [src.name]!</span>")
-			else
-				visible_message("<span class = 'red'>[A.name] is hit by the [src.name] in the [parse_zone(def_zone)]!</span>")//X has fired Y is now given by the guns so you cant tell who shot you if you could not see the shooter
-			if(istype(firer, /mob))
-				M.attack_log += "\[[time_stamp()]\] <b>[firer]/[firer.ckey]</b> shot <b>[M]/[M.ckey]</b> with a <b>[src.type]</b>"
-				firer.attack_log += "\[[time_stamp()]\] <b>[firer]/[firer.ckey]</b> shot <b>[M]/[M.ckey]</b> with a <b>[src.type]</b>"
-				if(!fake)
-					msg_admin_attack("[firer.name] ([firer.ckey]) shot [M.name] ([M.ckey]) with a [src] (<A HREF='?_src_=holder;adminplayerobservecoodjump=1;X=[firer.x];Y=[firer.y];Z=[firer.z]'>JMP</a>)") //BS12 EDIT ALG
-			else
-				M.attack_log += "\[[time_stamp()]\] <b>UNKNOWN SUBJECT (No longer exists)</b> shot <b>[M]/[M.ckey]</b> with a <b>[src]</b>"
-				if(!fake)
-					msg_admin_attack("UNKNOWN shot [M.name] ([M.ckey]) with a [src] (<A HREF='?_src_=holder;adminplayerobservecoodjump=1;X=[firer.x];Y=[firer.y];Z=[firer.z]'>JMP</a>)") //BS12 EDIT ALG
+	qdel(src)
+	return TRUE
 
-//	if(istype(src, /obj/item/projectile/beam))
-
-	if(A)
-		if (!forcedodge)
-			forcedodge = A.bullet_act(src, def_zone) // searches for return value
-		if(forcedodge == -1) // the bullet passes through a dense object!
-			bumped = 0 // reset bumped variable!
-			if(istype(A, /turf))
-				loc = A
-			else
-				loc = A.loc
-			permutated.Add(A)
-			return 0
-		if(istype(A,/turf))
-			for(var/obj/O in A)
-				O.bullet_act(src)
-			for(var/mob/M in A)
-				M.bullet_act(src, def_zone)
-
-		//stop flying
-		on_impact(A)
-
-		density = 0
-		invisibility = 101
-		qdel(src)
-	return 1
-
-//	else
-//		spawn(0)
-//			if(A)
-//						// We get the location before running A.bullet_act, incase the proc deletes A and makes it null
-//				var/turf/new_loc = null
-//				if(istype(A, /turf))
-//					new_loc = A
-//				else
-//					new_loc = A.loc
-//
-//				if (!forcedodge)
-//					forcedodge = A.bullet_act(src, def_zone) // searches for return value
-//				if(forcedodge == -1) // the bullet passes through a dense object!
-//					bumped = 0 // reset bumped variable!
-//					loc = new_loc
-//					permutated.Add(A)
-//					return 0
-//				//stop flying
-//				on_impact(A)
-//
-//				density = 0
-//				invisibility = 101
-//				qdel(src)
-//				return 0
-//		return 1	//с ТГ, работает лучше
-
-
-
-/obj/item/projectile/CanPass(atom/movable/mover, turf/target, height=0, air_group=0)
-	if(air_group || (height==0)) return 1
-
-	if(istype(mover, /obj/item/projectile))
+/obj/item/projectile/CanPass(atom/movable/mover, turf/target, height=0)
+	if(istype(mover, /obj/item/projectile) && (reverse_dir[dir] & mover.dir))
 		return prob(95)
-	else
-		return 1
+	return TRUE
 
 
-/obj/item/projectile/process()
+/obj/item/projectile/process(boolet_number = 1) // we add default arg value, because there is alot of uses of projectiles without guns (e.g turrets).
 	var/first_step = 1
 
 	//plot the initial trajectory
 	setup_trajectory()
 
 	spawn while(src && src.loc)
+		if(paused)
+			stoplag(1)
+			continue
 		if(kill_count-- < 1)
-			on_impact(src.loc) //for any final impact behaviours
+			bullet_act(src) //for any final impact behaviours
 			qdel(src)
 			return
 		if((!( current ) || loc == current))
@@ -241,7 +224,6 @@
 		if((x == 1 || x == world.maxx || y == 1 || y == world.maxy))
 			qdel(src)
 			return
-
 		trajectory.increment()	// increment the current location
 		location = trajectory.return_location(location)		// update the locally stored location data
 
@@ -251,15 +233,12 @@
 
 		before_move()
 		Move(location.return_turf())
-
-		if(!bumped && !isturf(original))
-			if(loc == get_turf(original))
-				if(!(original in permutated))
-					if(Bump(original))
-						return
+		if(QDELING(src))
+			return
 
 		if(first_step)
-			muzzle_effect(effect_transform)
+			if(boolet_number == 1) // so that it won't spam with muzzle effects incase of multiple pellets.
+				muzzle_effect(effect_transform)
 			first_step = 0
 		else if(!bumped)
 			tracer_effect(effect_transform)
@@ -275,16 +254,20 @@
 /obj/item/projectile/proc/setup_trajectory()
 	var/offset = 0
 
+	if(dispersion)
+		var/radius = round(dispersion * 9, 1)
+		offset = rand(-radius, radius)
+
 	// plot the initial trajectory
 	trajectory = new()
-	trajectory.setup(starting, original, pixel_x, pixel_y, angle_offset=offset)
+	trajectory.setup(starting, original, pixel_x, pixel_y, offset, dir)
 
 	// generate this now since all visual effects the projectile makes can use it
 	effect_transform = new()
 	effect_transform.Scale(trajectory.return_hypotenuse(), 1)
 	effect_transform.Turn(-trajectory.return_angle())		//no idea why this has to be inverted, but it works
 
-/obj/item/projectile/proc/muzzle_effect(var/matrix/T)
+/obj/item/projectile/proc/muzzle_effect(matrix/T)
 	if(silenced)
 		return
 
@@ -292,6 +275,8 @@
 		var/obj/effect/projectile/M = new muzzle_type(get_turf(src))
 
 		if(istype(M))
+			if(tracer_list)
+				tracer_list += M
 			M.set_transform(T)
 			M.pixel_x = location.pixel_x
 			M.pixel_y = location.pixel_y
@@ -302,39 +287,60 @@
 		var/obj/effect/projectile/P = new tracer_type(location.loc)
 
 		if(istype(P))
+			if(tracer_list)
+				tracer_list += P
 			P.set_transform(M)
 			P.pixel_x = location.pixel_x
 			P.pixel_y = location.pixel_y
 			P.activate()
 
 /obj/item/projectile/proc/impact_effect(matrix/M)
-	if(ispath(tracer_type) && location)
+	if(ispath(impact_type) && location)
 		var/obj/effect/projectile/P = new impact_type(location.loc)
 
 		if(istype(P))
+			if(tracer_list)
+				tracer_list += P
 			P.set_transform(M)
 			P.pixel_x = location.pixel_x
 			P.pixel_y = location.pixel_y
 			P.activate()
+
+/obj/item/projectile/proc/Fire(atom/A, mob/living/user, params=null)
+	var/turf/T = get_turf(user)
+	var/turf/U = get_turf(A)
+	firer = user
+	def_zone = check_zone(user.get_targetzone())
+	starting = T
+	original = A
+	current = T
+	yo = U.y - T.y
+	xo = U.x - T.x
+
+	if(params)
+		var/list/mouse_control = params2list(params)
+		if(mouse_control[ICON_X])
+			p_x = text2num(mouse_control[ICON_X])
+		if(mouse_control[ICON_Y])
+			p_y = text2num(mouse_control[ICON_Y])
+
+	process()
 
 /obj/item/projectile/test //Used to see if you can hit them.
 	invisibility = 101 //Nope!  Can't see me!
 	yo = null
 	xo = null
 	var/target = null
-	var/result = 0 //To pass the message back to the gun.
+	var/atom/result = null //To pass the bumped atom back to the gun.
+
+/obj/item/projectile/test/check_miss(mob/living/L)
+	return FALSE
 
 /obj/item/projectile/test/Bump(atom/A)
-	if(A == firer)
-		loc = A.loc
-		return //cannot shoot yourself
 	if(istype(A, /obj/item/projectile))
 		return
-	if(istype(A, /mob/living))
-		result = 2 //We hit someone, return 1!
-		return
-	result = 1
-	return
+	result = A
+	bumped = TRUE
 
 /obj/item/projectile/test/process()
 	var/turf/curloc = get_turf(src)
@@ -343,34 +349,49 @@
 		return 0
 	yo = targloc.y - curloc.y
 	xo = targloc.x - curloc.x
-	target = targloc
 	original = target
+	target = targloc
 	starting = curloc
 
 	//plot the initial trajectory
 	setup_trajectory()
 
 	while(src) //Loop on through!
-		if(result)
-			return (result - 1)
-		if((!( target ) || loc == target))
+		if(bumped)
+			return result
+		if(!target || loc == target)
 			target = locate(min(max(x + xo, 1), world.maxx), min(max(y + yo, 1), world.maxy), z) //Finding the target turf at map edge
+		if(x == 1 || x == world.maxx || y == 1 || y == world.maxy || kill_count-- < 1)
+			qdel(src)
+			return 0
 
 		trajectory.increment()	// increment the current location
 		location = trajectory.return_location(location)		// update the locally stored location data
+		if(!location)
+			qdel(src)
+			return 0
 
 		Move(location.return_turf())
-
-		var/mob/living/M = locate() in get_turf(src)
-		if(istype(M)) //If there is someting living...
-			return 1 //Return 1
-		else
-			M = locate() in get_step(src,target)
-			if(istype(M))
-				return 1
 
 /obj/item/projectile/proc/Range() ///tg/
 	return
 
 /obj/item/projectile/Process_Spacemove(movement_dir = 0)
 	return 1 //Bullets don't drift in space
+
+var/global/static/list/taser_projectiles = list(
+	/obj/item/projectile/beam/stun,
+	/obj/item/ammo_casing/energy/electrode
+)
+
+/obj/item/projectile/proc/get_full_impact_force(mob/living/target)
+	var/full_impact_force = impact_force
+	var/distance = get_dist(starting, target.loc)
+	if(distance <= 2)
+		full_impact_force += close_range_impact_force
+	if(isreplicator(target))
+		full_impact_force *= 0.1
+		if(damage_type == BRUTE)
+			damage += damage * 0.1
+	return full_impact_force
+

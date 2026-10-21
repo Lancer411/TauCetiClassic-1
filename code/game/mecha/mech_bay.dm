@@ -1,18 +1,8 @@
-/turf/simulated/floor/mech_bay_recharge_floor               //        Whos idea it was
-	name = "mech bay recharge station"                      //        Recharging turfs
-	icon = 'icons/turf/floors.dmi'                          //		  That are set in stone to check the west turf for recharge port
-	icon_state = "recharge_floor"                           //        Some people just want to watch the world burn i guess
-
-/turf/simulated/floor/mech_bay_recharge_floor/airless
-	icon_state = "recharge_floor_asteroid"
-	oxygen = 0.01
-	nitrogen = 0.01
-	temperature = TCMB
-
 /obj/machinery/mech_bay_recharge_port
 	name = "mech bay power port"
-	density = 1
-	anchored = 1
+	desc = "Charges exosuits. It consumes a lot of energy when working."
+	density = TRUE
+	anchored = TRUE
 	dir = 4
 	icon = 'icons/mecha/mech_bay.dmi'
 	icon_state = "recharge_port"
@@ -23,8 +13,8 @@
 	var/repairability = 0
 	var/turf/recharging_turf = null
 
-/obj/machinery/mech_bay_recharge_port/New()
-	..()
+/obj/machinery/mech_bay_recharge_port/atom_init()
+	. = ..()
 	component_parts = list()
 	component_parts += new /obj/item/weapon/circuitboard/mech_recharger(null)
 	component_parts += new /obj/item/weapon/stock_parts/capacitor(null)
@@ -32,11 +22,13 @@
 	component_parts += new /obj/item/weapon/stock_parts/capacitor(null)
 	component_parts += new /obj/item/weapon/stock_parts/capacitor(null)
 	component_parts += new /obj/item/weapon/stock_parts/capacitor(null)
-	component_parts += new /obj/item/weapon/cable_coil(null, 1)
+	component_parts += new /obj/item/stack/cable_coil/red(null, 1)
 	RefreshParts()
 	recharging_turf = get_step(loc, dir)
 
 /obj/machinery/mech_bay_recharge_port/RefreshParts()
+	..()
+
 	var/MC
 	for(var/obj/item/weapon/stock_parts/capacitor/C in component_parts)
 		MC += C.rating
@@ -75,7 +67,7 @@
 	default_deconstruction_crowbar(I)
 
 	if(panel_open)
-		if(istype(I, /obj/item/device/multitool))
+		if(ispulsing(I))
 			var/obj/item/device/multitool/MT = I
 			if(istype(MT.buffer, /obj/machinery/computer/mech_bay_power_console))
 				recharge_console = MT.buffer
@@ -86,49 +78,45 @@
 /obj/machinery/computer/mech_bay_power_console
 	name = "mech bay power control console"
 	desc = "Used to control mechbay power ports."
-	density = 1
-	anchored = 1
+	density = TRUE
+	anchored = TRUE
 	icon = 'icons/obj/computer.dmi'
 	icon_state = "recharge_comp"
+	state_broken_preset = "techb"
+	state_nopower_preset = "tech0"
 	light_color = "#a97faa"
 	circuit = /obj/item/weapon/circuitboard/mech_bay_power_console
 	var/obj/machinery/mech_bay_recharge_port/recharge_port
 
 /obj/machinery/computer/mech_bay_power_console/attackby(obj/item/I, mob/user)
 	..()
-	if(istype(I, /obj/item/device/multitool))
+	if(ispulsing(I))
 		var/obj/item/device/multitool/MT = I
 		MT.buffer = src
 		to_chat(user, "<span class='notice'>You download data to the buffer.</span>")
 
-/obj/machinery/computer/mech_bay_power_console/attack_ai(mob/user)
-	return interact(user)
-
-/obj/machinery/computer/mech_bay_power_console/attack_hand(mob/user)
-	if(..())
-		return
-	interact(user)
-
-/obj/machinery/computer/mech_bay_power_console/interact(mob/user)
+/obj/machinery/computer/mech_bay_power_console/ui_interact(mob/user)
 	var/data
 	if(!recharge_port)
-		data += "<div class='statusDisplay'>No recharging port detected.</div><BR>"
-		data += "<A href='?src=\ref[src];reconnect=1'>Reconnect</A>"
+		data += "<div class='Section'>No recharging port detected.</div><BR>"
+		data += "<A href='byond://?src=\ref[src];reconnect=1'>Reconnect</A>"
 	else
-		data += "<h3>Mech status</h3>"
+		data += "<div class='Section__title'>Mech status</div>"
 		if(!recharge_port.recharging_mech)
-			data += "<div class='statusDisplay'>No mech detected.</div>"
+			data += "<div class='Section'>No mech detected.</div>"
 		else
-			data += "<div class='statusDisplay'>Integrity: [recharge_port.recharging_mech.health]<BR>"
-			if(recharge_port.recharging_mech.cell.crit_fail)
-				data += "<span class='bad'>WARNING : the mech cell seems faulty!</span></div>"
+			data += "<div class='Section'>Integrity: [recharge_port.recharging_mech.health]<BR>"
+			if(!recharge_port.recharging_mech.cell)
+				data += "<span class='bad'>No cell detected in the mech.</span><BR>"
 			else
-				data += "Power: [recharge_port.recharging_mech.cell.charge]/[recharge_port.recharging_mech.cell.maxcharge]</div>"
+				if(recharge_port.recharging_mech.cell.crit_fail)
+					data += "<span class='bad'>WARNING : the mech cell seems faulty!</span></div>"
+				else
+					data += "Power: [recharge_port.recharging_mech.cell.charge]/[recharge_port.recharging_mech.cell.maxcharge]</div>"
 
 	var/datum/browser/popup = new(user, "mech recharger", name, 300, 300)
 	popup.set_content(data)
 	popup.open()
-	return
 
 /obj/machinery/computer/mech_bay_power_console/Topic(href, href_list)
 	. = ..()
@@ -161,10 +149,12 @@
 	update_icon()
 
 /obj/machinery/computer/mech_bay_power_console/update_icon()
+	. = ..()
 	if(!recharge_port || !recharge_port.recharging_mech || !recharge_port.recharging_mech.cell || !(recharge_port.recharging_mech.cell.charge < recharge_port.recharging_mech.cell.maxcharge))
 		icon_state = "recharge_comp"
 	else
 		icon_state = "recharge_comp_on"
 
-/obj/machinery/computer/mech_bay_power_console/initialize()
+/obj/machinery/computer/mech_bay_power_console/atom_init()
+	. = ..()
 	reconnect()

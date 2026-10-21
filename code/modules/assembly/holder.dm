@@ -3,9 +3,9 @@
 	icon = 'icons/obj/assemblies/new_assemblies.dmi'
 	icon_state = "holder"
 	item_state = "assembly"
-	flags = FPRINT | TABLEPASS| CONDUCT
+	flags = CONDUCT | HEAR_TALK
 	throwforce = 5
-	w_class = 2.0
+	w_class = SIZE_TINY
 	throw_speed = 3
 	throw_range = 10
 
@@ -13,6 +13,11 @@
 	var/obj/item/device/assembly/a_left = null
 	var/obj/item/device/assembly/a_right = null
 	var/obj/special_assembly = null
+
+/obj/item/device/assembly_holder/Destroy()
+	QDEL_NULL(a_left)
+	QDEL_NULL(a_right)
+	return ..()
 
 /obj/item/device/assembly_holder/proc/attach(obj/item/device/D, obj/item/device/D2, mob/user)
 	return
@@ -59,15 +64,15 @@
 
 
 /obj/item/device/assembly_holder/update_icon()
-	overlays.Cut()
+	cut_overlays()
 	if(a_left)
-		overlays += "[a_left.icon_state]_left"
+		add_overlay("[a_left.icon_state]_left")
 		for(var/O in a_left.attached_overlays)
-			overlays += "[O]_l"
+			add_overlay("[O]_l")
 	if(a_right)
-		src.overlays += "[a_right.icon_state]_right"
+		add_overlay("[a_right.icon_state]_right")
 		for(var/O in a_right.attached_overlays)
-			overlays += "[O]_r"
+			add_overlay("[O]_r")
 	if(master)
 		master.update_icon()
 
@@ -79,17 +84,8 @@
 		else
 			to_chat(user, "\The [src] can be attached!")
 
-
-/obj/item/device/assembly_holder/HasProximity(atom/movable/AM)
-	if(a_left)
-		a_left.HasProximity(AM)
-	if(a_right)
-		a_right.HasProximity(AM)
-	if(special_assembly)
-		special_assembly.HasProximity(AM)
-
-
-/obj/item/device/assembly_holder/Crossed(atom/movable/AM as mob|obj)
+/obj/item/device/assembly_holder/Crossed(atom/movable/AM)
+	. = ..()
 	if(a_left)
 		a_left.Crossed(AM)
 	if(a_right)
@@ -104,17 +100,16 @@
 	if(a_right)
 		a_right.on_found(finder)
 	if(special_assembly)
-		if(istype(special_assembly, /obj/item))
+		if(isitem(special_assembly))
 			var/obj/item/S = special_assembly
 			S.on_found(finder)
 
 
-/obj/item/device/assembly_holder/Move()
-	..()
+/obj/item/device/assembly_holder/Move(NewLoc, Dir = 0, step_x = 0, step_y = 0)
+	. = ..()
 	if(a_left && a_right)
 		a_left.holder_movement()
 		a_right.holder_movement()
-	return
 
 /obj/item/device/assembly_holder/hear_talk(mob/living/M, msg, verb, datum/language/speaking)
 	if(a_left)
@@ -132,53 +127,52 @@
 	..()
 	return
 
-
-/obj/item/device/assembly_holder/attackby(obj/item/weapon/W, mob/user)
-	if(isscrewdriver(W))
+/obj/item/device/assembly_holder/attackby(obj/item/I, mob/user, params)
+	if(isscrewing(I))
 		if(!a_left || !a_right)
-			to_chat(user, "\red BUG:Assembly part missing, please report this!")
+			to_chat(user, "<span class='warning'>BUG:Assembly part missing, please report this!</span>")
 			return
 		a_left.toggle_secure()
 		a_right.toggle_secure()
 		secured = !secured
 		if(secured)
-			to_chat(user, "\blue \The [src] is ready!")
+			to_chat(user, "<span class='notice'>\The [src] is ready!</span>")
 		else
-			to_chat(user, "\blue \The [src] can now be taken apart!")
+			to_chat(user, "<span class='notice'>\The [src] can now be taken apart!</span>")
 		update_icon()
 		return
-	else if(W.IsSpecialAssembly())
-		attach_special(W, user)
+	else if(I.IsSpecialAssembly())
+		attach_special(I, user)
 	else
-		..()
-	return
-
+		return ..()
 
 /obj/item/device/assembly_holder/attack_self(mob/user)
-	src.add_fingerprint(user)
+	add_fingerprint(user)
 	if(src.secured)
 		if(!a_left || !a_right)
-			to_chat(user, "\red Assembly part missing!")
+			to_chat(user, "<span class='warning'>Assembly part missing!</span>")
 			return
 		if(istype(a_left,a_right.type))//If they are the same type it causes issues due to window code
-			switch(alert("Which side would you like to use?",,"Left","Right"))
+			switch(tgui_alert(usr, "Which side would you like to use?",, list("Left","Right")))
 				if("Left")	a_left.attack_self(user)
 				if("Right")	a_right.attack_self(user)
 			return
 		else
-			if(!istype(a_left,/obj/item/device/assembly/igniter))
+			if(!isigniter(a_left))
 				a_left.attack_self(user)
-			if(!istype(a_right,/obj/item/device/assembly/igniter))
+			if(!isigniter(a_right))
 				a_right.attack_self(user)
 	else
 		var/turf/T = get_turf(src)
 		if(!T)	return 0
 		if(a_left)
-			a_left:holder = null
 			a_left.loc = T
+			a_left.holder = null
+			a_left = null
 		if(a_right)
-			a_right:holder = null
 			a_right.loc = T
+			a_right.holder = null
+			a_right = null
 		qdel(src)
 	return
 
@@ -200,8 +194,8 @@
 /obj/item/device/assembly_holder/timer_igniter
 	name = "timer-igniter assembly"
 
-/obj/item/device/assembly_holder/timer_igniter/New()
-	..()
+/obj/item/device/assembly_holder/timer_igniter/atom_init()
+	. = ..()
 
 	var/obj/item/device/assembly/igniter/ign = new(src)
 	ign.secured = 1
@@ -210,7 +204,7 @@
 	tmr.time=5
 	tmr.secured = 1
 	tmr.holder = src
-	SSobj.processing |= tmr
+	START_PROCESSING(SSobj, tmr)
 	a_left = tmr
 	a_right = ign
 	secured = 1
@@ -228,15 +222,15 @@
 	set category = "Object"
 	set src in usr
 
-	if ( !(usr.stat || usr.restrained()) )
+	if (!usr.incapacitated())
 		var/obj/item/device/assembly_holder/holder
 		if(istype(src,/obj/item/weapon/grenade/chem_grenade))
 			var/obj/item/weapon/grenade/chem_grenade/gren = src
 			holder=gren.detonator
 		var/obj/item/device/assembly/timer/tmr = holder.a_left
-		if(!istype(tmr,/obj/item/device/assembly/timer))
+		if(!istimer(tmr))
 			tmr = holder.a_right
-		if(!istype(tmr,/obj/item/device/assembly/timer))
+		if(!istimer(tmr))
 			to_chat(usr, "<span class='notice'>This detonator has no timer.</span>")
 			return
 
@@ -252,3 +246,22 @@
 				to_chat(usr, "<span class='notice'>Timer can't be [ntime<=0?"negative":"more than 1000 seconds"].</span>")
 	else
 		to_chat(usr, "<span class='notice'>You cannot do this while [usr.stat?"unconscious/dead":"restrained"].</span>")
+
+//********-Mousetrap
+/obj/item/device/assembly_holder/mousetrap_igniter
+	name = "mousetrap-igniter assembly"
+
+/obj/item/device/assembly_holder/mousetrap_igniter/atom_init()
+	. = ..()
+
+	var/obj/item/device/assembly/igniter/ign = new(src)
+	ign.secured = 1
+	ign.holder = src
+	var/obj/item/device/assembly/mousetrap/mous = new(src)
+	mous.armed = TRUE
+	mous.secured = 1
+	mous.holder = src
+	a_left = mous
+	a_right = ign
+	secured = 1
+	update_icon()

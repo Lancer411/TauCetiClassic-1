@@ -4,85 +4,108 @@
 	name = "Emergency Floodlight"
 	icon = 'icons/obj/machines/floodlight.dmi'
 	icon_state = "flood00"
-	density = 1
-	var/on = 0
+	density = TRUE
+	light_power = 2
+	interact_offline = TRUE
+	var/on = FALSE
 	var/obj/item/weapon/stock_parts/cell/high/cell = null
 	var/use = 5
-	var/unlocked = 0
-	var/open = 0
+	var/unlocked = FALSE
+	var/open = FALSE
 	var/brightness_on = 7
-	light_power = 2
 
-/obj/machinery/floodlight/New()
-	src.cell = new(src)
-	..()
+/obj/machinery/floodlight/atom_init()
+	cell = new(src)
+	. = ..()
 
-/obj/machinery/floodlight/proc/updateicon()
+/obj/machinery/floodlight/proc/toggle(on = !on)
+	src.on = on
+	if(on)
+		set_light(brightness_on)
+	else
+		set_light(0)
+	update_icon()
+
+/obj/machinery/floodlight/update_icon()
 	icon_state = "flood[open ? "o" : ""][open && cell ? "b" : ""]0[on]"
 
 /obj/machinery/floodlight/process()
 	if(on)
-		if(cell.charge >= use)
+		if(cell && cell.charge >= use)
 			cell.use(use)
 		else
-			on = 0
-			updateicon()
-			set_light(0)
-			src.visible_message("<span class='warning'>[src] shuts down due to lack of power!</span>")
+			toggle(FALSE)
+			visible_message("<span class='warning'>[src] shuts down due to lack of power!</span>")
 			return
 
 /obj/machinery/floodlight/attack_hand(mob/user)
+	. = ..()
+	if(.)
+		return
+
 	if(open && cell)
-		if(ishuman(user))
-			if(!user.get_active_hand())
-				user.put_in_hands(cell)
-				cell.loc = user.loc
-		else
-			cell.loc = loc
+		user.put_in_hands(cell)
 
 		cell.add_fingerprint(user)
-		cell.updateicon()
+		cell.update_icon()
 
-		src.cell = null
+		cell = null
+		toggle(FALSE)
 		to_chat(user, "You remove the power cell")
-		updateicon()
 		return
 
 	if(on)
-		on = 0
-		to_chat(user, "\blue You turn off the light")
-		set_light(0)
+		toggle(FALSE)
+		to_chat(user, "<span class='notice'>You turn off the light</span>")
+		user.SetNextMove(CLICK_CD_INTERACT)
+		playsound(src, 'sound/machines/floodlight.ogg', VOL_EFFECTS_MASTER, 40)
 	else
 		if(!cell)
 			return
 		if(cell.charge <= 0)
 			return
-		on = 1
-		to_chat(user, "\blue You turn on the light")
-		set_light(brightness_on)
+		toggle(TRUE)
+		to_chat(user, "<span class='notice'>You turn on the light</span>")
 
-	updateicon()
+		user.SetNextMove(CLICK_CD_INTERACT)
+		playsound(src, 'sound/machines/floodlight.ogg', VOL_EFFECTS_MASTER, 40)
+		playsound(src, 'sound/machines/lightson.ogg', VOL_EFFECTS_MASTER, null, FALSE)
 
+/obj/machinery/floodlight/verb/rotate()
+	set name = "Rotate Floodlight"
+	set category = "Object"
+	set src in oview(1)
+
+	if(!config.ghost_interaction && isobserver(usr))
+		return
+	if(ismouse(usr))
+		return
+	if(!usr || !isturf(usr.loc))
+		return
+	if(usr.incapacitated())
+		return
+
+	set_dir(turn(dir, 90))
 
 /obj/machinery/floodlight/attackby(obj/item/weapon/W, mob/user)
-	if (istype(W, /obj/item/weapon/screwdriver))
+	if (isscrewing(W))
 		if (!open)
 			if(unlocked)
-				unlocked = 0
+				unlocked = FALSE
 				to_chat(user, "You screw the battery panel in place.")
 			else
-				unlocked = 1
+				unlocked = TRUE
 				to_chat(user, "You unscrew the battery panel.")
 
-	if (istype(W, /obj/item/weapon/crowbar))
+	if (isprying(W))
 		if(unlocked)
 			if(open)
-				open = 0
-				overlays = null
+				open = FALSE
+				cut_overlays()
 				to_chat(user, "You crowbar the battery panel in place.")
 			else
 				if(unlocked)
-					open = 1
+					open = TRUE
 					to_chat(user, "You remove the battery panel.")
 
 	if (istype(W, /obj/item/weapon/stock_parts/cell))
@@ -90,8 +113,17 @@
 			if(cell)
 				to_chat(user, "There is a power cell already installed.")
 			else
-				user.drop_item()
-				W.loc = src
+				user.drop_from_inventory(W, src)
 				cell = W
 				to_chat(user, "You insert the power cell.")
-	updateicon()
+	update_icon()
+
+/obj/machinery/floodlight/deconstruct(disassembled)
+	playsound(loc, 'sound/effects/Glassbr3.ogg', VOL_EFFECTS_MASTER, 100, TRUE)
+	//var/obj/structure/floodlight_frame/F = new(loc) // TODO floodligh construction
+	//F.state = FLOODLIGHT_NEEDS_LIGHTS
+	//new /obj/item/light/tube/broken(loc)
+	..()
+
+/obj/machinery/floodlight/play_attack_sound(damage_amount, damage_type = BRUTE, damage_flag = 0)
+	playsound(loc, 'sound/effects/Glasshit.ogg', VOL_EFFECTS_MASTER, 75, TRUE)

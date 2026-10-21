@@ -7,12 +7,11 @@
 	time_to_live = 300
 	pass_flags = PASSTABLE | PASSGRILLE | PASSGLASS		//PASSGLASS is fine here, it's just so the visual effect can "flow" around glass
 
-/obj/effect/effect/smoke/chem/New()
-	..()
+/obj/effect/effect/smoke/chem/atom_init()
+	. = ..()
 	var/datum/reagents/R = new/datum/reagents(500)
 	reagents = R
 	R.my_atom = src
-	return
 
 /datum/effect/effect/system/smoke_spread/chem
 	smoke_type = /obj/effect/effect/smoke/chem
@@ -21,6 +20,7 @@
 	var/list/targetTurfs
 	var/list/wallList
 	var/density
+	var/color //it is used to give color to smoke, despite the reagents in it
 
 
 /datum/effect/effect/system/smoke_spread/chem/New()
@@ -42,7 +42,7 @@
 	cardinals = c
 	carry.copy_to(chemholder, carry.total_volume)
 
-	if(istype(loca, /turf/))
+	if(istype(loca, /turf))
 		location = loca
 	else
 		location = get_turf(loca)
@@ -54,7 +54,7 @@
 	//build affected area list
 	for(var/turf/T in view(range, location))
 		//cull turfs to circle
-		if(cheap_pythag(T.x - location.x, T.y - location.y) <= range)
+		if(HYPOTENUSE(T.x, T.y, location.x, location.y) <= range)
 			targetTurfs += T
 
 	//make secondary list for reagents that affect walls
@@ -76,13 +76,13 @@
 	var/area/A = get_area(location)
 
 	var/where = "[A.name] | [location.x], [location.y]"
-	var/whereLink = "<A HREF='?_src_=holder;adminplayerobservecoodjump=1;X=[location.x];Y=[location.y];Z=[location.z]'>[where]</a>"
+	var/whereLink = "<A href='byond://?_src_=holder;adminplayerobservecoodjump=1;X=[location.x];Y=[location.y];Z=[location.z]'>[where]</a>"
 
 	if(carry.my_atom.fingerprintslast)
 		var/mob/M = get_mob_by_key(carry.my_atom.fingerprintslast)
 		var/more = ""
 		if(M)
-			more = "(<A HREF='?_src_=holder;adminmoreinfo=\ref[M]'>?</a>)"
+			more = "(<A href='byond://?_src_=holder;adminmoreinfo=\ref[M]'>?</a>)"
 		message_admins("A chemical smoke reaction has taken place in ([whereLink])[contained]. Last associated key is [carry.my_atom.fingerprintslast][more].", 0, 1)
 		log_game("A chemical smoke reaction has taken place in ([where])[contained]. Last associated key is [carry.my_atom.fingerprintslast].")
 	else
@@ -133,7 +133,7 @@
 							if(istype(A, /obj/effect/effect/smoke/chem))	//skip the item if it is chem smoke
 								continue
 							else if(istype(A, /mob))
-								var/dist = cheap_pythag(T.x - location.x, T.y - location.y)
+								var/dist = HYPOTENUSE(T.x, T.y, location.x, location.y)
 								if(!dist)
 									dist = 1
 								R.reaction_mob(A, volume = R.volume / dist)
@@ -143,7 +143,8 @@
 
 
 	//build smoke icon
-	var/color = mix_color_from_reagents(chemholder.reagents.reagent_list)
+	if(!color)
+		color = mix_color_from_reagents(chemholder.reagents.reagent_list)
 	var/icon/I
 	if(color)
 		I = icon('icons/effects/chemsmoke.dmi')
@@ -166,9 +167,9 @@
 
 		var/offset = 0
 		var/points = round((radius * 2 * PI) / arcLength)
-		var/angle = round(ToDegrees(arcLength / radius), 1)
+		var/angle = round(TO_DEGREES(arcLength / radius), 1)
 
-		if(!IsInteger(radius))
+		if(!IS_INTEGER(radius))
 			offset = 45		//degrees
 
 		for(var/j = 0, j < points, j++)
@@ -192,13 +193,11 @@
 		chemholder.reagents.copy_to(smoke, chemholder.reagents.total_volume / dist, safety = 1)	//copy reagents to the smoke so mob/breathe() can handle inhaling the reagents
 	smoke.icon = I
 	smoke.layer = 6
-	smoke.dir = pick(cardinal)
+	smoke.set_dir(pick(cardinal))
 	smoke.pixel_x = -32 + rand(-8,8)
 	smoke.pixel_y = -32 + rand(-8,8)
 	walk_to(smoke, T)
-	smoke.opacity = 1		//switching opacity on after the smoke has spawned, and then
 	sleep(150+rand(0,20))	// turning it off before it is deleted results in cleaner
-	smoke.opacity = 0		// lighting and view range updates
 	fadeOut(smoke)
 	qdel(smoke)
 
@@ -209,7 +208,7 @@
 	var/step = A.alpha / frames
 	for(var/i = 0, i < frames, i++)
 		A.alpha -= step
-		sleep(world.tick_lag)
+		stoplag()
 	return
 
 //------------------------------------------
@@ -228,7 +227,7 @@
 			for(var/D in cardinal)
 				var/turf/target = get_step(current, D)
 				if(wallList)
-					if(istype(target, /turf/simulated/wall))
+					if(iswallturf(target))
 						if(!(target in wallList))
 							wallList += target
 						continue
@@ -239,9 +238,9 @@
 					continue
 				if(!(target in targetTurfs))
 					continue
-				if(current.c_airblock(target)) //this is needed to stop chemsmoke from passing through thin window walls
+				if(FAST_C_AIRBLOCK(current, target) & AIR_BLOCKED) //this is needed to stop chemsmoke from passing through thin window walls
 					continue
-				if(target.c_airblock(current)) 
+				if(FAST_C_AIRBLOCK(target, current) & AIR_BLOCKED)
 					continue
 				pending += target
 

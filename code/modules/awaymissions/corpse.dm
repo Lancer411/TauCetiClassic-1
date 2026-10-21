@@ -23,43 +23,44 @@
 	var/corpseidjob = null // Needs to be in quotes, such as "Clown" or "Chef." This just determines what the ID reads as, not their access
 	var/corpseidaccess = null //This is for access. See access.dm for which jobs give what access. Again, put in quotes. Use "Captain" if you want it to be all access.
 	var/corpseidicon = null //For setting it to be a gold, silver, centcomm etc ID
-	var/mutantrace = "human"
+	var/specie = HUMAN //Set specie of a new corpse
 
-/obj/effect/landmark/corpse/initialize()
+/obj/effect/landmark/corpse/atom_init()
+	. = ..()
 	createCorpse()
 
 /obj/effect/landmark/corpse/proc/createCorpse() //Creates a mob and checks for gear in each slot before attempting to equip it.
 	var/mob/living/carbon/human/M = new /mob/living/carbon/human (src.loc)
-	M.dna.mutantrace = mutantrace
+	M.set_species(specie)
 	M.real_name = src.name
 	M.death(1) //Kills the new mob
 	if(src.corpseuniform)
-		M.equip_to_slot_or_del(new src.corpseuniform(M), slot_w_uniform)
+		M.equip_to_slot_or_del(new corpseuniform(M), SLOT_W_UNIFORM)
 	if(src.corpsesuit)
-		M.equip_to_slot_or_del(new src.corpsesuit(M), slot_wear_suit)
+		M.equip_to_slot_or_del(new corpsesuit(M), SLOT_WEAR_SUIT)
 	if(src.corpseshoes)
-		M.equip_to_slot_or_del(new src.corpseshoes(M), slot_shoes)
+		M.equip_to_slot_or_del(new corpseshoes(M), SLOT_SHOES)
 	if(src.corpsegloves)
-		M.equip_to_slot_or_del(new src.corpsegloves(M), slot_gloves)
+		M.equip_to_slot_or_del(new corpsegloves(M), SLOT_GLOVES)
 	if(src.corpseradio)
-		M.equip_to_slot_or_del(new src.corpseradio(M), slot_l_ear)
+		M.equip_to_slot_or_del(new corpseradio(M), SLOT_L_EAR)
 	if(src.corpseglasses)
-		M.equip_to_slot_or_del(new src.corpseglasses(M), slot_glasses)
+		M.equip_to_slot_or_del(new corpseglasses(M), SLOT_GLASSES)
 	if(src.corpsemask)
-		M.equip_to_slot_or_del(new src.corpsemask(M), slot_wear_mask)
+		M.equip_to_slot_or_del(new corpsemask(M), SLOT_WEAR_MASK)
 	if(src.corpsehelmet)
-		M.equip_to_slot_or_del(new src.corpsehelmet(M), slot_head)
+		M.equip_to_slot_or_del(new corpsehelmet(M), SLOT_HEAD)
 	if(src.corpsebelt)
-		M.equip_to_slot_or_del(new src.corpsebelt(M), slot_belt)
+		M.equip_to_slot_or_del(new corpsebelt(M), SLOT_BELT)
 	if(src.corpsepocket1)
-		M.equip_to_slot_or_del(new src.corpsepocket1(M), slot_r_store)
+		M.equip_to_slot_or_del(new corpsepocket1(M), SLOT_R_STORE)
 	if(src.corpsepocket2)
-		M.equip_to_slot_or_del(new src.corpsepocket2(M), slot_l_store)
+		M.equip_to_slot_or_del(new corpsepocket2(M), SLOT_L_STORE)
 	if(src.corpseback)
-		M.equip_to_slot_or_del(new src.corpseback(M), slot_back)
+		M.equip_to_slot_or_del(new corpseback(M), SLOT_BACK)
 	if(src.corpseid == 1)
 		var/obj/item/weapon/card/id/W = new(M)
-		W.name = "[M.real_name]'s ID Card"
+		W.assign(M.real_name)
 		var/datum/job/jobdatum
 		for(var/jobtype in typesof(/datum/job))
 			var/datum/job/J = new jobtype
@@ -75,8 +76,7 @@
 				W.access = list()
 		if(corpseidjob)
 			W.assignment = corpseidjob
-		W.registered_name = M.real_name
-		M.equip_to_slot_or_del(W, slot_wear_id)
+		M.equip_to_slot_or_del(W, SLOT_WEAR_ID)
 	qdel(src)
 
 
@@ -91,10 +91,10 @@
 	name = "Syndicate Operative"
 	corpseuniform = /obj/item/clothing/under/syndicate
 	corpsesuit = /obj/item/clothing/suit/armor/vest
-	corpseshoes = /obj/item/clothing/shoes/swat
+	corpseshoes = /obj/item/clothing/shoes/boots/swat
 	corpsegloves = /obj/item/clothing/gloves/swat
 	corpseradio = /obj/item/device/radio/headset
-	corpsemask = /obj/item/clothing/mask/gas/coloured
+	corpsemask = /obj/item/clothing/mask/breath/gas/coloured
 	corpsehelmet = /obj/item/clothing/head/helmet/swat
 	corpseback = /obj/item/weapon/storage/backpack
 	corpseid = 1
@@ -107,10 +107,10 @@
 	name = "Syndicate Commando"
 	corpseuniform = /obj/item/clothing/under/syndicate
 	corpsesuit = /obj/item/clothing/suit/space/rig/syndi
-	corpseshoes = /obj/item/clothing/shoes/swat
+	corpseshoes = /obj/item/clothing/shoes/boots/swat
 	corpsegloves = /obj/item/clothing/gloves/swat
 	corpseradio = /obj/item/device/radio/headset
-	corpsemask = /obj/item/clothing/mask/gas/syndicate
+	corpsemask = /obj/item/clothing/mask/breath/gas/syndicate
 	corpsehelmet = /obj/item/clothing/head/helmet/space/rig/syndi
 	corpseback = /obj/item/weapon/tank/jetpack/oxygen
 	corpsepocket1 = /obj/item/weapon/tank/emergency_oxygen
@@ -118,14 +118,37 @@
 	corpseidjob = "Operative"
 	corpseidaccess = "Syndicate"
 
+/obj/effect/landmark/corpse/unathisoldier
+	name = "Unathi Soldier"
+	corpseback = /obj/item/weapon/storage/backpack
+	corpseuniform = /obj/item/clothing/under/tactical
+	corpseshoes = /obj/item/clothing/shoes/boots/combat
+	corpseradio = /obj/item/device/radio/headset
+	corpsemask = /obj/item/clothing/mask/breath/gas/coloured
+	corpsehelmet = /obj/item/clothing/head/helmet/swat
+	corpsesuit = /obj/item/clothing/suit/armor/bulletproof
+	corpseid = 0
+	specie = UNATHI
 
+/obj/effect/landmark/corpse/unathicommander
+	name = "Unathi Commander"
+	corpseback = /obj/item/weapon/tank/jetpack/oxygen
+	corpseuniform = /obj/item/clothing/under/syndicate/tacticool
+	corpseshoes = /obj/item/clothing/shoes/boots/combat
+	corpseradio = /obj/item/device/radio/headset
+	corpsemask = /obj/item/clothing/mask/breath/gas/coloured
+	corpsehelmet = /obj/item/clothing/head/helmet/space/unathi/breacher
+	corpsesuit = /obj/item/clothing/suit/space/unathi/breacher
+	corpseid = 1
+	corpseidjob = "Unathi Commander"
+	specie = UNATHI
 
 ///////////Civilians//////////////////////
 
 /obj/effect/landmark/corpse/chef
 	name = "Chef"
 	corpseuniform = /obj/item/clothing/under/rank/chef
-	corpsesuit = /obj/item/clothing/suit/chef/classic
+	corpsesuit = /obj/item/clothing/suit/chef_classic
 	corpseshoes = /obj/item/clothing/shoes/black
 	corpsehelmet = /obj/item/clothing/head/chefhat
 	corpseback = /obj/item/weapon/storage/backpack
@@ -154,7 +177,7 @@
 	corpseback = /obj/item/weapon/storage/backpack/industrial
 	corpseshoes = /obj/item/clothing/shoes/orange
 	corpsebelt = /obj/item/weapon/storage/belt/utility/full
-	corpsegloves = /obj/item/clothing/gloves/yellow
+	corpsegloves = /obj/item/clothing/gloves/insulated
 	corpsehelmet = /obj/item/clothing/head/hardhat/yellow
 	corpseid = 1
 	corpseidjob = "Station Engineer"
@@ -170,7 +193,7 @@
 	corpseuniform = /obj/item/clothing/under/rank/clown
 	corpseshoes = /obj/item/clothing/shoes/clown_shoes
 	corpseradio = /obj/item/device/radio/headset
-	corpsemask = /obj/item/clothing/mask/gas/clown_hat
+	corpsemask = /obj/item/clothing/mask/breath/gas/clown_hat
 	corpsepocket1 = /obj/item/weapon/bikehorn
 	corpseback = /obj/item/weapon/storage/backpack/clown
 	corpseid = 1
@@ -203,7 +226,6 @@
 	corpsemask = /obj/item/clothing/mask/breath
 	corpsehelmet = /obj/item/clothing/head/helmet/space/rig/mining
 
-
 /////////////////Officers//////////////////////
 
 /obj/effect/landmark/corpse/bridgeofficer
@@ -215,7 +237,6 @@
 	corpseglasses = /obj/item/clothing/glasses/sunglasses
 	corpseid = 1
 	corpseidjob = "Bridge Officer"
-	corpseidaccess = "Captain"
 
 /obj/effect/landmark/corpse/commander
 	name = "Commander"
@@ -226,8 +247,14 @@
 	corpsemask = /obj/item/clothing/mask/cigarette/cigar/cohiba
 	corpsehelmet = /obj/item/clothing/head/centhat
 	corpsegloves = /obj/item/clothing/gloves/swat
-	corpseshoes = /obj/item/clothing/shoes/swat
+	corpseshoes = /obj/item/clothing/shoes/boots/swat
 	corpsepocket1 = /obj/item/weapon/lighter/zippo
 	corpseid = 1
 	corpseidjob = "Commander"
-	corpseidaccess = "Captain"
+
+/obj/effect/landmark/corpse/securityofficer
+	name = "Security Officer"
+	corpseuniform = /obj/item/clothing/under/rank/security
+	corpseradio = /obj/item/device/radio/headset/headset_sec
+	corpseshoes = /obj/item/clothing/shoes/boots
+	corpseid = 0

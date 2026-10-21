@@ -1,7 +1,7 @@
-var/const/SAFETY_COOLDOWN = 100
+var/global/const/SAFETY_COOLDOWN = 100
 
 /obj/item/weapon/circuitboard/recycler
-	name = "Circuit board (Recycler)"
+	details = "circuit board (Recycler)"
 	board_type = "machine"
 	build_path = /obj/machinery/recycler
 	origin_tech = "engineering = 3"
@@ -14,8 +14,8 @@ var/const/SAFETY_COOLDOWN = 100
 	icon = 'icons/obj/recycling.dmi'
 	icon_state = "grinder-o0"
 	layer = MOB_LAYER+1 // Overhead
-	anchored = 1
-	density = 1
+	anchored = TRUE
+	density = TRUE
 	var/safety_mode = 0 // Temporality stops the machine if it detects a mob
 	var/grinding = 0
 	var/icon_name = "grinder-o"
@@ -23,9 +23,9 @@ var/const/SAFETY_COOLDOWN = 100
 	var/eat_dir = WEST
 	var/chance_to_recycle = 1
 
-/obj/machinery/recycler/New()
+/obj/machinery/recycler/atom_init()
 	// On us
-	..()
+	. = ..()
 	component_parts = list()
 	component_parts += new /obj/item/weapon/circuitboard/recycler(null)
 	component_parts += new /obj/item/weapon/stock_parts/manipulator(null)
@@ -33,6 +33,8 @@ var/const/SAFETY_COOLDOWN = 100
 	update_icon()
 
 /obj/machinery/recycler/RefreshParts()
+	..()
+
 	for(var/obj/item/weapon/stock_parts/manipulator/M in component_parts)
 		chance_to_recycle = 25 * M.rating //% of materials salvaged
 	chance_to_recycle = min(100, chance_to_recycle)
@@ -50,8 +52,6 @@ var/const/SAFETY_COOLDOWN = 100
 
 /obj/machinery/recycler/attackby(obj/item/I, mob/user, params)
 	add_fingerprint(user)
-	if (istype(I, /obj/item/weapon/card/emag))
-		emag_act(user)
 	if(default_deconstruction_screwdriver(user, "grinder-oOpen", "grinder-o0", I))
 		return
 
@@ -68,14 +68,16 @@ var/const/SAFETY_COOLDOWN = 100
 	..()
 	return
 
-/obj/machinery/recycler/proc/emag_act(mob/user)
-	if(!emagged)
-		emagged = 1
-		if(safety_mode)
-			safety_mode = 0
-			update_icon()
-		playsound(src.loc, "sparks", 75, 1, -1)
-		to_chat(user, "<span class='notice'>You use the cryptographic sequencer on the [src.name].</span>")
+/obj/machinery/recycler/emag_act(mob/user)
+	if(emagged)
+		return FALSE
+	emagged = 1
+	if(safety_mode)
+		safety_mode = 0
+		update_icon()
+	playsound(src, pick(SOUNDIN_SPARKS), VOL_EFFECTS_MASTER)
+	to_chat(user, "<span class='notice'>You use the cryptographic sequencer on the [src.name].</span>")
+	return TRUE
 
 /obj/machinery/recycler/update_icon()
 	..()
@@ -107,10 +109,10 @@ var/const/SAFETY_COOLDOWN = 100
 				eat(AM)
 			else
 				stop(AM)
-		else if(istype(AM, /obj/item))
+		else if(isitem(AM))
 			recycle(AM)
 		else // Can't recycle
-			playsound(src.loc, 'sound/machines/buzz-sigh.ogg', 50, 0)
+			playsound(src, 'sound/machines/buzz-sigh.ogg', VOL_EFFECTS_MASTER, null, FALSE)
 			AM.forceMove(src.loc)
 
 /obj/machinery/recycler/proc/recycle(obj/item/I, sound = 1)
@@ -119,7 +121,7 @@ var/const/SAFETY_COOLDOWN = 100
 		return
 
 	if(sound)
-		playsound(src.loc, 'sound/items/Welder.ogg', 50, 1)
+		playsound(src, 'sound/items/Welder.ogg', VOL_EFFECTS_MASTER)
 	var/chance_mod = 1
 	if(!istype(I, /obj/item/weapon/scrap_lump))
 		chance_mod = 5
@@ -130,13 +132,13 @@ var/const/SAFETY_COOLDOWN = 100
 
 /obj/machinery/recycler/proc/stop(mob/living/L)
 	set waitfor = 0
-	playsound(src.loc, 'sound/machines/buzz-sigh.ogg', 50, 0)
+	playsound(src, 'sound/machines/buzz-sigh.ogg', VOL_EFFECTS_MASTER, null, FALSE)
 	safety_mode = 1
 	update_icon()
 	L.forceMove(src.loc)
 
 	sleep(SAFETY_COOLDOWN)
-	playsound(src.loc, 'sound/machines/ping.ogg', 50, 0)
+	playsound(src, 'sound/machines/ping.ogg', VOL_EFFECTS_MASTER, null, FALSE)
 	safety_mode = 0
 	update_icon()
 
@@ -145,16 +147,16 @@ var/const/SAFETY_COOLDOWN = 100
 	L.forceMove(src.loc)
 
 	if(issilicon(L))
-		playsound(src.loc, 'sound/items/Welder.ogg', 50, 1)
+		playsound(src, 'sound/items/Welder.ogg', VOL_EFFECTS_MASTER)
 	else
-		L.emote("scream",,, 1)
+		L.emote("scream")
 
 	var/gib = 1
 	// By default, the emagged recycler will gib all non-carbons. (human simple animal mobs don't count)
 	if(iscarbon(L))
 		gib = 0
 		if(L.stat == CONSCIOUS)
-			L.emote("scream",,, 1)
+			L.emote("scream")
 		add_blood(L)
 
 	if(!blood && !issilicon(L))
@@ -168,13 +170,13 @@ var/const/SAFETY_COOLDOWN = 100
 
 	// Instantly lie down, also go unconscious from the pain, before you die.
 	L.Paralyse(5)
-	L.anchored = 1
+	L.anchored = TRUE
 	// For admin fun, var edit emagged to 2.
 	if(gib || emagged == 2)
 		L.gib()
-		playsound(src.loc, 'sound/effects/splat.ogg', 50, 1)
+		playsound(src, 'sound/effects/splat.ogg', VOL_EFFECTS_MASTER)
 	else if(emagged == 1)
 		for(var/i = 1 to 3)
 			sleep(10)
 			L.adjustBruteLoss(80)
-	L.anchored = 0
+	L.anchored = FALSE

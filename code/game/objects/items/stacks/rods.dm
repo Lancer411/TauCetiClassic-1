@@ -3,62 +3,94 @@
 	desc = "Some rods. Can be used for building, or something."
 	singular_name = "metal rod"
 	icon_state = "rods"
-	flags = FPRINT | TABLEPASS| CONDUCT
-	w_class = 3.0
-	force = 9.0
-	throwforce = 15.0
-	throw_speed = 5
+	flags = CONDUCT
+	w_class = SIZE_SMALL
+	force = 2.0
+	throwforce = 5.0
+	throw_speed = 3
 	throw_range = 20
 	m_amt = 1875
 	max_amount = 60
+	usesound = 'sound/weapons/Genhit.ogg'
 	attack_verb = list("hit", "bludgeoned", "whacked")
+	qualities = list(
+		QUALITY_PRYING = 0.5
+	)
 
-/obj/item/stack/rods/attackby(obj/item/W, mob/user)
-	..()
-	if (istype(W, /obj/item/weapon/weldingtool))
-		var/obj/item/weapon/weldingtool/WT = W
+/obj/item/stack/rods/update_icon()
+	var/amount = get_amount()
+	if((amount <= 5) && (amount > 0))
+		icon_state = "rods-[amount]"
+	else
+		icon_state = "rods"
 
-		if(amount < 2)
-			to_chat(user, "\red You need at least two rods to do this.")
+/obj/item/stack/rods/attackby(obj/item/I, mob/user, params)
+	if(iswelding(I))
+		var/obj/item/weapon/weldingtool/WT = I
+
+		if(get_amount() < 2)
+			to_chat(user, "<span class='warning'>You need at least two rods to do this!</span>")
 			return
 
-		if(WT.remove_fuel(0,user))
-			var/obj/item/stack/sheet/metal/new_item = new(usr.loc)
-			new_item.add_to_stacks(usr)
-			for (var/mob/M in viewers(src))
-				M.show_message("\red [src] is shaped into metal by [user.name] with the weldingtool.", 3, "\red You hear welding.", 2)
-			var/obj/item/stack/rods/R = src
-			src = null
-			var/replace = (user.get_inactive_hand()==R)
-			R.use(2)
-			if (!R && replace)
+		if(WT.use(0, user))
+			var/obj/item/stack/sheet/metal/new_item = new(usr.loc, , TRUE)
+			user.visible_message(
+				"[user.name] shaped [src] into metal with the welding tool.",
+				"<span class='notice'>You shape [src] into metal with the welding tool.</span>",
+				"<span class='italics'>You hear welding.</span>")
+
+			var/replace = (user.get_inactive_hand() == src)
+			use(2)
+			if(!QDELETED(src) && replace)
 				user.put_in_hands(new_item)
+	if(iscutter(I))
+		playsound(src, 'sound/items/Wirecutter.ogg', VOL_EFFECTS_MASTER)
+		user.visible_message(
+			"[user.name] cuts the [src], turning it into a crossbow bolt.",
+			"<span class='notice'>You cuts the [src], turning it into a crossbow bolt.</span>"
+			)
+		var/obj/item/weapon/arrow/new_item = new(user.loc)
+		use(1)
+		var/replace = (user.get_inactive_hand() == src)
+		if(!QDELETED(src) && replace)
+			user.put_in_hands(new_item)
+
+	else
+		return ..()
+
+/obj/item/stack/rods/attack_self(mob/living/user)
+	var/atom/build_loc = loc
+	if(ismob(build_loc))
+		build_loc = build_loc.loc
+
+	if(!isturf(build_loc))
+		return FALSE
+
+	add_fingerprint(user)
+
+	if(locate(/obj/structure/grille, build_loc))
+		for(var/obj/structure/grille/G in build_loc)
+			if(!G.destroyed)
+				return TRUE
+
+			if(!use(1))
+				continue
+
+			G.update_integrity(G.max_integrity)
+			G.density = TRUE
+			G.destroyed = FALSE
+			update_icon()
+
+		return FALSE
+
+	try_to_build_grille(user, build_loc)
+
+/obj/item/stack/rods/proc/try_to_build_grille(mob/living/user, build_loc, spawn_unanchored = TRUE)
+	to_chat(usr, "<span class='notice'>Assembling grille...</span>")
+	if (!use_tool(src, usr, 20, 2))
 		return
 
-/obj/item/stack/rods/attack_self(mob/user)
-	src.add_fingerprint(user)
+	var/obj/structure/grille/F = new(build_loc, spawn_unanchored)
 
-	if(!istype(user.loc,/turf)) return 0
-
-	if (locate(/obj/structure/grille, usr.loc))
-		for(var/obj/structure/grille/G in usr.loc)
-			if (G.destroyed)
-				G.health = 10
-				G.density = 1
-				G.destroyed = 0
-				G.icon_state = "grille"
-				use(1)
-			else
-				return 1
-	else
-		if(amount < 2)
-			to_chat(user, "\blue You need at least two rods to do this.")
-			return
-		to_chat(usr, "\blue Assembling grille...")
-		if (!do_after(usr, 10, target = usr))
-			return
-		var/obj/structure/grille/F = new /obj/structure/grille/ ( usr.loc )
-		to_chat(usr, "\blue You assemble a grille")
-		F.add_fingerprint(usr)
-		use(2)
-	return
+	to_chat(usr, "<span class='notice'>You assembled \a [F].</span>")
+	F.add_fingerprint(usr)

@@ -1,5 +1,7 @@
 // Machinery serving as a media source.
 /obj/machinery/media
+	resistance_flags = FULL_INDESTRUCTIBLE
+
 	var/playing=0
 	var/media_url=""
 	var/media_start_time=0
@@ -46,7 +48,7 @@
 			L.update_music()
 
 /obj/machinery/media/proc/update_media_source()
-	var/area/A = get_area_master(src)
+	var/area/A = get_area(src)
 
 	// Check if there's a media source already.
 	if(A.media_source && A.media_source!=src)
@@ -60,7 +62,7 @@
 	master_area=A
 
 /obj/machinery/media/proc/disconnect_media_source()
-	var/area/A = get_area_master(src)
+	var/area/A = get_area(src)
 
 	// Sanity
 	if(!A)
@@ -82,8 +84,8 @@
 
 	master_area=null
 
-/obj/machinery/media/Move()
-	..()
+/obj/machinery/media/Move(NewLoc, Dir = 0, step_x = 0, step_y = 0)
+	. = ..()
 	if(anchored)
 		update_music()
 
@@ -93,8 +95,8 @@
 	if(anchored)
 		update_music()
 
-/obj/machinery/media/New()
-	..()
+/obj/machinery/media/atom_init()
+	. = ..()
 	update_media_source()
 
 /obj/machinery/media/Destroy()

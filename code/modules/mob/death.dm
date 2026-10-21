@@ -1,53 +1,34 @@
+/mob/proc/spawn_gibs()
+	new /obj/effect/gibspawner/generic(get_turf(loc), src)
+
 //This is the proc for gibbing a mob. Cannot gib ghosts.
 //added different sort of gibs and animations. N
 /mob/proc/gib()
 	death(1)
-	var/atom/movable/overlay/animation = null
-	monkeyizing = 1
-	canmove = 0
-	icon = null
-	invisibility = 101
 
-	animation = new(loc)
-	animation.icon_state = "blank"
-	animation.icon = 'icons/mob/mob.dmi'
-	animation.master = src
+	spawn_gibs()
 
-//	flick("gibbed-m", animation)
-	gibs(loc, viruses, dna)
+	qdel(src)
 
-	dead_mob_list -= src
-	spawn(15)
-		if(animation)	qdel(animation)
-		if(src)			qdel(src)
+/mob/proc/dust_process()
+	var/icon/I = build_disappear_icon(src, lying ? -lying_current : 0)
+	var/atom/movable/overlay/animation = new(loc)
+	animation.transform = transform
+	flick(I, animation)
 
-
-//This is the proc for turning a mob into ash. Mostly a copy of gib code (above).
-//Originally created for wizard disintegrate. I've removed the virus code since it's irrelevant here.
-//Dusting robots does not eject the MMI, so it's a bit more powerful than gib() /N
-/mob/proc/dust()
+	playsound(src, 'sound/weapons/sear.ogg', VOL_EFFECTS_MASTER)
+	emote("scream")
 	death(1)
-	var/atom/movable/overlay/animation = null
-	monkeyizing = 1
-	canmove = 0
-	icon = null
-	invisibility = 101
+	qdel(src)
 
-	animation = new(loc)
-	animation.icon_state = "blank"
-	animation.icon = 'icons/mob/mob.dmi'
-	animation.master = src
+	QDEL_IN(animation, 2 SECONDS)
 
-//	flick("dust-m", animation)
+/mob/proc/dust()
 	new /obj/effect/decal/cleanable/ash(loc)
-
-	dead_mob_list -= src
-	spawn(15)
-		if(animation)	qdel(animation)
-		if(src)			qdel(src)
-
+	dust_process()
 
 /mob/proc/death(gibbed)
+	SEND_SIGNAL(src, COMSIG_MOB_DIED, gibbed)
 
 	//Quick fix for corpses kept propped up in chairs. ~Z
 	drop_r_hand()
@@ -56,7 +37,13 @@
 
 	timeofdeath = world.time
 
-	living_mob_list -= src
+	alive_mob_list -= src
 	dead_mob_list += src
 	clear_fullscreens()
-	return ..(gibbed)
+	setDrugginess(0)
+
+	for(var/mob/M as anything in remote_hearers)
+		remove_remote_hearer(M)
+
+	for(var/mob/M as anything in remote_hearing)
+		M.remove_remote_hearer(src)

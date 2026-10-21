@@ -1,60 +1,76 @@
 /mob/living/simple_animal/mouse
 	name = "mouse"
 	real_name = "mouse"
-	desc = "It's a small, disease-ridden rodent."
+	desc = "Это маленький, поражённый болезнями грызун."
 	icon_state = "mouse_gray"
 	icon_living = "mouse_gray"
 	icon_dead = "mouse_gray_dead"
-	speak = list("Squeek!","SQUEEK!","Squeek?")
-	speak_emote = list("squeeks","squeeks","squiks")
-	emote_hear = list("squeeks","squeaks","squiks")
-	emote_see = list("runs in a circle", "shakes", "scritches at something")
-	pass_flags = PASSTABLE
-	small = 1
+	icon_move = "mouse_gray_move"
+	speak = list("Пии!","ПИИ!","Пии?")
+	speak_emote = list("пищит")
+	emote_hear = list("пищит")
+	emote_see = list("бегает вокруг","чешется")
+	pass_flags = PASSTABLE | PASSMOB
+	w_class = SIZE_MINUSCULE
 	speak_chance = 1
-	turns_per_move = 5
+	melee_damage = 0
+	turns_per_move = 8
 	see_in_dark = 6
-	maxHealth = 5
-	health = 5
-	meat_type = /obj/item/weapon/reagent_containers/food/snacks/meat
+	maxHealth = 15
+	health = 15
+	nutrition = NUTRITION_LEVEL_STARVING
+	butcher_results = list(/obj/item/weapon/reagent_containers/food/snacks/meat = 1)
 	response_help  = "pets the"
 	response_disarm = "gently pushes aside the"
 	response_harm   = "stamps on the"
-	density = 0
+	attacktext = "gnaw"
+	density = FALSE
 	var/body_color //brown, gray and white, leave blank for random
 	layer = MOB_LAYER
 	min_oxy = 16 //Require atleast 16kPA oxygen
 	minbodytemp = 223		//Below -50 Degrees Celcius
 	maxbodytemp = 323	//Above 50 Degrees Celcius
-	universal_speak = 0
 	universal_understand = 1
 	holder_type = /obj/item/weapon/holder/mouse
 	ventcrawler = 2
+	faction = "untouchable"
+	var/changes_color = TRUE
+	var/can_emote_snuffles = TRUE
+
+	has_head = TRUE
+	has_arm = TRUE
+	has_leg = TRUE
+
+	show_examine_log = FALSE
 
 /mob/living/simple_animal/mouse/Life()
 	..()
-	if(!stat && prob(speak_chance))
+	if(stat == CONSCIOUS && prob(speak_chance))
 		for(var/mob/M in view())
-			M << 'sound/effects/mousesqueek.ogg'
-
-	if(!ckey && stat == CONSCIOUS && prob(0.5))
+			M.playsound_local(loc, 'sound/effects/mousesqueek.ogg', VOL_EFFECTS_MASTER)
+	if(!ckey && stat == CONSCIOUS && prob(0.5) && can_emote_snuffles)
 		stat = UNCONSCIOUS
 		icon_state = "mouse_[body_color]_sleep"
-		wander = 0
+		wander = FALSE
 		speak_chance = 0
 		//snuffles
-	else if(stat == UNCONSCIOUS)
+	else if(stat == UNCONSCIOUS && can_emote_snuffles)
 		if(ckey || prob(1))
 			stat = CONSCIOUS
 			icon_state = "mouse_[body_color]"
-			wander = 1
+			wander = TRUE
 		else if(prob(5))
 			emote("snuffles")
+	if(nutrition > 0 && prob(10))
+		nutrition -= 1
 
-/mob/living/simple_animal/mouse/New()
-	..()
+/mob/living/simple_animal/mouse/atom_init()
+	. = ..()
 	name = "[name] ([rand(1, 1000)])"
 	real_name = name
+
+	if(!changes_color)
+		return
 
 	if(!body_color)
 		body_color = pick( list("brown","gray","white") )
@@ -68,24 +84,22 @@
 	icon_state = "mouse_[body_color]"
 	icon_living = "mouse_[body_color]"
 	icon_dead = "mouse_[body_color]_dead"
-	desc = "It's a small [body_color] rodent, often seen hiding in maintenance areas and making a nuisance of itself."
-
+	icon_move = "mouse_[body_color]_move"
+	desc = "Это маленький, поражённый болезнями грызун."
 
 /mob/living/simple_animal/mouse/proc/splat()
-	src.health = 0
-	src.stat = DEAD
-	src.icon_dead = "mouse_[body_color]_splat"
-	src.icon_state = "mouse_[body_color]_splat"
-	layer = MOB_LAYER
-	if(client)
-		client.time_died_as_mouse = world.time
+	death()
+	if(changes_color)
+		icon_dead = "mouse_[body_color]_splat"
+		icon_state = "mouse_[body_color]_splat"
 
 /mob/living/simple_animal/mouse/MouseDrop(atom/over_object)
 
 	var/mob/living/carbon/H = over_object
-	if(!istype(H) || !Adjacent(H)) return ..()
+	if(!istype(H) || !Adjacent(H) || ismob(H.loc))
+		return ..()
 
-	if(H.a_intent == "help")
+	if(H.a_intent == INTENT_HELP)
 		get_scooped(H)
 		return
 	else
@@ -104,7 +118,7 @@
 
 	if (layer != TURF_LAYER+0.2)
 		layer = TURF_LAYER+0.2
-		to_chat(src, text("\blue You are now hiding."))
+		to_chat(src, text("<span class='notice'>You are now hiding.</span>"))
 		/*
 		for(var/mob/O in oviewers(src, null))
 			if ((O.client && !( O.blinded )))
@@ -112,7 +126,7 @@
 		*/
 	else
 		layer = MOB_LAYER
-		to_chat(src, text("\blue You have stopped hiding."))
+		to_chat(src, text("<span class='notice'>You have stopped hiding.</span>"))
 		/*
 		for(var/mob/O in oviewers(src, null))
 			if ((O.client && !( O.blinded )))
@@ -121,7 +135,7 @@
 
 //make mice fit under tables etc? this was hacky, and not working
 /*
-/mob/living/simple_animal/mouse/Move(var/dir)
+/mob/living/simple_animal/mouse/Move(NewLoc, Dir = 0, step_x = 0, step_y = 0)
 
 	var/turf/target_turf = get_step(src,dir)
 	//CanReachThrough(src.loc, target_turf, src)
@@ -129,7 +143,7 @@
 	if(target_turf.ZCanPass(get_turf(src),1))
 		can_fit_under = 1
 
-	..(dir)
+	. = ..()
 	if(can_fit_under)
 		src.loc = target_turf
 	for(var/d in cardinal)
@@ -146,18 +160,16 @@
 	to_chat(src, "<span class='warning'>You are too small to pull anything.</span>")
 	return
 
-/mob/living/simple_animal/mouse/Crossed(AM as mob|obj)
+/mob/living/simple_animal/mouse/Crossed(atom/movable/AM)
 	if( ishuman(AM) )
-		if(!stat)
+		if(stat == CONSCIOUS)
 			var/mob/M = AM
-			to_chat(M, "\blue [bicon(src)] Squeek!")
-			M << 'sound/effects/mousesqueek.ogg'
-	..()
+			to_chat(M, "<span class='notice'>[bicon(src)] Squeek!</span>")
+			playsound(src, 'sound/effects/mousesqueek.ogg', VOL_EFFECTS_MASTER)
+	. = ..()
 
 /mob/living/simple_animal/mouse/death()
 	layer = MOB_LAYER
-	if(client)
-		client.time_died_as_mouse = world.time
 	..()
 
 /*
@@ -180,9 +192,56 @@
 	holder_type = /obj/item/weapon/holder/mouse/brown
 
 //TOM IS ALIVE! SQUEEEEEEEE~K :)
+ADD_TO_GLOBAL_LIST(/mob/living/simple_animal/mouse/brown/Tom, chief_animal_list)
 /mob/living/simple_animal/mouse/brown/Tom
 	name = "Tom"
-	desc = "Jerry the cat is not amused."
+	desc = "Он не нравится коту Джерри..."
 	response_help  = "pets"
 	response_disarm = "gently pushes aside"
 	response_harm   = "splats"
+
+
+/mob/living/simple_animal/mouse/rat
+	name = "Rat"
+	melee_damage = 2
+	ventcrawler = 0
+	icon_state = "rat"
+	icon_living = "rat"
+	icon_dead = "rat_dead"
+	icon_move = "rat"
+	desc = "Это большая вредная мышь."
+	maxHealth = 50
+	health = 50
+	changes_color = FALSE
+	can_emote_snuffles = FALSE
+	holder_type = null
+
+/mob/living/simple_animal/mouse/rat/atom_init()
+	. = ..()
+	AddComponent(/datum/component/gnawing)
+
+/mob/living/simple_animal/mouse/nuke
+	name = "nuclear mousperative"
+	desc = "Syndicate's failed experiment. Some mad scientist tried to modify murine cheese craving to nuclear desire. Sadly, these rodents proved to be too small and stupid to properly insert the disk into a bomb."
+	icon_state = "mouse_nuke"
+	icon_living = "mouse_nuke"
+	icon_move = "mouse_nuke_move"
+	body_color = "nuke"
+	holder_type = /obj/item/weapon/holder/mouse/nuke
+
+	changes_color = FALSE
+
+	min_oxy = 0
+	max_tox = 0
+	max_co2 = 0
+	minbodytemp = 0
+	maxbodytemp = 500
+	melee_damage = 1
+	maxHealth = 30
+	health = 30
+	speak = list("Beep!","BEEP!","Beep?")
+
+/mob/living/simple_animal/mouse/nuke/death()
+	..()
+	new /obj/effect/gibspawner/generic(loc)
+	qdel(src)

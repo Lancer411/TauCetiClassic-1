@@ -1,65 +1,23 @@
-/mob/dead/observer/say(var/message)
-	message = sanitize(copytext(message, 1, MAX_MESSAGE_LEN))
+/mob/dead/observer/say(message)
+	message = sanitize(message)
 
 	if (!message)
 		return
 
-	log_say("Ghost/[src.key] : [message]")
+	log_say("Ghost/[key_name(src)] : [message]")
 
-	if (src.client)
-		if(src.client.prefs.muted & MUTE_DEADCHAT)
-			to_chat(src, "\red You cannot talk in deadchat (muted).")
+	. = say_dead(message)
+
+
+/mob/dead/observer/me_emote(message, message_type = SHOWMSG_VISUAL, intentional=FALSE)
+	log_emote("Ghost/[key_name(src)] : [message]")
+
+	if(client)
+		if(client.prefs.muted & MUTE_OOC || IS_ON_ADMIN_CD(client, ADMIN_CD_OOC))
+			to_chat(src, "<span class='alert'>You cannot emote in deadchat (muted).</span>")
 			return
 
-		if (src.client.handle_spam_prevention(message,MUTE_DEADCHAT))
+		if(client.handle_spam_prevention(message, ADMIN_CD_OOC))
 			return
 
-	. = src.say_dead(message)
-
-
-/mob/dead/observer/emote(act, type, message)
-	message = sanitize_simple(copytext(message, 1, MAX_MESSAGE_LEN))
-
-	if(!message)
-		return
-
-	if(act != "me")
-		return
-
-	log_emote("Ghost/[src.key] : [message]")
-
-	if(src.client)
-		if(src.client.prefs.muted & MUTE_DEADCHAT)
-			to_chat(src, "\red You cannot emote in deadchat (muted).")
-			return
-
-		if(src.client.handle_spam_prevention(message, MUTE_DEADCHAT))
-			return
-
-	. = src.emote_dead(message)
-
-/*
-	for (var/mob/M in hearers(null, null))
-		if (!M.stat)
-			if(M.job == "Chaplain")
-				if (prob (49))
-					M.show_message("<span class='game'><i>You hear muffled speech... but nothing is there...</i></span>", 2)
-					if(prob(20))
-						playsound(src.loc, pick('sound/effects/ghost.ogg','sound/effects/ghost2.ogg'), 10, 1)
-				else
-					M.show_message("<span class='game'><i>You hear muffled speech... you can almost make out some words...</i></span>", 2)
-//				M.show_message("<span class='game'><i>[stutter(message)]</i></span>", 2)
-					if(prob(30))
-						playsound(src.loc, pick('sound/effects/ghost.ogg','sound/effects/ghost2.ogg'), 10, 1)
-			else
-				if (prob(50))
-					return
-				else if (prob (95))
-					M.show_message("<span class='game'><i>You hear muffled speech... but nothing is there...</i></span>", 2)
-					if(prob(20))
-						playsound(src.loc, pick('sound/effects/ghost.ogg','sound/effects/ghost2.ogg'), 10, 1)
-				else
-					M.show_message("<span class='game'><i>You hear muffled speech... you can almost make out some words...</i></span>", 2)
-//				M.show_message("<span class='game'><i>[stutter(message)]</i></span>", 2)
-					playsound(src.loc, pick('sound/effects/ghost.ogg','sound/effects/ghost2.ogg'), 10, 1)
-*/
+	return emote_dead(message)

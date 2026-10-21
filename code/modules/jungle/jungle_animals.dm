@@ -4,16 +4,16 @@
 	icon_state = "x3"
 	var/spawn_type
 	var/mob/living/spawned_animal
-	invisibility = 101
 
-/obj/effect/landmark/animal_spawner/New()
+/obj/effect/landmark/animal_spawner/atom_init()
+	. = ..()
+
 	if(!spawn_type)
-		var/new_type = pick(typesof(/obj/effect/landmark/animal_spawner) - /obj/effect/landmark/animal_spawner)
+		var/new_type = pick(subtypesof(/obj/effect/landmark/animal_spawner))
 		new new_type(get_turf(src))
-		qdel(src)
+		return INITIALIZE_HINT_QDEL
 
-	SSobj.processing |= src
-	spawned_animal = new spawn_type(get_turf(src))
+	START_PROCESSING(SSobj, src)
 
 /obj/effect/landmark/animal_spawner/process()
 	//if any of our animals are killed, spawn new ones
@@ -24,7 +24,7 @@
 			spawned_animal.loc = locate(src.x + rand(-12,12), src.y + rand(-12,12), src.z)
 
 /obj/effect/landmark/animal_spawner/Destroy()
-	SSobj.processing.Remove(src)
+	STOP_PROCESSING(SSobj, src)
 	return ..()
 
 /obj/effect/landmark/animal_spawner/panther
@@ -51,26 +51,26 @@
 /mob/living/simple_animal/hostile/panther
 	name = "panther"
 	desc = "A long sleek, black cat with sharp teeth and claws."
-	icon = 'code/modules/jungle/jungle.dmi'
+	icon = 'icons/misc/jungle.dmi'
 	icon_state = "panther"
 	icon_living = "panther"
 	icon_dead = "panther_dead"
 	icon_gib = "panther_dead"
 	speak_chance = 0
 	turns_per_move = 3
-	meat_type = /obj/item/weapon/reagent_containers/food/snacks/meat
+	butcher_results = list(/obj/item/weapon/reagent_containers/food/snacks/meat = 3)
 	response_help = "pets the"
 	response_disarm = "gently pushes aside the"
 	response_harm = "hits the"
-	stop_automated_movement_when_pulled = 0
+	stop_automated_movement_when_pulled = FALSE
 	maxHealth = 50
 	health = 50
+	w_class = SIZE_HUMAN
 
 	harm_intent_damage = 8
-	melee_damage_lower = 15
-	melee_damage_upper = 15
-	attacktext = "slashes"
-	attack_sound = 'sound/weapons/bite.ogg'
+	melee_damage = 15
+	attacktext = "gnaw"
+	attack_sound = list('sound/weapons/bite.ogg')
 
 	layer = 3.1		//so they can stay hidde under the /obj/structure/bush
 	var/stalk_tick_delay = 3
@@ -84,15 +84,17 @@
 /mob/living/simple_animal/hostile/panther/FindTarget()
 	. = ..()
 	if(.)
-		emote("nashes at [.]")
+		me_emote("nashes at [.]")
 
-/mob/living/simple_animal/hostile/panther/AttackingTarget()
-	. =..()
-	var/mob/living/L = .
-	if(istype(L))
-		if(prob(15))
-			L.Weaken(3)
-			L.visible_message("<span class='danger'>\the [src] knocks down \the [L]!</span>")
+/mob/living/simple_animal/hostile/panther/UnarmedAttack(atom/A)
+	. = ..()
+	if(!isliving(A))
+		return
+	var/mob/living/L = A
+	if(prob(15))
+		L.Weaken(3)
+		L.Stun(1)
+		L.visible_message("<span class='danger'>\the [src] knocks down \the [L]!</span>")
 
 /mob/living/simple_animal/hostile/panther/AttackTarget()
 	..()
@@ -109,26 +111,26 @@
 /mob/living/simple_animal/hostile/snake
 	name = "snake"
 	desc = "A sinuously coiled, venomous looking reptile."
-	icon = 'code/modules/jungle/jungle.dmi'
+	icon = 'icons/misc/jungle.dmi'
 	icon_state = "snake"
 	icon_living = "snake"
 	icon_dead = "snake_dead"
 	icon_gib = "snake_dead"
 	speak_chance = 0
 	turns_per_move = 1
-	meat_type = /obj/item/weapon/reagent_containers/food/snacks/meat
+	butcher_results = list(/obj/item/weapon/reagent_containers/food/snacks/meat = 2)
 	response_help = "pets the"
 	response_disarm = "gently pushes aside the"
 	response_harm = "hits the"
-	stop_automated_movement_when_pulled = 0
+	stop_automated_movement_when_pulled = FALSE
 	maxHealth = 25
 	health = 25
+	w_class = SIZE_HUMAN
 
 	harm_intent_damage = 2
-	melee_damage_lower = 3
-	melee_damage_upper = 10
-	attacktext = "bites"
-	attack_sound = 'sound/weapons/bite.ogg'
+	melee_damage = 7
+	attacktext = "gnaw"
+	attack_sound = list('sound/weapons/bite.ogg')
 
 	layer = 3.1		//so they can stay hidde under the /obj/structure/bush
 	var/stalk_tick_delay = 3
@@ -142,12 +144,12 @@
 /mob/living/simple_animal/hostile/snake/FindTarget()
 	. = ..()
 	if(.)
-		emote("hisses wickedly")
+		me_emote("hisses wickedly")
 
-/mob/living/simple_animal/hostile/snake/AttackingTarget()
-	. =..()
-	var/mob/living/L = .
-	if(istype(L))
+/mob/living/simple_animal/hostile/snake/UnarmedAttack(atom/A)
+	. = ..()
+	if(isliving(A))
+		var/mob/living/L = A
 		L.apply_damage(rand(3,12), TOX)
 
 /mob/living/simple_animal/hostile/snake/AttackTarget()

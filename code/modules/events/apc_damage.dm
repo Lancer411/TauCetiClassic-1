@@ -1,25 +1,36 @@
 /datum/event/apc_damage
-	var/apcSelectionRange	= 25
+	var/apcSelectionRange = 25
 
 /datum/event/apc_damage/start()
 	var/obj/machinery/power/apc/A = acquire_random_apc()
-
-	var/severity_range = rand(0,15)
+	var/severity_range = rand(7,15)
+	if(severity == EVENT_LEVEL_MODERATE)
+		severity_range = rand(15,23)
 
 	for(var/obj/machinery/power/apc/apc in range(severity_range,A))
-		if(is_valid_apc(apc))
-			apc.emagged = 1
-			apc.update_icon()
+		apc.aidisabled = TRUE
+		if(!is_valid_apc(apc))
+			continue
+		if(prob(50))
+			apc.disable_random_categories()
+
+		if(prob(50))
+			apc.disable_autocharge()
+		else if(prob(50))
+			apc.toggle_power_use()
+		else
+			apc.make_short_circuit()
+
+		apc.needs_reboot = TRUE
+		apc.operating = 0
+		apc.update()
+		apc.update_icon()
 
 /datum/event/apc_damage/proc/acquire_random_apc()
-	var/list/possibleEpicentres = list()
+	var/list/possibleEpicentres = landmarks_list["lightsout"]
 	var/list/apcs = list()
 
-	for(var/obj/effect/landmark/newEpicentre in landmarks_list)
-		if(newEpicentre.name == "lightsout")
-			possibleEpicentres += newEpicentre
-
-	if(!possibleEpicentres.len)
+	if(!length(possibleEpicentres))
 		return
 
 	var/epicentre = pick(possibleEpicentres)
@@ -28,7 +39,7 @@
 			apcs += apc
 			// Greatly increase the chance for APCs in maintenance areas to be selected
 			var/area/A = get_area(apc)
-			if(istype(A,/area/maintenance))
+			if(istype(A,/area/station/maintenance))
 				apcs += apc
 				apcs += apc
 
@@ -44,4 +55,4 @@
 		return 0
 
 	var/turf/T = get_turf(apc)
-	return !apc.emagged && T && (T.z in config.player_levels)
+	return !apc.emagged && !apc.needs_reboot && T && (T.z in SSmapping.levels_by_any_trait(list(ZTRAIT_STATION, ZTRAIT_MINING)))

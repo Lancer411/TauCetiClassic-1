@@ -8,27 +8,28 @@
 /obj/effect/jungle_tribe_spawn
 	name = "campfire"
 	desc = "Looks cosy, in an alien sort of way."
-	icon = 'code/modules/jungle/jungle.dmi'
+	icon = 'icons/misc/jungle.dmi'
 	icon_state = "campfire"
-	anchored = 1
+	anchored = TRUE
 	var/list/tribesmen = list()
 	var/list/enemy_players = list()
 	var/tribe_type = 1
 
-/obj/effect/jungle_tribe_spawn/New()
-	SSobj.processing |= src
+/obj/effect/jungle_tribe_spawn/atom_init()
+	. = ..()
+	START_PROCESSING(SSobj, src)
 	tribe_type = rand(1,5)
 
 	var/num_tribesmen = rand(3,6)
-	for(var/i=0,i<num_tribesmen,i++)
-		var/mob/living/simple_animal/hostile/tribesman/T = new(src.loc)
+	for (var/i in 1 to num_tribesmen)
+		var/mob/living/simple_animal/hostile/tribesman/T = new(loc)
 		T.my_type = tribe_type
 		T.x += rand(-6,6)
 		T.y += rand(-6,6)
 		tribesmen += T
 
 /obj/effect/jungle_tribe_spawn/Destroy()
-	SSobj.processing.Remove(src)
+	STOP_PROCESSING(SSobj, src)
 	return ..()
 
 /obj/effect/jungle_tribe_spawn/process()
@@ -47,7 +48,7 @@
 /mob/living/simple_animal/hostile/tribesman
 	name = "tribesman"
 	desc = "A noble savage, doesn't seem to know what to make of you."
-	icon = 'code/modules/jungle/jungle.dmi'
+	icon = 'icons/misc/jungle.dmi'
 	icon_state = "native1"
 	icon_living = "native1"
 	icon_dead = "native1_dead"
@@ -56,20 +57,20 @@
 	speak_emote = list("chatters")
 	emote_hear = list("chatters to themselves","chatters away at something","whistles")
 	emote_see = list("bends down to examine something")
-	melee_damage_lower = 5
-	melee_damage_upper = 15
+	melee_damage = 10
 	turns_per_move = 1
-	stop_automated_movement_when_pulled = 0
+	stop_automated_movement_when_pulled = FALSE
+	w_class= SIZE_HUMAN
 	var/my_type = 1
 
-/mob/living/simple_animal/hostile/tribesman/New()
-	if(prob(33))
-		ranged = 1
+/mob/living/simple_animal/hostile/tribesman/atom_init()
+	. = ..()
+	//if(prob(33)) - this mob has no projectiletype var set, and causes runtime when trying to shoot non existent spears.
+	//	ranged = TRUE
 
-	spawn(8)
-		icon_state = "native[my_type]"
-		icon_living = "native[my_type]"
-		icon_dead = "native[my_type]_dead"
+	icon_state = "native[my_type]"
+	icon_living = "native[my_type]"
+	icon_dead = "native[my_type]_dead"
 
 /mob/living/simple_animal/hostile/tribesman/ListTargets()
 	var/list/targets = list()
@@ -82,10 +83,10 @@
 /mob/living/simple_animal/hostile/tribesman/FindTarget()
 	. = ..()
 	if(.)
-		emote("waves a spear at [.]")
+		me_emote("waves a spear at [.]")
 
 /mob/living/simple_animal/hostile/tribesman/OpenFire(target_mob)
-	visible_message("\red <b>[src]</b> throws a spear at [target_mob]!", 1)
+	visible_message("<span class='warning'><b>[src]</b> throws a spear at [target_mob]!</span>")
 	flick(src, "native[my_type]_act")
 
 	var/tturf = get_turf(target_mob)

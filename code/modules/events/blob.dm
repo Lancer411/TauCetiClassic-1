@@ -2,27 +2,9 @@
 	announceWhen	= 12
 	endWhen			= 120
 
-	var/obj/effect/blob/core/Blob
-
-
-/datum/event/blob/announce()
-	command_alert("Confirmed outbreak of level 7 biohazard aboard [station_name()]. All personnel must contain the outbreak.", "Biohazard Alert")
-	world << sound('sound/AI/outbreak7.ogg')
-
-
 /datum/event/blob/start()
-	var/turf/T = pick(blobstart)
-	if(!T)
+	if(!length(landmarks_list["blobstart"])) // add return codes for create_spawner
 		kill()
 		return
-	Blob = new /obj/effect/blob/core(T, 120)
-	for(var/i = 1; i < rand(3, 4), i++)
-		Blob.process()
 
-
-/datum/event/blob/tick()
-	if(!Blob)
-		kill()
-		return
-	if(IsMultiple(activeFor, 3))
-		Blob.process()
+	create_spawner(/datum/spawner/blob_event)

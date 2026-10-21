@@ -25,7 +25,7 @@
 		if(T.x < trg_min_x || !trg_min_x) trg_min_x	= T.x
 		if(T.y < trg_min_y || !trg_min_y) trg_min_y	= T.y
 
-	var/list/refined_src = new/list()
+	var/list/refined_src = list()
 	for(var/turf/T in turfs_src)
 		refined_src += T
 		refined_src[T] = new/datum/coords
@@ -33,7 +33,7 @@
 		C.x_pos = (T.x - src_min_x)
 		C.y_pos = (T.y - src_min_y)
 
-	var/list/refined_trg = new/list()
+	var/list/refined_trg = list()
 	for(var/turf/T in turfs_trg)
 		refined_trg += T
 		refined_trg[T] = new/datum/coords
@@ -41,7 +41,7 @@
 		C.x_pos = (T.x - trg_min_x)
 		C.y_pos = (T.y - trg_min_y)
 
-	var/list/toupdate = new/list()
+	var/list/toupdate = list()
 
 	var/copiedobjs = list()
 
@@ -58,24 +58,24 @@
 					var/old_icon1 = T.icon
 
 					if(platingRequired)
-						if(istype(B, /turf/space))
+						if(isenvironmentturf(B))
 							continue moving
 
 					var/turf/X = new T.type(B)
-					X.dir = old_dir1
+					X.set_dir(old_dir1)
 					X.icon_state = old_icon_state1
 					X.icon = old_icon1 //Shuttle floors are in shuttle.dmi while the defaults are floors.dmi
 
 
-					var/list/mobs = new/list()
-					var/list/newmobs = new/list()
+					var/list/mobs = list()
+					var/list/newmobs = list()
 
 					for(var/mob/M in T)
 
-						if(!istype(M,/mob) || istype(M, /mob/aiEye)) continue // If we need to check for more mobs, I'll add a variable
+						if(!istype(M,/mob) || istype(M, /mob/camera/Eye)) continue // If we need to check for more mobs, I'll add a variable
 						mobs += M
 
-					for(var/mob/M in mobs)
+					for(var/mob/M as anything in mobs)
 						newmobs += DuplicateObject(M , 1)
 
 					for(var/mob/M in newmobs)
@@ -102,19 +102,19 @@
 
 
 
-	/*var/list/doors = new/list()
+	/*var/list/doors = list()
 
 	if(toupdate.len)
 		for(var/turf/simulated/T1 in toupdate)
 			for(var/obj/machinery/door/D2 in T1)
 				doors += D2
 			if(T1.parent)
-				air_master.groups_to_rebuild += T1.parent
+				SSair.groups_to_rebuild += T1.parent
 			else
-				air_master.tiles_to_update += T1
+				SSair.tiles_to_update += T1
 
 	for(var/obj/O in doors)
-		O:update_nearby_tiles(1)*/
+		O:update_nearby_tiles()*/
 
 
 

@@ -1,6 +1,10 @@
 /turf/simulated/shuttle/wall/newes_shuttle
 	name = "shuttle wall"
-	icon = 'code/modules/locations/shuttles/shuttle.dmi'
+	cases = list("стена шаттла", "стены шаттла", "стене шаттла", "стену шаттла", "стеной шаттла", "стене шаттла")
+	icon = 'icons/locations/shuttles/shuttle.dmi'
 
 /turf/simulated/shuttle/wall/newes_shuttle/mining
-	icon = 'code/modules/locations/shuttles/shuttle_mining.dmi'
+	icon = 'icons/locations/shuttles/shuttle_mining.dmi'
+
+/turf/simulated/shuttle/wall/newes_shuttle/evac
+	icon = 'icons/locations/shuttles/evac_shuttle.dmi'

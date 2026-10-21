@@ -16,8 +16,8 @@
 	var/frequency = 1451
 	var/broadcasting = null
 	var/listening = 1.0
-	flags = FPRINT | TABLEPASS| CONDUCT
-	w_class = 2.0
+	flags = CONDUCT
+	w_class = SIZE_TINY
 	item_state = "electronic"
 	throw_speed = 4
 	throw_range = 20
@@ -31,27 +31,28 @@
 		dat = "[src.temp]<BR><BR><A href='byond://?src=\ref[src];temp=1'>Clear</A>"
 	else
 		dat = {"
-<B>Persistent Signal Locator</B><HR>
 Frequency:
 <A href='byond://?src=\ref[src];freq=-10'>-</A>
 <A href='byond://?src=\ref[src];freq=-2'>-</A> [format_frequency(src.frequency)]
 <A href='byond://?src=\ref[src];freq=2'>+</A>
 <A href='byond://?src=\ref[src];freq=10'>+</A><BR>
 
-<A href='?src=\ref[src];refresh=1'>Refresh</A>"}
-	user << browse(dat, "window=radio")
-	onclose(user, "radio")
+<A href='byond://?src=\ref[src];refresh=1'>Refresh</A>"}
+
+	var/datum/browser/popup = new(user, "radio", "Persistent Signal Locator")
+	popup.set_content(dat)
+	popup.open()
 	return
 
 /obj/item/weapon/locator/Topic(href, href_list)
 	..()
-	if (usr.stat || usr.restrained())
+	if (usr.incapacitated())
 		return
 	var/turf/current_location = get_turf(usr)//What turf is the user on?
-	if(!current_location||current_location.z==2)//If turf was not found or they're on z level 2.
+	if(!current_location || !SSmapping.has_level(current_location.z) || is_centcom_level(current_location.z) || is_junkyard_level(current_location.z))//If turf was not found or they're on centcom z level.
 		to_chat(usr, "The [src] is malfunctioning.")
 		return
-	if ((usr.contents.Find(src) || (in_range(src, usr) && istype(src.loc, /turf))))
+	if (Adjacent(usr))
 		usr.set_machine(src)
 		if (href_list["refresh"])
 			src.temp = "<B>Persistent Signal Locator</B><HR>"
@@ -60,7 +61,7 @@ Frequency:
 			if (sr)
 				src.temp += "<B>Located Beacons:</B><BR>"
 
-				for(var/obj/item/device/radio/beacon/W in world)
+				for(var/obj/item/device/radio/beacon/W in radio_beacon_list)
 					if (W.frequency == src.frequency)
 						var/turf/tr = get_turf(W)
 						if (tr.z == sr.z && tr)
@@ -78,14 +79,14 @@ Frequency:
 							src.temp += "[W.code]-[dir2text(get_dir(sr, tr))]-[direct]<BR>"
 
 				src.temp += "<B>Extranneous Signals:</B><BR>"
-				for (var/obj/item/weapon/implant/tracking/W in world)
-					if (!W.implanted || !(istype(W.loc,/datum/organ/external) || ismob(W.loc)))
+				for (var/obj/item/weapon/implant/tracking/W in global.implant_list)
+					if (!W.implanted_mob)
 						continue
-					else
-						var/mob/M = W.loc
-						if (M.stat == DEAD)
-							if (M.timeofdeath + 6000 < world.time)
-								continue
+
+					var/mob/M = W.implanted_mob
+					if (M.stat == DEAD)
+						if (M.timeofdeath + 6000 < world.time)
+							continue
 
 					var/turf/tr = get_turf(W)
 					if (tr.z == sr.z && tr)
@@ -100,7 +101,7 @@ Frequency:
 									direct = "weak"
 							src.temp += "[W.id]-[dir2text(get_dir(sr, tr))]-[direct]<BR>"
 
-				src.temp += "<B>You are at \[[sr.x],[sr.y],[sr.z]\]</B> in orbital coordinates.<BR><BR><A href='byond://?src=\ref[src];refresh=1'>Refresh</A><BR>"
+				src.temp += "<B>You are at \[[COORD(sr)]\]</B> in orbital coordinates.<BR><BR><A href='byond://?src=\ref[src];refresh=1'>Refresh</A><BR>"
 			else
 				src.temp += "<B><FONT color='red'>Processing Error:</FONT></B> Unable to locate orbital position.<BR>"
 		else
@@ -115,7 +116,7 @@ Frequency:
 		else
 			for(var/mob/M in viewers(1, src))
 				if (M.client)
-					src.attack_self(M)
+					attack_self(M)
 	return
 
 
@@ -124,25 +125,30 @@ Frequency:
  */
 /obj/item/weapon/hand_tele
 	name = "hand tele"
-	desc = "A portable item using blue-space technology."
+	desc = "A portable item using bluespace technology."
 	icon = 'icons/obj/device.dmi'
 	icon_state = "hand_tele"
-	item_state = "electronic"
+	item_state = "hand_tele"
 	throwforce = 5
-	w_class = 2.0
+	w_class = SIZE_TINY
 	throw_speed = 3
 	throw_range = 5
 	m_amt = 10000
 	origin_tech = "magnets=1;bluespace=3"
 
 /obj/item/weapon/hand_tele/attack_self(mob/user)
+	if(!user.IsAdvancedToolUser())
+		to_chat(user, "<span class='red'>You don't have the dexterity to do this!</span>")
+		return
 	var/turf/current_location = get_turf(user)//What turf is the user on?
-	if(!current_location||current_location.z==2||current_location.z>=7)//If turf was not found or they're on z level 2 or >7 which does not currently exist.
+	if(!current_location || !SSmapping.has_level(current_location.z) || is_centcom_level(current_location.z) || is_junkyard_level(current_location.z))//If turf was not found or they're on z level 2 or >7 which does not currently exist.
 		to_chat(user, "<span class='notice'>\The [src] is malfunctioning.</span>")
 		return
 	var/list/L = list(  )
-	for(var/obj/machinery/computer/teleporter/com in machines)
+	for(var/obj/machinery/computer/teleporter/com in teleporter_list)
 		if(com.target)
+			if(is_centcom_level(com.target.z))
+				continue
 			if(com.power_station && com.power_station.teleporter_hub && com.power_station.engaged)
 				L["[com.id] (Active)"] = com.target
 			else
@@ -155,21 +161,22 @@ Frequency:
 	if(turfs.len)
 		L["None (Dangerous)"] = pick(turfs)
 	var/t1 = input(user, "Please select a teleporter to lock in on.", "Hand Teleporter") in L
-	if ((user.get_active_hand() != src || user.stat || user.restrained()))
+	if ((user.get_active_hand() != src || user.incapacitated()))
 		return
 	var/count = 0	//num of portals from this teleport in world
-	for(var/obj/effect/portal/PO in world)
+	for(var/obj/effect/portal/PO in portal_list)
 		if(PO.creator == src)	count++
 	if(count >= 3)
-		user.show_message("<span class='notice'>\The [src] is recharging!</span>")
+		to_chat(user, "<span class='notice'>\The [src] is recharging!</span>")
 		return
 	var/T = L[t1]
-	for(var/mob/O in hearers(user, null))
-		O.show_message("<span class='notice'>Locked In.</span>", 2)
+
+	user.audible_message("<span class='notice'>Locked In.</span>") //why not personal audible message?
+
 	var/obj/effect/portal/P = new /obj/effect/portal( get_turf(src) )
 	P.target = T
 	P.creator = src
-	src.add_fingerprint(user)
+	add_fingerprint(user)
 	return
 
 

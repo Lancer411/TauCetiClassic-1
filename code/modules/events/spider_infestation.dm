@@ -1,31 +1,26 @@
-/var/global/sent_spiders_to_station = 0
-
 /datum/event/spider_infestation
-	announceWhen	= 400
-	oneShot			= 1
-
+	announceWhen = 400
+	announcement = new /datum/announcement/centcomm/aliens
 	var/spawncount = 1
-
 
 /datum/event/spider_infestation/setup()
 	announceWhen = rand(announceWhen, announceWhen + 50)
-	spawncount = rand(8, 12)	//spiderlings only have a 50% chance to grow big and strong
-	sent_spiders_to_station = 0
-
-/datum/event/spider_infestation/announce()
-	command_alert("Unidentified lifesigns detected coming aboard [station_name()]. Secure any exterior access, including ducting and ventilation.", "Lifesign Alert")
-	world << sound('sound/AI/aliens.ogg')
-
+	spawncount = rand(4 * severity, 6 * severity)
 
 /datum/event/spider_infestation/start()
-	var/list/vents = list()
-	for(var/obj/machinery/atmospherics/unary/vent_pump/temp_vent in machines)
-		if(temp_vent.loc.z == ZLEVEL_STATION && !temp_vent.welded && temp_vent.network)
-			if(temp_vent.network.normal_members.len > 50)
-				vents += temp_vent
+	var/list/vents = get_vents()
 
-	while((spawncount >= 1) && vents.len)
+	if(!vents.len)
+		message_admins("An event attempted to spawn spiders but no suitable vents were found. Shutting down.")
+		return
+
+	var/list/spawned_spiderlings = list()
+	while(spawncount >= 1)
 		var/obj/vent = pick(vents)
-		new /obj/effect/spider/spiderling(vent.loc)
+		spawned_spiderlings += new /obj/structure/spider/spiderling(vent.loc)
 		vents -= vent
 		spawncount--
+
+	if(length(spawned_spiderlings))
+		var/obj/structure/spider/spiderling/S = pick(spawned_spiderlings)
+		notify_ghosts("Spider infestation!", source = S, action = NOTIFY_ORBIT, header = "Spider Infestation")

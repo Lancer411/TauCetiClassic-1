@@ -4,7 +4,8 @@
 	pass_flags = PASSTABLE | PASSGLASS | PASSGRILLE
 	damage = 40
 	damage_type = BURN
-	flag = "laser"
+	sharp = TRUE // concentrated burns
+	flag = LASER
 	eyeblur = 4
 	var/frequency = 1
 	hitscan = 1
@@ -13,6 +14,10 @@
 	tracer_type = /obj/effect/projectile/laser/tracer
 	impact_type = /obj/effect/projectile/laser/impact
 
+/obj/item/projectile/beam/atom_init()
+	. = ..()
+	proj_act_sound = SOUNDIN_LASERACT
+
 /obj/item/projectile/beam/practice
 	name = "laser"
 	icon_state = "laser"
@@ -20,8 +25,12 @@
 	damage = 0
 	damage_type = BURN
 	fake = 1
-	flag = "laser"
+	flag = LASER
 	eyeblur = 2
+
+/obj/item/projectile/beam/practice/atom_init()
+	. = ..()
+	proj_act_sound = null
 
 /obj/item/projectile/beam/scatter
 	name = "laser pellet"
@@ -69,79 +78,91 @@
 	tracer_type = /obj/effect/projectile/emitter/tracer
 	impact_type = /obj/effect/projectile/emitter/impact
 
-/obj/item/projectile/beam/emitter/Destroy()
-	..()
-	return QDEL_HINT_PUTINPOOL
-
 /obj/item/projectile/beam/emitter/singularity_pull()
 	return //don't want the emitters to miss
 
-/obj/item/projectile/beam/lastertag/blue
+/obj/item/projectile/beam/emitter/on_hit(atom/target, def_zone = BP_CHEST, blocked = 0)
+	if(ishuman(target))
+		var/mob/living/carbon/human/H = target
+		if((HULK in H.mutations) && H.hulk_activator == ACTIVATOR_EMITTER_BEAM)
+			H.try_mutate_to_hulk(H)
+
+/obj/item/projectile/beam/lasertag
 	name = "lasertag beam"
-	icon_state = "bluelaser"
 	pass_flags = PASSTABLE | PASSGLASS | PASSGRILLE
 	damage = 0
 	damage_type = BURN
-	fake = 1
-	flag = "laser"
+	fake = TRUE
+	flag = LASER
+
+	var/lasertag_color = "none"
+
+/obj/item/projectile/beam/lasertag/atom_init()
+	. = ..()
+	proj_act_sound = null
+
+/obj/item/projectile/beam/lasertag/on_hit(atom/target, def_zone = BP_CHEST, blocked = 0)
+	if(ishuman(target))
+		var/mob/living/carbon/human/H = target
+		if(istype(H.wear_suit, /obj/item/clothing/suit/lasertag))
+			var/obj/item/clothing/suit/lasertag/L = H.wear_suit
+			if(L.lasertag_color != lasertag_color)
+				H.Stun(1)
+				H.Weaken(2)
+	return TRUE
+
+/obj/item/projectile/beam/lasertag/blue
+	icon_state = "bluelaser"
+	lasertag_color = "blue"
 
 	muzzle_type = /obj/effect/projectile/laser_blue/muzzle
 	tracer_type = /obj/effect/projectile/laser_blue/tracer
 	impact_type = /obj/effect/projectile/laser_blue/impact
 
-	on_hit(atom/target, blocked = 0)
-		if(istype(target, /mob/living/carbon/human))
-			var/mob/living/carbon/human/M = target
-			if(istype(M.wear_suit, /obj/item/clothing/suit/redtag))
-				M.Weaken(5)
-		return 1
-
-/obj/item/projectile/beam/lastertag/red
-	name = "lasertag beam"
+/obj/item/projectile/beam/lasertag/red
 	icon_state = "laser"
-	pass_flags = PASSTABLE | PASSGLASS | PASSGRILLE
-	damage = 0
-	damage_type = BURN
-	fake = 1
-	flag = "laser"
+	lasertag_color = "red"
 
-	on_hit(atom/target, blocked = 0)
-		if(istype(target, /mob/living/carbon/human))
-			var/mob/living/carbon/human/M = target
-			if(istype(M.wear_suit, /obj/item/clothing/suit/bluetag))
-				M.Weaken(5)
-		return 1
+	/*
+	We don't announce seperate muzzle_types, since parent's laser is already red.
+	*/
 
-/obj/item/projectile/beam/lastertag/omni//A laser tag bolt that stuns EVERYONE
-	name = "lasertag beam"
+/obj/item/projectile/beam/lasertag/omni//A laser tag bolt that stuns EVERYONE
 	icon_state = "omnilaser"
-	pass_flags = PASSTABLE | PASSGLASS | PASSGRILLE
-	damage = 0
-	damage_type = BURN
-	flag = "laser"
 
 	muzzle_type = /obj/effect/projectile/laser_omni/muzzle
 	tracer_type = /obj/effect/projectile/laser_omni/tracer
 	impact_type = /obj/effect/projectile/laser_omni/impact
 
-	on_hit(atom/target, blocked = 0)
-		if(istype(target, /mob/living/carbon/human))
-			var/mob/living/carbon/human/M = target
-			if((istype(M.wear_suit, /obj/item/clothing/suit/bluetag))||(istype(M.wear_suit, /obj/item/clothing/suit/redtag)))
-				M.Weaken(5)
-		return 1
-
 /obj/item/projectile/beam/sniper
 	name = "sniper beam"
 	icon_state = "laser"
-	damage = 60
-	stun = 5
-	weaken = 5
+	damage = 50
 	stutter = 5
+	armor_multiplier = 0.5
 
 	muzzle_type = /obj/effect/projectile/laser/muzzle
 	tracer_type = /obj/effect/projectile/laser/tracer
 	impact_type = /obj/effect/projectile/laser/impact
+
+/obj/item/projectile/beam/rails
+	name = "rails beam"
+	icon_state = "omnilaser"
+	plane = ABOVE_HUD_PLANE
+
+	damage = 50
+	stun = 5
+	weaken = 5
+	stutter = 5
+
+	flag = BULLET
+	pass_flags = PASSTABLE
+	damage_type = BRUTE
+	sharp = TRUE
+
+	muzzle_type = /obj/effect/projectile/rails/tracer // yes, tracer as muzzle!
+	tracer_type = /obj/effect/projectile/rails/tracer
+	impact_type = /obj/effect/projectile/rails/impact
 
 /obj/item/projectile/beam/stun
 	name = "stun beam"
@@ -150,8 +171,31 @@
 	damage = 0
 	agony = 40
 	damage_type = HALLOSS
+	sharp = FALSE // not a laser
 	stutter = 5
 
 	muzzle_type = /obj/effect/projectile/stun/muzzle
 	tracer_type = /obj/effect/projectile/stun/tracer
 	impact_type = /obj/effect/projectile/stun/impact
+
+/obj/item/projectile/beam/stun/atom_init()
+	. = ..()
+	proj_act_sound = null
+
+/obj/item/projectile/beam/cult_laser
+	name = "beam"
+	icon_state = "emitter"
+	damage = 5
+
+	muzzle_type = /obj/effect/projectile/emitter/muzzle/cult
+	tracer_type = /obj/effect/projectile/emitter/tracer/cult
+	impact_type = /obj/effect/projectile/emitter/impact/cult
+
+/obj/item/projectile/beam/cult_laser/atom_init()
+	. = ..()
+	def_zone = ran_zone()
+
+/obj/item/projectile/beam/cult_laser/Bump(atom/A, forced=0)
+	if(istype(A, /mob/living/simple_animal/hostile/pylon/cult) || istype(A, /obj/structure/cult/pylon) || isconstruct(A) || istype(A, /obj/effect/anomaly/bluespace/cult_portal))
+		return FALSE
+	return ..()

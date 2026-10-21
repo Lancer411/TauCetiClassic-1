@@ -28,15 +28,17 @@
 	icon_state = "abed"
 
 /obj/structure/stool/bed/attack_paw(mob/user)
-	return src.attack_hand(user)
+	return attack_hand(user)
 
 /obj/structure/stool/bed/CanPass(atom/movable/mover)
-	if(ishuman(mover) && mover.checkpass(PASSCRAWL))
+	// todo: we should not change mover properties here, this method is only for attempt to pass
+	// part of future mob layer / crawl refactoring
+	if(buckled_mob != mover && iscarbon(mover) && mover.checkpass(PASSCRAWL))
 		mover.layer = 2.7
 	return ..()
 
 /obj/structure/stool/bed/CheckExit(atom/movable/O as mob|obj)
-	if(istype(O) && O.checkpass(PASSCRAWL))
+	if(buckled_mob != O && iscarbon(O) && O.checkpass(PASSCRAWL))
 		O.layer = 4.0
 	return ..()
 
@@ -59,50 +61,58 @@
 	name = "roller bed"
 	icon = 'icons/obj/rollerbed.dmi'
 	icon_state = "down"
-	anchored = 0
+	anchored = FALSE
 	var/type_roller = /obj/item/roller
 
 /obj/structure/stool/bed/roller/attackby(obj/item/weapon/W, mob/user)
 	if(istype(W,src) || istype(W, /obj/item/roller_holder))
+		user.SetNextMove(CLICK_CD_INTERACT)
 		if(buckled_mob)
-			user_unbuckle_mob()
+			user_unbuckle_mob(user)
 		else
 			visible_message("[user] collapses \the [src.name].")
 			new type_roller(get_turf(src))
-			spawn(0)
-				qdel(src)
-		return
-	..()
+			qdel(src)
+	else
+		..()
 
 /obj/structure/stool/bed/roller/CanPass(atom/movable/mover)
-	if(ishuman(mover) && mover.checkpass(PASSCRAWL))
-		return 0
+	if(iscarbon(mover) && mover.checkpass(PASSCRAWL))
+		return TRUE
 	return ..()
+
+/obj/structure/stool/bed/roller/Move(NewLoc, Dir = 0, step_x = 0, step_y = 0)
+	. = ..()
+
+	if(moving_diagonally)
+		return .
+
+	if(has_gravity(src))
+		playsound(src, 'sound/effects/roll.ogg', VOL_EFFECTS_MASTER)
 
 /obj/item/roller
 	name = "roller bed"
 	desc = "A collapsed roller bed that can be carried around."
 	icon = 'icons/obj/rollerbed.dmi'
 	icon_state = "folded"
-	w_class = 4 // Can't be put in backpacks. Oh well.
+	w_class = SIZE_NORMAL // Can't be put in backpacks. Oh well.
 	var/type_bed = /obj/structure/stool/bed/roller
 	var/type_holder = /obj/item/roller_holder
-
 
 /obj/item/roller/attack_self(mob/user)
 	var/obj/structure/stool/bed/roller/R = new type_bed(user.loc)
 	R.add_fingerprint(user)
 	qdel(src)
 
-/obj/item/roller/attackby(obj/item/weapon/W, mob/user)
-	if(istype(W, /obj/item/roller_holder))
-		var/obj/item/roller_holder/RH = W
+/obj/item/roller/attackby(obj/item/I, mob/user, params)
+	if(istype(I, /obj/item/roller_holder))
+		var/obj/item/roller_holder/RH = I
 		if(!RH.held)
 			to_chat(user, "<span class='notice'>You collect the roller bed.</span>")
-			src.loc = RH
+			forceMove(RH)
 			RH.held = src
 			return
-	..()
+	return ..()
 
 /obj/item/roller_holder
 	name = "roller bed rack"
@@ -112,8 +122,8 @@
 	var/held = /obj/item/roller
 	var/type_bed = /obj/structure/stool/bed/roller
 
-/obj/item/roller_holder/New()
-	..()
+/obj/item/roller_holder/atom_init()
+	. = ..()
 	held = new held(src)
 
 /obj/item/roller_holder/attack_self(mob/user)
@@ -130,16 +140,19 @@
 
 /obj/structure/stool/bed/roller/post_buckle_mob(mob/living/M)
 	if(M == buckled_mob)
-		density = 1
+		if(M.crawling)
+			M.SetCrawling(FALSE)
+			M.layer = 4.0
+		density = TRUE
 		icon_state = "up"
 	else
-		density = 0
+		density = FALSE
 		icon_state = "down"
 	return ..()
 
 /obj/structure/stool/bed/roller/MouseDrop(over_object, src_location, over_location)
 	..()
-	if((over_object == usr && (in_range(src, usr) || usr.contents.Find(src))))
+	if(over_object == usr && Adjacent(usr))
 		if(!ishuman(usr))
 			return
 		if(buckled_mob)
@@ -152,14 +165,14 @@
 /obj/structure/stool/bed/attackby(obj/item/weapon/W, mob/user)
 	..()
 	if(istype(W, /obj/item/weapon/grab))
+		if(user.is_busy()) return
 		var/obj/item/weapon/grab/G = W
 		var/mob/living/L = G.affecting
 		user.visible_message("<span class='notice'>[user] attempts to buckle [L] into \the [src]!</span>")
-		if(do_after(user, 20, target = src))
+		if(G.use_tool(src, user, 20, volume = 50))
 			L.loc = loc
 			if(buckle_mob(L))
-				L.visible_message(\
-					"<span class='danger'>[L.name] is buckled to [src] by [user.name]!</span>",\
-					"<span class='danger'>You are buckled to [src] by [user.name]!</span>",\
+				L.visible_message(
+					"<span class='danger'>[L.name] is buckled to [src] by [user.name]!</span>",
+					"<span class='danger'>You are buckled to [src] by [user.name]!</span>",
 					"<span class='notice'>You hear metal clanking.</span>")
-	return

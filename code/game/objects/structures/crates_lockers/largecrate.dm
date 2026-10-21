@@ -3,15 +3,16 @@
 	desc = "A hefty wooden crate."
 	icon = 'icons/obj/storage.dmi'
 	icon_state = "densecrate"
-	density = 1
-	flags = FPRINT
+	density = TRUE
+
+	hit_particle_type = /particles/tool/digging/wood
 
 /obj/structure/largecrate/attack_hand(mob/user)
 	to_chat(user, "<span class='notice'>You need a crowbar to pry this open!</span>")
 	return
 
 /obj/structure/largecrate/attackby(obj/item/weapon/W, mob/user)
-	if(istype(W, /obj/item/weapon/crowbar))
+	if(isprying(W))
 		new /obj/item/stack/sheet/wood(src)
 		var/turf/T = get_turf(src)
 		for(var/atom/movable/M in contents)
@@ -22,6 +23,11 @@
 		qdel(src)
 	else
 		return attack_hand(user)
+
+/obj/structure/largecrate/Destroy()
+	if(isturf(loc))
+		new /obj/effect/abstract/particle_holder(loc, /particles/cargo_infill, PARTICLE_FADEOUT|PARTICLE_FLICK)
+	return ..()
 
 /obj/structure/largecrate/mule
 	icon_state = "mulecrate"

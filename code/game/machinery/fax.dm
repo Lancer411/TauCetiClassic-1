@@ -1,30 +1,36 @@
-var/list/obj/machinery/faxmachine/allfaxes = list()
-var/list/alldepartments = list("Central Command")
+#define TYPE_PAPER 1
+#define TYPE_PHOTO 2
+#define TYPE_BUNDLE 3
+
+var/global/list/obj/machinery/faxmachine/allfaxes = list()
+var/global/list/alldepartments = list("Central Command")
 
 /obj/machinery/faxmachine
 	name = "fax machine"
-	icon = 'icons/obj/library.dmi'
+	icon = 'icons/obj/bureaucracy.dmi'
 	icon_state = "fax"
 	req_one_access = list(access_lawyer, access_heads)
-	anchored = 1
-	density = 1
-	use_power = 1
+	anchored = TRUE
+	density = TRUE
+	use_power = IDLE_POWER_USE
 	idle_power_usage = 30
 	active_power_usage = 200
-	power_channel = EQUIP
+	interact_offline = TRUE
+	allowed_checks = ALLOWED_CHECK_NONE
+	resistance_flags = FULL_INDESTRUCTIBLE
 
 	var/obj/item/weapon/card/id/scan = null // identification
 	var/authenticated = 0
 
-	var/obj/item/weapon/paper/tofax = null // what we're sending
+	var/obj/item/weapon/tofax = null // what we're sending
 	var/sendcooldown = 0 // to avoid spamming fax messages
 
 	var/department = "Unknown" // our department
+	var/dptdest = "Central Command" // the department we're sending to
+	required_skills = list(/datum/skill/command = SKILL_LEVEL_TRAINED)
 
-	var/dpt = "Central Command" // the department we're sending to
-
-/obj/machinery/faxmachine/New()
-	..()
+/obj/machinery/faxmachine/atom_init()
+	. = ..()
 	allfaxes += src
 
 	if( !("[department]" in alldepartments) )
@@ -32,262 +38,260 @@ var/list/alldepartments = list("Central Command")
 
 /obj/machinery/faxmachine/Destroy()
 	allfaxes -= src
+	QDEL_NULL(scan)
+	QDEL_NULL(tofax)
 	return ..()
 
-/obj/machinery/faxmachine/process()
-	return 0
+/obj/machinery/faxmachine/tgui_interact(mob/user, datum/tgui/ui)
+	ui = SStgui.try_update_ui(user, src, ui)
+	if(!ui)
+		ui = new(user, src, "Fax", name)
+		ui.open()
 
-/obj/machinery/faxmachine/attack_ai(mob/user)
-	return attack_hand(user)
-
-/obj/machinery/faxmachine/attack_paw(mob/user)
-	return attack_hand(user)
-
-/obj/machinery/faxmachine/attack_hand(mob/user)
-	user.set_machine(src)
-
-	var/dat
-
-	var/scan_name
-	if(scan)
-		scan_name = scan.name
+/obj/machinery/faxmachine/tgui_data(mob/user)
+	var/list/data = list(
+		"scan" = scan?.name,
+		"authenticated" = authenticated,
+		"sendCooldown" = sendcooldown,
+		"paperName" = tofax?.name,
+		"paper" = tofax,
+		"destination" = dptdest
+	)
+	if(isnull(tofax))
+		data["paperType"] = 0
+	else if(istype(tofax, /obj/item/weapon/paper))
+		data["paperType"] = TYPE_PAPER
+	else if(istype(tofax, /obj/item/weapon/photo))
+		data["paperType"] = TYPE_PHOTO
+	else if(istype(tofax, /obj/item/weapon/paper_bundle))
+		data["paperType"] = TYPE_BUNDLE
 	else
-		scan_name = "--------"
+		data["paperType"] = 0
 
-	dat += "Confirm Identity: <a href='byond://?src=\ref[src];scan=1'>[scan_name]</a><br>"
+	return data
 
-	if(authenticated)
-		dat += "<a href='byond://?src=\ref[src];logout=1'>Log Out</a>"
-	else
-		dat += "<a href='byond://?src=\ref[src];auth=1'>Log In</a>"
+/obj/machinery/faxmachine/tgui_static_data(mob/user)
+	return list("allDepartments" = alldepartments)
 
-	dat += "<hr>"
+/obj/machinery/faxmachine/ui_interact(mob/user)
+	tgui_interact(user)
 
-	if(authenticated)
-		dat += "<b>Logged in to:</b> Central Command Quantum Entanglement Network<br><br>"
-
-		if(tofax)
-			dat += "<a href='byond://?src=\ref[src];remove=1'>Remove Paper</a><br><br>"
-
-			if(sendcooldown)
-				dat += "<b>Transmitter arrays realigning. Please stand by.</b><br>"
-
-			else
-				dat += "<a href='byond://?src=\ref[src];send=1'>Send</a><br>"
-				dat += "<b>Currently sending:</b> [tofax.name]<br>"
-				dat += "<b>Sending to:</b> <a href='byond://?src=\ref[src];dept=1'>[dpt]</a><br>"
-
-		else
-			if(sendcooldown)
-				dat += "Please insert paper to send via secure connection.<br><br>"
-				dat += "<b>Transmitter arrays realigning. Please stand by.</b><br>"
-			else
-				dat += "Please insert paper to send via secure connection.<br><br>"
-
-	else
-		dat += "Proper authentication is required to use this device.<br><br>"
-
-		if(tofax)
-			dat += "<a href ='byond://?src=\ref[src];remove=1'>Remove Paper</a><br>"
-
-	var/datum/browser/popup = new(user, "window=copier", "Fax Machine", 450, 300)
-	popup.set_content(dat)
-	popup.open()
-	return
-
-/obj/machinery/faxmachine/is_operational_topic()
+/obj/machinery/faxmachine/is_operational()
 	return TRUE
 
-/obj/machinery/faxmachine/Topic(href, href_list)
+/obj/machinery/faxmachine/tgui_act(action, params, obj/item/O)
 	. = ..()
-	if(!.)
+	if(.)
 		return
 
-	if(href_list["send"])
-		if(tofax)
+	switch(action)
+		if("send")
+			if(sendcooldown)
+				return
 
-			if(dpt == "Central Command")
-				sendcooldown = 1800
-				Centcomm_fax(tofax.info, tofax.name, usr)
+			if(tofax)
+				if(dptdest == "Central Command")
+					sendcooldown = 1800
+					centcomm_fax(usr, tofax, src)
+				else
+					sendcooldown = 600
+					send_fax(usr, tofax, dptdest)
 
-			else
-				sendcooldown = 600
-				SendFax(tofax.info, tofax.name, usr, dpt)
+				audible_message("Message transmitted successfully.")
+				spawn(sendcooldown) // cooldown time
+					sendcooldown = 0
 
-			to_chat(usr, "Message transmitted successfully.")
+		if("paperinteraction")
+			if(tofax)
+				if(usr.Adjacent(loc))
+					tofax.loc = usr.loc
+					usr.put_in_hands(tofax)
+				else
+					tofax.forceMove(loc)
 
-			spawn(sendcooldown) // cooldown time
-				sendcooldown = 0
-
-	if(href_list["remove"])
-		if(tofax)
-			if(!ishuman(usr))
-				to_chat(usr, "<span class='warning'>You can't do it.</span>")
-			else
-				tofax.loc = usr.loc
-				usr.put_in_hands(tofax)
-				to_chat(usr, "<span class='notice'>You take the paper out of \the [src].</span>")
+				to_chat(usr, "<span class='notice'>You take the item out of \the [src].</span>")
 				tofax = null
-
-	if(href_list["scan"])
-		if (scan)
-			if(ishuman(usr))
-				scan.loc = usr.loc
-				if(!usr.get_active_hand())
-					usr.put_in_hands(scan)
-				scan = null
 			else
-				scan.loc = src.loc
-				scan = null
-		else
-			var/obj/item/I = usr.get_active_hand()
-			if (istype(I, /obj/item/weapon/card/id))
-				usr.drop_item()
-				I.loc = src
-				scan = I
-		authenticated = 0
+				var/obj/item/I = usr.get_active_hand()
+				if(istype(I, /obj/item/weapon/paper) || istype(I, /obj/item/weapon/photo) || istype(I, /obj/item/weapon/paper_bundle))
+					usr.drop_from_inventory(I, src)
+					tofax = I
 
-	if(href_list["dept"])
-		var/lastdpt = dpt
-		dpt = input(usr, "Which department?", "Choose a department", "") as null|anything in alldepartments
-		if(!dpt) dpt = lastdpt
 
-	if(href_list["auth"])
-		if ( (!( authenticated ) && (scan)) )
+		if("scan")
+			if (scan)
+				if(ishuman(usr) && usr.Adjacent(loc))
+					scan.loc = usr.loc
+					if(!usr.get_active_hand())
+						usr.put_in_hands(scan)
+					scan = null
+				else
+					scan.loc = src.loc
+					scan = null
+			else if(ishuman (usr))
+				var/obj/item/I = usr.get_active_hand()
+				if (istype(I, /obj/item/weapon/card/id))
+					usr.drop_from_inventory(I, src)
+					scan = I
+			if(ishuman(usr))
+				var/mob/living/carbon/human/H = usr
+				H.sec_hud_set_ID()
+			authenticated = 0
+
 			if (check_access(scan))
 				authenticated = 1
 
-	if(href_list["logout"])
-		authenticated = 0
-
-	updateUsrDialog()
+		if("setDestination")
+			var/new_dep_dest = params["to"]
+			if(!new_dep_dest || !(new_dep_dest in alldepartments))
+				return
+			dptdest = new_dep_dest
 
 /obj/machinery/faxmachine/attackby(obj/item/O, mob/user)
-
-	if(istype(O, /obj/item/weapon/paper))
+	if(istype(O, /obj/item/weapon/paper) || istype(O, /obj/item/weapon/photo) || istype(O, /obj/item/weapon/paper_bundle))
 		if(!tofax)
-			user.drop_item()
+			user.drop_from_inventory(O, src)
 			tofax = O
-			O.loc = src
-			to_chat(user, "<span class='notice'>You insert the paper into \the [src].</span>")
+			to_chat(user, "<span class='notice'>You insert \the [O] into \the [src].</span>")
 			flick("faxsend", src)
-			updateUsrDialog()
+			SStgui.update_uis(src)
 		else
 			to_chat(user, "<span class='notice'>There is already something in \the [src].</span>")
-
 	else if(istype(O, /obj/item/weapon/card/id))
-
 		var/obj/item/weapon/card/id/idcard = O
 		if(!scan)
-			usr.drop_item()
+			usr.drop_from_inventory(idcard, src)
 			idcard.loc = src
 			scan = idcard
+			if ( (!( authenticated ) && (scan)) )
+				if (check_access(scan))
+					authenticated = 1
+			if(ishuman(usr))
+				var/mob/living/carbon/human/H = usr
+				H.sec_hud_set_ID()
+	else if(iswrenching(O))
+		default_unfasten_wrench(user, O)
 
-	else if(istype(O, /obj/item/weapon/wrench))
-		playsound(loc, 'sound/items/Ratchet.ogg', 50, 1)
-		anchored = !anchored
-		to_chat(user, "<span class='notice'>You [anchored ? "wrench" : "unwrench"] \the [src].</span>")
-	return
+/obj/item/proc/get_fax_info()
+	return null
 
-/proc/Centcomm_fax(sent, sentname, mob/Sender)
+/obj/item/weapon/paper/get_fax_info()
+	. = info
+	. += stamp_text
 
-	var/msg = "\blue <b><font color='orange'>CENTCOMM FAX: </font>[key_name(Sender, 1)] (<A HREF='?_src_=holder;adminplayeropts=\ref[Sender]'>PP</A>) (<A HREF='?_src_=vars;Vars=\ref[Sender]'>VV</A>) (<A HREF='?_src_=holder;subtlemessage=\ref[Sender]'>SM</A>) (<A HREF='?_src_=holder;adminplayerobservejump=\ref[Sender]'>JMP</A>) (<A HREF='?_src_=holder;secretsadmin=check_antagonist'>CA</A>) (<a href='?_src_=holder;CentcommFaxReply=\ref[Sender]'>RPLY</a>)</b>: Receiving '[sentname]' via secure connection ... <a href='?_src_=holder;CentcommFaxView=\ref[sent]'>view message</a>"
-	log_fax("[Sender] sending [sentname] : [sent]")
-	for(var/client/C in admins)
+/obj/item/weapon/photo/get_fax_info()
+	return desc
+
+/obj/item/weapon/paper_bundle/get_fax_info()
+	. = "This is a bundle containing [pages.len] items."
+	for(var/obj/item/page in pages)
+		if(istype(page, /obj/item/weapon/photo))
+			. += "\nPhoto: [page.get_fax_info()]"
+		else if(istype(page, /obj/item/weapon/paper))
+			. += "\nPaper: [page.get_fax_info()]"
+
+/obj/item/proc/get_fax_copy()
+	return null
+
+/obj/item/weapon/paper/get_fax_copy()
+	var/obj/item/weapon/paper/P = new
+
+	P.name       = name
+	P.info       = info
+	P.info_links = info_links
+	P.stamp_text = stamp_text
+	P.fields     = fields
+	P.sfields    = sfields
+	P.stamped    = LAZYCOPY(stamped)
+	P.ico        = LAZYCOPY(ico)
+	P.offset_x   = LAZYCOPY(offset_x)
+	P.offset_y   = LAZYCOPY(offset_y)
+	P.copy_overlays(src, TRUE)
+
+	P.updateinfolinks()
+	P.update_icon()
+
+	return P
+
+/obj/item/weapon/photo/get_fax_copy()
+	var/obj/item/weapon/photo/copy = new()
+	copy.img = img
+	copy.icon_state = icon_state
+	copy.desc = desc
+	if(scribble)
+		copy.scribble = scribble
+	copy.name = name
+	return copy
+
+/obj/item/weapon/paper_bundle/get_fax_copy()
+	var/obj/item/weapon/paper_bundle/copy = new()
+	copy.icon_state = icon_state
+	copy.overlays = overlays
+	copy.underlays = underlays
+	for(var/obj/item/page in pages)
+		var/obj/item/copied_page
+		if(istype(page, /obj/item/weapon/photo))
+			copied_page = page.get_fax_copy()
+		else if(istype(page, /obj/item/weapon/paper))
+			copied_page = page.get_fax_copy()
+		if(copied_page)
+			copied_page.forceMove(copy)
+			copy.pages.Add(copied_page)
+	copy.update_icon()
+	return copy
+
+/proc/centcomm_fax(mob/sender, obj/item/weapon/P, obj/machinery/faxmachine/fax)
+	var/item_info = P.get_fax_info()
+
+	var/msg = text("<span class='notice'><b>[] [] [] [] [] [] []</b>: Receiving '[P.name]' via secure connection ... []</span>",
+	"<font color='orange'>CENTCOMM FAX: </font>[key_name(sender, 1)]",
+	"(<a href='byond://?_src_=holder;adminplayeropts=\ref[sender]'>PP</a>)",
+	"(<a href='byond://?_src_=vars;Vars=\ref[sender]'>VV</a>)",
+	"(<a href='byond://?_src_=holder;subtlemessage=\ref[sender]'>SM</a>)",
+	ADMIN_JMP(sender),
+	"(<a href='byond://?_src_=holder;secretsadmin=check_antagonist'>CA</a>)",
+	"(<a href='byond://?_src_=holder;CentcommFaxReply=\ref[sender];CentcommFaxReplyDestination=\ref[fax.department]'>RPLY</a>)",
+	"<a href='byond://?_src_=holder;CentcommFaxViewInfo=\ref[item_info]'>view message</a>") // Some weird BYOND bug doesn't allow to send \ref like `[P.info + P.stamp_text]`.
+
+	for(var/client/C as anything in admins)
 		to_chat(C, msg)
-	send2slack_custommsg("[key_name(Sender)] sent fax to Centcomm", sent, ":fax:")
 
+	send_fax(sender, P, "Central Command")
 
-proc/SendFax(sent, sentname, mob/Sender, dpt, stamp, stamps)
+	SSStatistics.add_communication_log(type = "fax-station", author = sender.name, content = item_info)
 
-	log_fax("[Sender] sending [sentname] to [dpt] : [sent]")
+	for(var/client/X in global.admins)
+		X.mob.playsound_local(null, 'sound/machines/fax_centcomm.ogg', VOL_NOTIFICATIONS, vary = FALSE, frequency = null, ignore_environment = TRUE)
 
+	world.send2bridge(
+		type = list(BRIDGE_ADMINCOM),
+		attachment_title = ":fax: **[key_name(sender)]** sent fax to ***Centcomm***",
+		attachment_msg = strip_html_properly(replacetext(item_info,"<br>", "\n")),
+		attachment_footer = get_admin_counts_formatted(),
+		attachment_color = BRIDGE_COLOR_ADMINCOM,
+	)
+
+/proc/send_fax(mob/sender, obj/item/weapon/P, department)
 	for(var/obj/machinery/faxmachine/F in allfaxes)
-		if(dpt == "Unknown")
-			if(! (F.stat & (BROKEN|NOPOWER) ) )
-				flick("faxreceive", F)
+		if((department == "All" || F.department == department) && !( F.stat & (BROKEN|NOPOWER) ))
+			var/obj/item/copy = P.get_fax_copy()
+			if(copy)
+				copy.loc = F.loc
+				F.print_fax(copy)
 
-				// give the sprite some time to flick
-				spawn(20)
-					var/obj/item/weapon/paper/P = new /obj/item/weapon/paper( F.loc )
-					P.name = "[sentname]"
-					P.info = "[sent]"
-					P.update_icon()
-					if(stamp == "CentCom")
-						var/image/stampoverlay = image('icons/obj/bureaucracy.dmi')
-						stampoverlay.icon_state = "paper_stamp-cent"
-						if(!stamps)
-							P.stamps += "<HR><i>This paper has been stamped by the Central Command Quantum Relay.</i>"
-						else
-							P.stamps += "<HR><i>[stamps]</i>"
-						P.overlays += stampoverlay
-					if (stamp == "Clown")
-						var/image/stampoverlay = image('icons/obj/bureaucracy.dmi')
-						stampoverlay.icon_state = "paper_stamp-clown"
-						if(!stamps)
-							P.stamps += "<HR><i>This paper has been stamped by strange pink stamp.</i>"
-						else
-							P.stamps += "<HR><i>[stamps]</i>"
-						P.overlays += stampoverlay
-					if (stamp == "Syndicate")
-						var/image/stampoverlay = image('icons/obj/bureaucracy.dmi')
-						stampoverlay.icon_state = "paper_stamp-syndicate"
-						if(!stamps)
-							P.stamps += "<HR><i>This paper has been stamped by the Syndicate Command Interception Relay.</i>"
-						else
-							P.stamps += "<HR><i>[stamps]</i>"
-						P.overlays += stampoverlay
-					if (stamp == "FakeCentCom")
-						var/image/stampoverlay = image('icons/obj/bureaucracy.dmi')
-						stampoverlay.icon_state = "paper_stamp-fakecentcom"
-						if(!stamps)
-							P.stamps += "<HR><i>This paper has been stamped by the Central Compound Quantum Relay.</i>"
-						else
-							P.stamps += "<HR><i>[stamps]</i>"
-						P.overlays += stampoverlay
-					playsound(F.loc, "sound/items/polaroid1.ogg", 50, 1)
+	log_fax("[sender] sending [P.name] to [department]: [P.get_fax_info()]")
 
-		if( F.department == dpt )
-			if(! (F.stat & (BROKEN|NOPOWER) ) )
+/obj/machinery/faxmachine/proc/print_fax(obj/item/weapon/P)
+	set waitfor = FALSE
 
-				flick("faxreceive", F)
+	playsound(src, "sound/items/polaroid1.ogg", VOL_EFFECTS_MASTER)
+	flick("faxreceive", src)
 
-				// give the sprite some time to flick
-				spawn(20)
-					var/obj/item/weapon/paper/P = new /obj/item/weapon/paper( F.loc )
-					P.name = "[sentname]"
-					P.info = "[sent]"
-					P.update_icon()
-					if(stamp == "CentCom")
-						var/image/stampoverlay = image('icons/obj/bureaucracy.dmi')
-						stampoverlay.icon_state = "paper_stamp-cent"
-						if(!stamps)
-							P.stamps += "<HR><i>This paper has been stamped by the Central Command Quantum Relay.</i>"
-						else
-							P.stamps += "<HR><i>[stamps]</i>"
-						P.overlays += stampoverlay
-					if (stamp == "Clown")
-						var/image/stampoverlay = image('icons/obj/bureaucracy.dmi')
-						stampoverlay.icon_state = "paper_stamp-clown"
-						if(!stamps)
-							P.stamps += "<HR><i>This paper has been stamped by strange pink stamp.</i>"
-						else
-							P.stamps += "<HR><i>[stamps]</i>"
-						P.overlays += stampoverlay
-					if (stamp == "Syndicate")
-						var/image/stampoverlay = image('icons/obj/bureaucracy.dmi')
-						stampoverlay.icon_state = "paper_stamp-syndicate"
-						if(!stamps)
-							P.stamps += "<HR><i>This paper has been stamped by the Syndicate Command Interception Relay.</i>"
-						else
-							P.stamps += "<HR><i>[stamps]</i>"
-						P.overlays += stampoverlay
-					if (stamp == "FakeCentCom")
-						var/image/stampoverlay = image('icons/obj/bureaucracy.dmi')
-						stampoverlay.icon_state = "paper_stamp-fakecentcom"
-						if(!stamps)
-							P.stamps += "<HR><i>This paper has been stamped by the Central Compound Quantum Relay.</i>"
-						else
-							P.stamps += "<HR><i>[stamps]</i>"
-						P.overlays += stampoverlay
-					playsound(F.loc, "sound/items/polaroid1.ogg", 50, 1)
+	sleep(20)
+
+	P.loc = loc
+	audible_message("Received message.")
+
+#undef TYPE_PAPER
+#undef TYPE_PHOTO
+#undef TYPE_BUNDLE

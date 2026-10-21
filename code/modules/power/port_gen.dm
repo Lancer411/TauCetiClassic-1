@@ -1,67 +1,28 @@
-//This file was auto-corrected by findeclaration.exe on 25.5.2012 20:42:33
-
-/* new portable generator - work in progress
-
-/obj/machinery/power/port_gen
-	name = "portable generator"
-	desc = "A portable generator used for emergency backup power."
-	icon = 'generator.dmi'
-	icon_state = "off"
-	density = 1
-	anchored = 0
-	directwired = 0
-	var/t_status = 0
-	var/t_per = 5000
-	var/filter = 1
-	var/tank = null
-	var/turf/inturf
-	var/starter = 0
-	var/rpm = 0
-	var/rpmtarget = 0
-	var/capacity = 1e6
-	var/turf/outturf
-	var/lastgen
-
-
-/obj/machinery/power/port_gen/process()
-ideally we're looking to generate 5000
-
-/obj/machinery/power/port_gen/attackby(obj/item/weapon/W, mob/user)
-tank [un]loading stuff
-
-/obj/machinery/power/port_gen/attack_hand(mob/user)
-turn on/off
-
-/obj/machinery/power/port_gen/examine()
-display round(lastgen) and phorontank amount
-
-*/
-
-//Previous code been here forever, adding new framework for portable generators
-
+#define PORT_GEN_HEAT_OVERHEAT_EXPLOSION 300
+#define PORT_GEN_MAX_MALFUNCTIONS 10
+#define PORT_GEN_MAX_SAFE_POWER_OUTPUT 4
 
 //Baseline portable generator. Has all the default handling. Not intended to be used on it's own (since it generates unlimited power).
 /obj/machinery/power/port_gen
 	name = "Placeholder Generator"	//seriously, don't use this. It can't be anchored without VV magic.
 	desc = "A portable generator for emergency backup power."
 	icon = 'icons/obj/power.dmi'
-	var/icon_state_on = "portgen1"
-	icon_state = "portgen0"
-	density = 1
-	anchored = 0
-	directwired = 0
-	use_power = 0
+	var/icon_state_on = "gen_generic-on"
+	icon_state = "gen_generic-off"
+	density = TRUE
+	anchored = FALSE
+	use_power = NO_POWER_USE
 
-	var/active = 0
+	var/active = FALSE
 	var/power_gen = 5000
 	var/recent_fault = 0
 	var/power_output = 1
-	var/consumption = 0
+	var/efficiency = 0
 
 /obj/machinery/power/port_gen/proc/HasFuel() //Placeholder for fuel check.
 	return 1
 
-/obj/machinery/power/port_gen/proc/UseFuel() //Placeholder for fuel use.
+/obj/machinery/power/port_gen/proc/UseFuel(seconds_per_tick) //Placeholder for fuel use.
 	return
 
 /obj/machinery/power/port_gen/proc/DropFuel()
@@ -70,22 +31,28 @@ display round(lastgen) and phorontank amount
 /obj/machinery/power/port_gen/proc/handleInactive()
 	return
 
-/obj/machinery/power/port_gen/process()
+/obj/machinery/power/port_gen/proc/handle_malfunctions(seconds_per_tick)
+	return
+
+/obj/machinery/power/port_gen/proc/handle_ambient_heat_exchange(seconds_per_tick)
+	return
+
+/obj/machinery/power/port_gen/process(seconds_per_tick)
 	if(active && HasFuel() && !crit_fail && anchored && powernet)
 		add_avail(power_gen * power_output)
-		UseFuel()
-		src.updateDialog()
-
+		UseFuel(seconds_per_tick)
+		updateDialog()
 	else
-		active = 0
+		active = FALSE
 		icon_state = initial(icon_state)
 		handleInactive()
 
-/obj/machinery/power/port_gen/attack_hand(mob/user)
-	if(..())
-		return
-	if(!anchored)
-		return
+	handle_malfunctions(seconds_per_tick)
+	handle_ambient_heat_exchange(seconds_per_tick)
+
+/obj/machinery/power/port_gen/interact(mob/user)
+	if(anchored)
+		..()
 
 /obj/machinery/power/port_gen/examine(mob/user)
 	..()
@@ -98,43 +65,59 @@ display round(lastgen) and phorontank amount
 	var/max_sheets = 100
 	var/sheet_name = "solid phoron"
 	var/sheet_path = /obj/item/stack/sheet/mineral/phoron
-	var/board_path = "/obj/item/weapon/circuitboard/pacman"
+	var/board_path = /obj/item/weapon/circuitboard/pacman
 	var/sheet_left = 0 // How much is left of the sheet
-	var/time_per_sheet = 40
+	var/seconds_per_sheet = 80
 	var/heat = 0
+	var/capacity_scale_with_upgrades = TRUE
 
-/obj/machinery/power/port_gen/pacman/initialize()
-	..()
-	if(anchored)
-		connect_to_network()
+	var/kaboom_prob_per_second = 0
 
-/obj/machinery/power/port_gen/pacman/New()
-	..()
+	var/malfunctions = 0
+	var/malfunction_prob_per_second = 0.5
+
+	var/emitted_gas = "sleeping_agent"
+	var/emitted_moles_per_sheet = 1.0
+
+	var/consumed_gas = null
+	var/consumed_moles_per_sheet = 1.0
+
+	var/heat_transfer_coefficient = 1.0
+
+/obj/machinery/power/port_gen/pacman/atom_init()
+	. = ..()
 	component_parts = list()
 	component_parts += new /obj/item/weapon/stock_parts/matter_bin(src)
 	component_parts += new /obj/item/weapon/stock_parts/micro_laser(src)
-	component_parts += new /obj/item/weapon/cable_coil(src, 1)
-	component_parts += new /obj/item/weapon/cable_coil(src, 1)
+	component_parts += new /obj/item/stack/cable_coil/red(src, 1)
+	component_parts += new /obj/item/stack/cable_coil/red(src, 1)
 	component_parts += new /obj/item/weapon/stock_parts/capacitor(src)
 	component_parts += new board_path(src)
 	RefreshParts()
+
+/obj/machinery/power/port_gen/pacman/atom_init()
+	. = ..()
+	if(anchored)
+		connect_to_network()
 
 /obj/machinery/power/port_gen/pacman/Destroy()
 	DropFuel()
 	return ..()
 
 /obj/machinery/power/port_gen/pacman/RefreshParts()
+	..()
+
 	var/temp_rating = 0
-	var/consumption_coeff = 0
+	var/efficiency_coeff = 0
 	for(var/obj/item/weapon/stock_parts/SP in component_parts)
-		if(istype(SP, /obj/item/weapon/stock_parts/matter_bin))
+		if(istype(SP, /obj/item/weapon/stock_parts/matter_bin) && capacity_scale_with_upgrades)
 			max_sheets = SP.rating * SP.rating * 50
 		else if(istype(SP, /obj/item/weapon/stock_parts/capacitor))
 			temp_rating += SP.rating
 		else
-			consumption_coeff += SP.rating
+			efficiency_coeff += SP.rating
 	power_gen = round(initial(power_gen) * temp_rating * 2)
-	consumption = consumption_coeff
+	efficiency = efficiency_coeff
 
 /obj/machinery/power/port_gen/pacman/examine(mob/user)
 	..()
@@ -143,9 +126,20 @@ display round(lastgen) and phorontank amount
 		to_chat(user, "<span class='danger'>The generator seems to have broken down.</span>")
 
 /obj/machinery/power/port_gen/pacman/HasFuel()
-	if(sheets >= 1 / (time_per_sheet / power_output) - sheet_left)
-		return 1
-	return 0
+	if(consumed_gas)
+		var/datum/gas_mixture/env = loc.return_air()
+		if(!env)
+			return FALSE
+		if(env.get_gas(consumed_gas) < consumed_moles_per_sheet)
+			return FALSE
+
+	var/has_fuel = sheets + sheet_left
+	var/fuel_usage_rate = 1 / (seconds_per_sheet * efficiency / power_output)
+
+	if(has_fuel >= fuel_usage_rate)
+		return TRUE
+
+	return FALSE
 
 /obj/machinery/power/port_gen/pacman/DropFuel()
 	if(sheets)
@@ -154,138 +148,266 @@ display round(lastgen) and phorontank amount
 			fail_safe += 1
 			var/obj/item/stack/sheet/S = new sheet_path(loc)
 			var/amount = min(sheets, S.max_amount)
-			S.amount = amount
+			S.set_amount(amount)
 			sheets -= amount
 
-/obj/machinery/power/port_gen/pacman/UseFuel()
-	var/needed_sheets = 1 / (time_per_sheet * consumption / power_output)
-	var/temp = min(needed_sheets, sheet_left)
-	needed_sheets -= temp
-	sheet_left -= temp
-	sheets -= round(needed_sheets)
-	needed_sheets -= round(needed_sheets)
-	if (sheet_left <= 0 && sheets > 0)
-		sheet_left = 1 - needed_sheets
+/obj/machinery/power/port_gen/pacman/UseFuel(seconds_per_tick)
+	var/percentage_of_sheet_to_use = seconds_per_tick / (seconds_per_sheet * efficiency / power_output)
+
+	var/available_percentage_of_sheet = min(percentage_of_sheet_to_use, sheet_left)
+
+	var/take_from_next_sheet = percentage_of_sheet_to_use - available_percentage_of_sheet
+
+	sheet_left -= available_percentage_of_sheet
+
+	if(sheet_left <= 0 && sheets > 0)
+		sheet_left = 1 - take_from_next_sheet
+
 		sheets--
 
-	var/lower_limit = 56 + power_output * 10
-	var/upper_limit = 76 + power_output * 10
-	var/bias = 0
-	if (power_output > 4)
-		upper_limit = 400
-		bias = power_output - consumption * (4 - consumption)
-	if (heat < lower_limit)
-		heat += 4 - consumption
-	else
-		heat += rand(-7 + bias, 7 + bias)
-		if (heat < lower_limit)
-			heat = lower_limit
-		if (heat > upper_limit)
-			heat = upper_limit
+		if(consumed_gas)
+			var/datum/gas_mixture/env = loc.return_air()
+			env.adjust_gas(consumed_gas, -consumed_moles_per_sheet)
 
-	if (heat > 300)
+		if(emitted_gas)
+			var/datum/gas_mixture/env = loc.return_air()
+			env.adjust_gas(emitted_gas, emitted_moles_per_sheet)
+
+	// If any of the heat margins sum to more than this, overheat explosion is possible.
+	var/safety_heat_margin = 100
+
+	var/area/A = get_area(src)
+	// In a perfect world this would be a function of the area,
+	// but currently areas don't know how much power is inbound within them,
+	// as electrical networks are inherently non-local.
+	// But it's a fun requirement to "keep generators in high load areas", so we keep this.
+	var/local_surplus = power_gen * power_output - A.usage(TOTAL)
+
+	// A magic number to make local surplus hurt more than global surplus.
+	// Let's imagine the wires are low efficiency and thus act as "resistors".
+	var/global_powernet_resistance = 1000
+	var/total_surplus = surplus() / global_powernet_resistance + local_surplus
+
+	var/surplus_load_heat_margin = 0
+
+	var/heat_increase_bias = round(power_output + malfunctions * 0.5 - efficiency)
+
+	if(total_surplus > 0 && power_gen > 0)
+		surplus_load_heat_margin = min(safety_heat_margin - 10, round(total_surplus / power_gen) * 10)
+		heat_increase_bias += min(5, round(total_surplus / power_gen))
+
+	// At max would contribute 90 to heat. Unless emagged.
+	var/power_output_heat_margin = safety_heat_margin - ((PORT_GEN_MAX_SAFE_POWER_OUTPUT - power_output) / PORT_GEN_MAX_SAFE_POWER_OUTPUT) * (safety_heat_margin - 10)
+	var/malfunctions_heat_margin = safety_heat_margin - ((PORT_GEN_MAX_MALFUNCTIONS - malfunctions) / PORT_GEN_MAX_MALFUNCTIONS) * (safety_heat_margin - 10)
+
+	// The fact that all heat margins have the safety_heat_margin - 10 means that even at max no one factor can cause a kaboom.
+	var/heat_bound = round(PORT_GEN_HEAT_OVERHEAT_EXPLOSION - safety_heat_margin + power_output_heat_margin + malfunctions_heat_margin + surplus_load_heat_margin)
+
+	var/minimal_heat_increase = (-3.5 + heat_increase_bias * 0.5) * seconds_per_tick
+	var/maximal_heat_increase = (3.5 + heat_increase_bias * 0.5) * seconds_per_tick
+
+	heat = round(max(0, heat + rand(minimal_heat_increase, maximal_heat_increase)))
+	if(heat >= heat_bound)
+		heat = heat_bound
+		if(SPT_PROB(malfunction_prob_per_second, seconds_per_tick))
+			add_malfunction()
+
+	if(heat > PORT_GEN_HEAT_OVERHEAT_EXPLOSION)
+		kaboom_prob_per_second += seconds_per_tick
+	else
+		kaboom_prob_per_second = 0
+
+	if(SPT_PROB(kaboom_prob_per_second, seconds_per_tick))
 		overheat()
-		qdel(src)
-	return
+		if(!QDELETED(src))
+			qdel(src)
+
+/obj/machinery/power/port_gen/pacman/proc/add_malfunction()
+	malfunctions = min(malfunctions + 1, PORT_GEN_MAX_MALFUNCTIONS)
+	new /obj/effect/abstract/particle_holder(src, /particles/tool/screw, PARTICLE_FADEOUT|PARTICLE_FLICK)
+	playsound(src, pick('sound/items/rake1.ogg', 'sound/items/rake2.ogg', 'sound/items/rake3.ogg'), VOL_EFFECTS_MASTER, vol=100, vary=TRUE)
+
+/obj/machinery/power/port_gen/pacman/proc/try_repair_malfunctions_loop(mob/living/user, obj/item/tool)
+	user.visible_message("<span class='notice'>[user] starts repairing the [src].</span>")
+
+	if(crit_fail)
+		if(!is_skill_competent(user, list(/datum/skill/engineering=SKILL_LEVEL_PRO)))
+			to_chat(user, "<span class='warning'>The [src] is too damaged to be repaired by me. I wonder if someone could help?</span>")
+			return
+		if(tool.use_tool(
+			target=src,
+			user=user,
+			delay=10 SECONDS,
+			volume=70,
+			quality=QUALITY_PULSING,
+			required_skills_override=list(
+				/datum/skill/engineering=SKILL_LEVEL_PRO,
+			),
+			can_move=FALSE,
+			particle_type=/particles/tool/wrench,
+		))
+			if(!panel_open)
+				to_chat(user, "<span class='warning'>Gah! The panel is closed. How can I repair it now?</span>")
+				return
+			crit_fail = FALSE
+
+	if(malfunctions <= 0)
+		to_chat(user, "<span class='notice'>[src] doesn't seem to need any repairs.</span>")
+		return
+
+	var/hard_limit = 20
+	for(var/i in 1 to hard_limit)
+		if(!tool.use_tool(
+			target=src,
+			user=user,
+			delay=1 SECOND,
+			volume=70,
+			quality=QUALITY_PULSING,
+			required_skills_override=list(
+				/datum/skill/engineering=SKILL_LEVEL_MASTER,
+			),
+			can_move=FALSE,
+			particle_type=/particles/tool/wrench,
+		))
+			return
+		if(malfunctions <= 0)
+			return
+		if(!panel_open)
+			to_chat(user, "<span class='warning'>Gah! The panel is closed. How can I repair it now?</span>")
+			return
+
+		malfunctions = max(0, malfunctions - 1)
+		kaboom_prob_per_second = max(0, kaboom_prob_per_second - 10)
+
+/obj/machinery/power/port_gen/pacman/handle_malfunctions(seconds_per_tick)
+	if(!active)
+		return
+
+	if(SPT_PROB(malfunction_prob_per_second, seconds_per_tick))
+		add_malfunction()
+
+	if(SPT_PROB(malfunction_prob_per_second, seconds_per_tick) && emitted_gas)
+		var/datum/gas_mixture/env = loc.return_air()
+		if(env && SPT_PROB(env.get_gas(emitted_gas) / emitted_moles_per_sheet, seconds_per_tick))
+			add_malfunction()
+
+	if(SPT_PROB(malfunctions * 10, seconds_per_tick))
+		new /obj/effect/abstract/particle_holder(src, /particles/tool/screw, PARTICLE_FADEOUT|PARTICLE_FLICK)
+		playsound(src, pick('sound/items/rake1.ogg', 'sound/items/rake2.ogg', 'sound/items/rake3.ogg'), VOL_EFFECTS_MASTER, vol=70, vary=TRUE, extrarange=-1)
+
+	if(malfunctions >= 10 && SPT_PROB(1, seconds_per_tick))
+		crit_fail = TRUE
+
+/obj/machinery/power/port_gen/pacman/handle_ambient_heat_exchange(seconds_per_tick)
+	if(heat <= 0)
+		return
+
+	var/datum/gas_mixture/env = loc.return_air()
+	// In space, you don't dissipate heat all that much.
+	if(!env)
+		if(SPT_PROB(15, seconds_per_tick))
+			heat = max(heat - 1, 0)
+			updateDialog()
+		return
+
+	// The environment is too hot for us to cool down if it takes us 0 energy to increase the temperature to our peak.
+	if(env.get_thermal_energy_change(T0C + heat) <=  0)
+		return
+
+	var/try_remove_heat = round(min(heat, rand(0, 2 * seconds_per_tick)))
+	if(try_remove_heat <= 0)
+		return
+
+	env.add_thermal_energy(try_remove_heat * power_gen * heat_transfer_coefficient)
+
+	heat = max(heat - try_remove_heat, 0)
+	updateDialog()
 
 /obj/machinery/power/port_gen/pacman/handleInactive()
-
-	if (heat > 0)
+	if(heat > 0)
 		heat = max(heat - 2, 0)
-		src.updateDialog()
+		updateDialog()
 
 /obj/machinery/power/port_gen/pacman/proc/overheat()
 	explosion(src.loc, 2, 5, 2, -1)
 
+/obj/machinery/power/port_gen/pacman/proc/add_sheets(obj/item/I, mob/user, params)
+	var/obj/item/stack/addstack = I
+	var/amount = min((max_sheets - sheets), addstack.get_amount())
+	if(amount < 1)
+		to_chat(user, "<span class='notice'>The [name] is full!</span>")
+		return
+	to_chat(user, "<span class='notice'>You add [amount] sheets to the [name].</span>")
+	sheets += amount
+	addstack.use(amount)
+	playsound(src, 'sound/items/insert_key.ogg', VOL_EFFECTS_MASTER)
+
 /obj/machinery/power/port_gen/pacman/attackby(obj/item/O, mob/user, params)
 	if(istype(O, sheet_path))
-		var/obj/item/stack/addstack = O
-		var/amount = min((max_sheets - sheets), addstack.amount)
-		if(amount < 1)
-			to_chat(user, "<span class='notice'>The [src.name] is full!</span>")
-			return
-		to_chat(user, "<span class='notice'>You add [amount] sheets to the [src.name].</span>")
-		sheets += amount
-		addstack.use(amount)
+		add_sheets(O, user, params)
 		updateUsrDialog()
-		return
-	else if (istype(O, /obj/item/weapon/card/emag))
-		emagged = 1
-		emp_act(1)
 	else if(!active)
 
 		if(exchange_parts(user, O))
 			return
 
-		if(istype(O, /obj/item/weapon/wrench))
-
+		if(iswrenching(O))
 			if(!anchored && !isinspace())
 				connect_to_network()
 				to_chat(user, "<span class='notice'>You secure the generator to the floor.</span>")
-				anchored = 1
+				anchored = TRUE
 			else if(anchored)
 				disconnect_from_network()
 				to_chat(user, "<span class='notice'>You unsecure the generator from the floor.</span>")
-				anchored = 0
+				anchored = FALSE
 
-			playsound(src.loc, 'sound/items/Deconstruct.ogg', 50, 1)
-
-		else if(istype(O, /obj/item/weapon/screwdriver))
+			playsound(src, 'sound/items/Deconstruct.ogg', VOL_EFFECTS_MASTER)
+		else if(isscrewing(O))
 			panel_open = !panel_open
-			playsound(src.loc, 'sound/items/Screwdriver.ogg', 50, 1)
+			playsound(src, 'sound/items/Screwdriver.ogg', VOL_EFFECTS_MASTER)
 			if(panel_open)
 				to_chat(user, "<span class='notice'>You open the access panel.</span>")
 			else
 				to_chat(user, "<span class='notice'>You close the access panel.</span>")
-		else if(istype(O, /obj/item/weapon/crowbar) && panel_open)
+		else if(isprying(O) && panel_open)
 			default_deconstruction_crowbar(O)
+		else if(ispulsing(O) && panel_open)
+			try_repair_malfunctions_loop(user, O)
 
-/obj/machinery/power/port_gen/pacman/attack_hand(mob/user)
-	..()
-	if (!anchored)
+/obj/machinery/power/port_gen/pacman/emag_act(mob/user)
+	if(emagged)
+		return FALSE
+	emagged = 1
+	user.SetNextMove(CLICK_CD_INTERACT)
+	emp_act(1)
+	return TRUE
+
+/obj/machinery/power/port_gen/pacman/ui_interact(mob/user)
+	if ((get_dist(src, user) > 1) && !issilicon(user) && !isobserver(user))
+		user.unset_machine(src)
+		user << browse(null, "window=port_gen")
 		return
 
-	interact(user)
-
-/obj/machinery/power/port_gen/pacman/attack_ai(mob/user)
-	interact(user)
-
-/obj/machinery/power/port_gen/pacman/attack_paw(mob/user)
-	interact(user)
-
-/obj/machinery/power/port_gen/pacman/interact(mob/user)
-	if (get_dist(src, user) > 1 )
-		if (!istype(user, /mob/living/silicon/ai))
-			user.unset_machine(src)
-			user << browse(null, "window=port_gen")
-			return
-
-	user.set_machine(src)
-
-	var/dat = text("<b>[name]</b><br>")
+	var/dat = ""
 	if (active)
-		dat += text("Generator: <A href='?src=\ref[src];action=disable'>On</A><br>")
+		dat += text("Generator: <A href='byond://?src=\ref[src];action=disable'>On</A><br>")
 	else
-		dat += text("Generator: <A href='?src=\ref[src];action=enable'>Off</A><br>")
-	dat += text("[capitalize(sheet_name)]: [sheets] - <A href='?src=\ref[src];action=eject'>Eject</A><br>")
+		dat += text("Generator: <A href='byond://?src=\ref[src];action=enable'>Off</A><br>")
+	dat += text("[capitalize(sheet_name)]: [sheets] - <A href='byond://?src=\ref[src];action=eject'>Eject</A><br>")
 	var/stack_percent = round(sheet_left * 100, 1)
 	dat += text("Current stack: [stack_percent]% <br>")
-	dat += text("Power output: <A href='?src=\ref[src];action=lower_power'>-</A> [power_gen * power_output] <A href='?src=\ref[src];action=higher_power'>+</A><br>")
+	dat += text("Power output: <A href='byond://?src=\ref[src];action=lower_power'>-</A> [power_gen * power_output] <A href='byond://?src=\ref[src];action=higher_power'>+</A><br>")
 	dat += text("Power current: [(powernet == null ? "Unconnected" : "[avail()]")]<br>")
 	dat += text("Heat: [heat]<br>")
-	dat += "<br><A href='?src=\ref[src];action=close'>Close</A>"
-	user << browse("[dat]", "window=port_gen")
-	onclose(user, "port_gen")
 
-/obj/machinery/power/port_gen/pacman/is_operational_topic()
+	var/datum/browser/popup = new(user, "port_gen", src.name)
+	popup.set_content(dat)
+	popup.open()
+
+/obj/machinery/power/port_gen/pacman/is_operational()
 	return TRUE
 
 /obj/machinery/power/port_gen/pacman/Topic(href, href_list)
-	if (href_list["action"] == "close")
-		usr << browse(null, "window=port_gen")
-		usr.unset_machine(src)
-		return FALSE
-
 	. = ..()
 	if(!.)
 		return
@@ -293,12 +415,14 @@ display round(lastgen) and phorontank amount
 	if(href_list["action"])
 		if(href_list["action"] == "enable")
 			if(!active && HasFuel() && !crit_fail)
-				active = 1
+				active = TRUE
 				icon_state = icon_state_on
+				playsound(src, 'sound/machines/pacman_on.ogg', VOL_EFFECTS_MASTER)
 		if(href_list["action"] == "disable")
 			if (active)
-				active = 0
+				active = FALSE
 				icon_state = initial(icon_state)
+				playsound(src, 'sound/machines/pacman_off.ogg', VOL_EFFECTS_MASTER)
 		if(href_list["action"] == "eject")
 			if(!active)
 				DropFuel()
@@ -309,29 +433,66 @@ display round(lastgen) and phorontank amount
 			if (power_output < 4 || emagged)
 				power_output++
 
-	src.updateUsrDialog()
+	updateUsrDialog()
 
 
 /obj/machinery/power/port_gen/pacman/super
 	name = "S.U.P.E.R.P.A.C.M.A.N.-type Portable Generator"
-	icon_state = "portgen1"
-	icon_state_on = "portgen1"
+	icon_state = "gen_uranium-off"
+	icon_state_on = "gen_uranium-on"
 	sheet_name = "uranium"
 	sheet_path = /obj/item/stack/sheet/mineral/uranium
 	power_gen = 15000
-	time_per_sheet = 65
-	board_path = "/obj/item/weapon/circuitboard/pacman/super"
-	overheat()
-		explosion(src.loc, 3, 3, 3, -1)
+	seconds_per_sheet = 130
+	board_path = /obj/item/weapon/circuitboard/pacman/super
+	emitted_gas = null
+
+/obj/machinery/power/port_gen/pacman/super/overheat()
+	explosion(src.loc, 3, 3, 3, -1)
 
 /obj/machinery/power/port_gen/pacman/mrs
 	name = "M.R.S.P.A.C.M.A.N.-type Portable Generator"
-	icon_state = "portgen2"
-	icon_state_on = "portgen2"
+	icon_state = "gen_uranium-off"
+	icon_state_on = "gen_uranium-on"
 	sheet_name = "tritium"
 	sheet_path = /obj/item/stack/sheet/mineral/tritium
 	power_gen = 40000
-	time_per_sheet = 80
-	board_path = "/obj/item/weapon/circuitboard/pacman/mrs"
-	overheat()
-		explosion(src.loc, 4, 4, 4, -1)
+	seconds_per_sheet = 160
+	board_path = /obj/item/weapon/circuitboard/pacman/mrs
+	emitted_gas = "hydrogen"
+
+/obj/machinery/power/port_gen/pacman/mrs/overheat()
+	explosion(src.loc, 4, 4, 4, -1)
+
+/obj/machinery/power/port_gen/pacman/money
+	name = "A.N.C.A.P.M.A.N.-type Portable Generator"
+	desc = "Don't simply waste your money - burn them to get power instead!"
+	icon_state = "gen_money-off"
+	icon_state_on = "gen_money-on"
+	sheet_name = "cash"
+	sheet_path = /obj/item/weapon/spacecash
+	power_gen = 10000
+	max_sheets = 10000
+	seconds_per_sheet = 10
+	board_path = /obj/item/weapon/circuitboard/pacman/money
+	capacity_scale_with_upgrades = FALSE
+	emitted_gas = "carbon_dioxide"
+	consumed_gas = "oxygen"
+
+/obj/machinery/power/port_gen/pacman/money/add_sheets(obj/item/I, mob/user, params)
+	var/obj/item/weapon/spacecash/addstack = I
+	var/amount = min((max_sheets - sheets), addstack.worth)
+	if(amount < 1)
+		to_chat(user, "<span class='notice'>The [name] is full!</span>")
+		return
+	to_chat(user, "<span class='notice'>You add [amount] sheets to the [name].</span>")
+	sheets += amount
+	qdel(addstack)
+
+/obj/machinery/power/port_gen/pacman/money/overheat()
+	visible_message("<span class='notice'>[src] overheats and quietly disintegrates. No customer should ever worry!</span>")
+	qdel(src)
+
+#undef PORT_GEN_HEAT_OVERHEAT_EXPLOSION
+#undef PORT_GEN_MAX_MALFUNCTIONS
+#undef PORT_GEN_MAX_SAFE_POWER_OUTPUT

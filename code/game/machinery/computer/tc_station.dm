@@ -1,24 +1,21 @@
-#define NUKESCALINGMODIFIER 0.5
-
-var/list/possible_uplinker_IDs = list("Alfa","Bravo","Charlie","Delta","Echo","Foxtrot","Zero", "Niner")
-
+var/global/list/possible_uplinker_IDs = list("Alfa","Bravo","Charlie","Delta","Echo","Foxtrot","Zero", "Niner")
 
 /obj/machinery/computer/telecrystals
-	name = "\improper Telecrystal assignment station"
+	name = "Telecrystal assignment station"
 	desc = "A device used to manage telecrystals during group operations. You shouldn't be looking at this particular one..."
 	icon_state = "tcstation"
 
 /////////////////////////////////////////////
 /obj/machinery/computer/telecrystals/uplinker
-	name = "\improper Telecrystal upload/recieve station"
+	name = "Telecrystal upload/recieve station"
 	desc = "A device used to manage telecrystals during group operations. To use, simply insert your uplink. With your uplink installed \
 	you can upload your telecrystals to the group's pool using the console, or be assigned additional telecrystals by your lieutenant."
 	icon_state = "tcstation"
 	var/obj/item/uplinkholder = null
 	var/obj/machinery/computer/telecrystals/boss/linkedboss = null
 
-/obj/machinery/computer/telecrystals/uplinker/New()
-	..()
+/obj/machinery/computer/telecrystals/uplinker/atom_init()
+	. = ..()
 
 	var/ID
 	if(possible_uplinker_IDs.len)
@@ -30,7 +27,7 @@ var/list/possible_uplinker_IDs = list("Alfa","Bravo","Charlie","Delta","Echo","F
 
 
 /obj/machinery/computer/telecrystals/uplinker/attackby(obj/item/O, mob/user)
-	if(istype(O, /obj/item))
+	if(isitem(O))
 
 		if(uplinkholder)
 			to_chat(user, "<span class='notice'>The [src] already has an uplink in it.</span>")
@@ -38,9 +35,8 @@ var/list/possible_uplinker_IDs = list("Alfa","Bravo","Charlie","Delta","Echo","F
 
 		if(O.hidden_uplink)
 			var/obj/item/P = user.get_active_hand()
-			user.drop_item()
+			user.drop_from_inventory(P, src)
 			uplinkholder = P
-			P.loc = src
 			P.add_fingerprint(user)
 			update_icon()
 			updateUsrDialog()
@@ -50,9 +46,9 @@ var/list/possible_uplinker_IDs = list("Alfa","Bravo","Charlie","Delta","Echo","F
 
 
 /obj/machinery/computer/telecrystals/uplinker/update_icon()
-	overlays.Cut()
+	cut_overlays()
 	if(uplinkholder)
-		overlays += "[initial(icon_state)]-closed"
+		add_overlay("[initial(icon_state)]-closed")
 
 
 /obj/machinery/computer/telecrystals/uplinker/proc/ejectuplink()
@@ -79,17 +75,12 @@ var/list/possible_uplinker_IDs = list("Alfa","Bravo","Charlie","Delta","Echo","F
 
 ///////
 
-/obj/machinery/computer/telecrystals/uplinker/attack_hand(mob/user)
-	if(..())
-		return
-	src.add_fingerprint(user)
-	user.set_machine(src)
-
+/obj/machinery/computer/telecrystals/uplinker/ui_interact(mob/user)
 	var/dat = ""
 	if(linkedboss)
 		dat += "[linkedboss] has [linkedboss.storedcrystals] telecrystals available for distribution. <BR><BR>"
 	else
-		dat += "No linked management consoles detected. Scan for uplink stations using the management console.<BR><BR>"
+		dat += "<div class='NoticeBox'>No linked management consoles detected. Scan for uplink stations using the management console.</div>"
 
 	if(uplinkholder)
 		dat += "[uplinkholder.hidden_uplink.uses] telecrystals remain in this uplink.<BR>"
@@ -97,12 +88,9 @@ var/list/possible_uplinker_IDs = list("Alfa","Bravo","Charlie","Delta","Echo","F
 			dat += "Donate TC: <a href='byond://?src=\ref[src];donate1=1'>1</a> | <a href='byond://?src=\ref[src];donate5=1'>5</a>"
 		dat += "<br><a href='byond://?src=\ref[src];eject=1'>Eject Uplink</a>"
 
-
-	var/datum/browser/popup = new(user, "computer", "Telecrystal Upload/Recieve Station", 700, 500)
+	var/datum/browser/popup = new(user, "computer", "Telecrystal Upload/Recieve Station", 700, 500, ntheme = CSS_THEME_SYNDICATE)
 	popup.set_content(dat)
-	popup.set_title_image(user.browse_rsc_icon(src.icon, src.icon_state))
 	popup.open()
-	return
 
 /obj/machinery/computer/telecrystals/uplinker/Topic(href, href_list)
 	. = ..()
@@ -118,7 +106,7 @@ var/list/possible_uplinker_IDs = list("Alfa","Bravo","Charlie","Delta","Echo","F
 	else if(href_list["eject"])
 		ejectuplink()
 
-	src.updateUsrDialog()
+	updateUsrDialog()
 
 
 /////////////////////////////////////////
@@ -143,55 +131,33 @@ var/list/possible_uplinker_IDs = list("Alfa","Bravo","Charlie","Delta","Echo","F
 			TCstations += A
 			A.linkedboss = src
 	if(virgin)
-		getDangerous()
 		virgin = 0
-
-/obj/machinery/computer/telecrystals/boss/proc/getDangerous()//This scales the TC assigned with the round population.
-	..()
-	var/danger
-	danger = player_list.len
-	while(!IsMultiple(++danger,10))//Just round up to the nearest multiple of ten.
-	scaleTC(danger)
-
-/obj/machinery/computer/telecrystals/boss/proc/scaleTC(amt)//Its own proc, since it'll probably need a lot of tweaks for balance, use a fancier algorhithm, etc.
-	storedcrystals += amt * NUKESCALINGMODIFIER
 
 /////////
 
-/obj/machinery/computer/telecrystals/boss/attack_hand(mob/user)
-	if(..())
-		return
-	src.add_fingerprint(user)
-	user.set_machine(src)
-
-
+/obj/machinery/computer/telecrystals/boss/ui_interact(mob/user)
 	var/dat = ""
-	dat += "<a href='byond://?src=\ref[src];scan=1'>Scan for TC stations.</a><BR>"
+	dat += "<a href='byond://?src=\ref[src];scan=1'>Scan for TC stations</a><BR>"
 	dat += "This [src] has [storedcrystals] telecrystals available for distribution. <BR>"
 	dat += "<BR><BR>"
-
 
 	for(var/obj/machinery/computer/telecrystals/uplinker/A in TCstations)
 		dat += "[A.name] | "
 		if(A.uplinkholder)
 			dat += "[A.uplinkholder.hidden_uplink.uses] telecrystals."
 		if(storedcrystals)
-			dat+= "<BR>Add TC: <a href ='?src=\ref[src];give1=\ref[A]'>1</a> | <a href ='?src=\ref[src];give5=\ref[A]'>5</a>"
+			dat+= "<BR>Add TC: <a href ='byond://?src=\ref[src];give1=\ref[A]'>1</a> | <a href ='byond://?src=\ref[src];give5=\ref[A]'>5</a>"
 		dat += "<BR>"
 
 	if(TCstations.len)
-		dat += "<BR><BR><a href='byond://?src=\ref[src];distrib=1'>Evenly distribute remaining TC.</a><BR><BR>"
-
+		dat += "<BR><BR><a href='byond://?src=\ref[src];distrib=1'>Evenly distribute remaining TC</a><BR><BR>"
 
 	for(var/entry in transferlog)
 		dat += "<small>[entry]</small><BR>"
 
-
-	var/datum/browser/popup = new(user, "computer", "Team Telecrystal Management Console", 700, 500)
+	var/datum/browser/popup = new(user, "computer", "Team Telecrystal Management Console", 700, 500, ntheme = CSS_THEME_SYNDICATE)
 	popup.set_content(dat)
-	popup.set_title_image(user.browse_rsc_icon(src.icon, src.icon_state))
 	popup.open()
-	return
 
 /obj/machinery/computer/telecrystals/boss/Topic(href, href_list)
 	. = ..()
@@ -217,6 +183,5 @@ var/list/possible_uplinker_IDs = list("Alfa","Bravo","Charlie","Delta","Echo","F
 			sanity++
 		logTransfer("[src] evenly distributed telecrystals.")
 
-	src.updateUsrDialog()
+	updateUsrDialog()
 
-#undef NUKESCALINGMODIFIER

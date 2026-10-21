@@ -3,9 +3,8 @@
 	icon = 'icons/obj/biomass.dmi'
 	icon_state = "stage1"
 	opacity = 0
-	density = 0
-	anchored = 1
-	layer = ABOVE_HUD_LAYER //DEBUG
+	density = FALSE
+	anchored = TRUE //DEBUG
 	plane = ABOVE_HUD_PLANE
 	var/health = 10
 	var/stage = 1
@@ -22,10 +21,10 @@
 	var/list/obj/effect/biomass/linkedBiomass = list() //all the biomass patches that have spread from it
 	var/newicon = 1 //DEBUG
 
-/obj/effect/rift/New()
+/obj/effect/rift/atom_init()
 	//set background = 1
 
-	..()
+	. = ..()
 
 	for(var/turf/T in orange(1,src))
 		if(!IsValidBiomassLoc(T))
@@ -42,10 +41,10 @@
 		qdel(biomass)
 	..()
 
-/obj/effect/biomass/New()
+/obj/effect/biomass/atom_init()
 	//set background = 1
 
-	..()
+	. = ..()
 	if(!IsValidBiomassLoc(loc,src))
 		qdel(src)
 		return

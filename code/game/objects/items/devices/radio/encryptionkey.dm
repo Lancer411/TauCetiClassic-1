@@ -4,18 +4,26 @@
 	icon = 'icons/obj/radio.dmi'
 	icon_state = "cypherkey"
 	item_state = ""
+	w_class = SIZE_TINY
 	var/translate_binary = 0
 	var/translate_hive = 0
 	var/syndie = 0
 	var/list/channels = list()
 
-/obj/item/device/encryptionkey/New()
-
-/obj/item/device/encryptionkey/attackby(obj/item/weapon/W, mob/user)
-
 /obj/item/device/encryptionkey/syndicate
 	icon_state = "cypherkey"
 	channels = list("Syndicate" = 1)
+	origin_tech = "syndicate=3"
+	syndie = 1//Signifies that it de-crypts Syndicate transmissions
+
+/obj/item/device/encryptionkey/allchannels
+	icon_state = "cypherkey"
+	origin_tech = "syndicate=1"
+	channels = list("Command" = 1, "Security" = 1, "Engineering" = 1, "Science" = 1, "Medical" = 1, "Supply" = 1)
+
+/obj/item/device/encryptionkey/heist
+	icon_state = "cypherkey"
+	channels = list("Heist" = 1)
 	origin_tech = "syndicate=3"
 	syndie = 1//Signifies that it de-crypts Syndicate transmissions
 
@@ -29,6 +37,12 @@
 	desc = "An encyption key for a radio headset.  Contains cypherkeys."
 	icon_state = "sec_cypherkey"
 	channels = list("Security" = 1)
+
+/obj/item/device/encryptionkey/headset_int
+	name = "Nanotrasen Representative's Encryption Key"
+	desc = "An encyption key for a radio headset.  Contains cypherkeys."
+	icon_state = "int_cypherkey"
+	channels = list("Security" = 1, "Command" = 1)
 
 /obj/item/device/encryptionkey/headset_eng
 	name = "Engineering Radio Encryption Key"

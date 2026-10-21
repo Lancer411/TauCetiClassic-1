@@ -1,15 +1,15 @@
 /obj/machinery/seed_extractor
 	name = "seed extractor"
 	desc = "Extracts and bags seeds from produce."
-	icon = 'icons/obj/hydroponics.dmi'
+	icon = 'icons/obj/hydroponics/equipment.dmi'
 	icon_state = "sextractor"
-	density = 1
-	anchored = 1
+	density = TRUE
+	anchored = TRUE
 	var/max_seeds = 1000
 	var/seed_multiplier = 1
 
-/obj/machinery/seed_extractor/New()
-	..()
+/obj/machinery/seed_extractor/atom_init()
+	. = ..()
 	component_parts = list()
 	component_parts += new /obj/item/weapon/circuitboard/seed_extractor(null)
 	component_parts += new /obj/item/weapon/stock_parts/matter_bin(null)
@@ -17,13 +17,15 @@
 	RefreshParts()
 
 /obj/machinery/seed_extractor/RefreshParts()
+	..()
+
 	for(var/obj/item/weapon/stock_parts/matter_bin/B in component_parts)
 		max_seeds = 1000 * B.rating
 	for(var/obj/item/weapon/stock_parts/manipulator/M in component_parts)
 		seed_multiplier = M.rating
 
 
-obj/machinery/seed_extractor/attackby(obj/item/O, mob/user)
+/obj/machinery/seed_extractor/attackby(obj/item/O, mob/user)
 
 	if(default_deconstruction_screwdriver(user, "sextractor_open", "sextractor", O))
 		return
@@ -39,11 +41,20 @@ obj/machinery/seed_extractor/attackby(obj/item/O, mob/user)
 
 	default_deconstruction_crowbar(O)
 
-	if(istype(O, /obj/item/weapon/reagent_containers/food/snacks/grown/))
+	if(isbodypart(O))
+		var/obj/item/organ/external/IO = O
+		if(IO.species.name == DIONA)
+			to_chat(user, "<span class='notice'>You extract some seeds from \the [IO.name].</span>")
+			new /obj/item/seeds/replicapod/real_deal(loc)
+			qdel(IO)
+		else if(IO.species.name == PODMAN)
+			to_chat(user, "<span class='warning'>You fail to extract any seeds from \the [IO.name].</span>")
+			qdel(IO)
+
+	else if(istype(O, /obj/item/weapon/reagent_containers/food/snacks/grown))
 		var/obj/item/weapon/reagent_containers/food/snacks/grown/F = O
-		user.drop_item()
 		to_chat(user, "<span class='notice'>You extract some seeds from the [F.name].</span>")
-		var/seed = text2path(F.seed)
+		var/seed = F.seed_type
 		var/t_amount = 0
 		var/t_max = rand(1,4)
 		while(t_amount < t_max)
@@ -58,11 +69,10 @@ obj/machinery/seed_extractor/attackby(obj/item/O, mob/user)
 			t_amount++
 		qdel(O)
 
-	else if(istype(O, /obj/item/weapon/grown/))
+	else if(istype(O, /obj/item/weapon/grown))
 		var/obj/item/weapon/grown/F = O
-		user.drop_item()
 		to_chat(user, "<span class='notice'>You extract some seeds from the [F.name].</span>")
-		var/seed = text2path(F.seed)
+		var/seed = F.seed_type
 		var/t_amount = 0
 		var/t_max = rand(1,4)
 		while(t_amount < t_max)
@@ -79,8 +89,14 @@ obj/machinery/seed_extractor/attackby(obj/item/O, mob/user)
 
 	else if(istype(O, /obj/item/stack/tile/grass))
 		var/obj/item/stack/tile/grass/S = O
+		if(!S.use(1))
+			return
 		to_chat(user, "<span class='notice'>You extract some seeds from the [S.name].</span>")
-		S.use(1)
 		new /obj/item/seeds/grassseed(loc)
-
+	else if(istype(O, /obj/item/stack/tile/fairygrass))
+		var/obj/item/stack/tile/fairygrass/F = O
+		if(!F.use(1))
+			return
+		to_chat(user, "<span class='notice'>You extract some seeds from the [F.name].</span>")
+		new /obj/item/seeds/fairy_grass(loc)
 	return

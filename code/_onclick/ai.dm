@@ -10,16 +10,15 @@
 	Note that AI have no need for the adjacency proc, and so this proc is a lot cleaner.
 */
 /mob/living/silicon/ai/DblClickOn(atom/A, params)
-	if(client.buildmode) // comes after object.Click to allow buildmode gui objects to be clicked
-		build_click(src, client.buildmode, params, A)
+	if(client.click_intercept) // handled in normal click.
 		return
 
-	if(control_disabled || stat) return
-	next_move = world.time + 9
+	if(control_disabled || stat != CONSCIOUS) return
+	SetNextMove(CLICK_CD_AI)
 
 	if(ismob(A))
 		ai_actual_track(A)
-	else if (!istype(A, /obj/screen))
+	else if (!istype(A, /atom/movable/screen))
 		A.move_camera_by_click()
 
 
@@ -28,33 +27,35 @@
 		return
 	next_click = world.time + 1
 
-	if(client.buildmode) // comes after object.Click to allow buildmode gui objects to be clicked
-		build_click(src, client.buildmode, params, A)
+	if(client.click_intercept) // comes after object.Click to allow buildmode gui objects to be clicked
+		client.click_intercept.InterceptClickOn(src, params, A)
 		return
 
-	if(control_disabled || stat)
+	if(control_disabled || stat != CONSCIOUS)
 		return
+
+	A.add_hiddenprint(src)
 
 	var/list/modifiers = params2list(params)
-	if(modifiers["shift"] && modifiers["ctrl"])
+	if(modifiers[SHIFT_CLICK] && modifiers[CTRL_CLICK])
 		CtrlShiftClickOn(A)
 		return
-	if(modifiers["middle"])
+	if(modifiers[MIDDLE_CLICK])
 		MiddleClickOn(A)
 		return
-	if(modifiers["shift"])
+	if(modifiers[SHIFT_CLICK])
 		ShiftClickOn(A)
 		return
-	if(modifiers["alt"]) // alt and alt-gr (rightalt)
+	if(modifiers[ALT_CLICK]) // alt and alt-gr (rightalt)
 		AltClickOn(A)
 		return
-	if(modifiers["ctrl"])
+	if(modifiers[CTRL_CLICK])
 		CtrlClickOn(A)
 		return
 
 	if(world.time <= next_move)
 		return
-	next_move = world.time + 9
+	SetNextMove(CLICK_CD_AI)
 
 	if(aiCamera.in_camera_mode)
 		aiCamera.camera_mode_off()
@@ -67,7 +68,9 @@
 		RestrainedClickOn(A)
 	else
 	*/
-	A.add_hiddenprint(src)
+	if(holohack && hcattack_ai(A))
+		return
+
 	A.attack_ai(src)
 
 /*
@@ -94,6 +97,9 @@
 /mob/living/silicon/ai/CtrlClickOn(atom/A)
 	A.AICtrlClick(src)
 /mob/living/silicon/ai/AltClickOn(atom/A)
+	if(active_module)
+		if(!active_module.AIAltClickHandle(A))
+			return
 	A.AIAltClick(src)
 
 /*
@@ -109,8 +115,16 @@
 		return
 	return
 
-/atom/proc/AIShiftClick()
-	return
+/atom/proc/AIShiftClick(mob/living/silicon/ai/user)
+	user.examinate(src)
+
+/mob/living/silicon/ai/examinate(atom/A)
+	if((client.eye != src && cameranet && !cameranet.checkCameraVis(A)) || stat == UNCONSCIOUS)
+		to_chat(usr, "<span class='notice'>Something is there but you can't see it.</span>")
+		return
+
+	A.examine(src)
+	SEND_SIGNAL(A, COMSIG_PARENT_POST_EXAMINE, src)
 
 /obj/machinery/door/airlock/AIShiftClick()  // Opens and closes doors!
 	if(density)
@@ -129,21 +143,31 @@
 	else
 		Topic("aiDisable=4", list("aiDisable"="4"), 1)
 
-/obj/machinery/power/apc/AICtrlClick() // turns off APCs.
-	Topic("breaker=1", list("breaker"="1"), 0) // 0 meaning no window (consistency! wait...)
+/obj/machinery/power/apc/AICtrlClick(mob/user) // turns off/on APCs.
+	if(user.incapacitated() || aidisabled)
+		return
+	toggle_breaker(user)
 
-
-/atom/proc/AIAltClick()
+/atom/proc/AIAltClick(mob/M)
 	return
 
-/obj/machinery/door/airlock/AIAltClick() // Eletrifies doors.
-	if(!secondsElectrified)
-		// permenant shock
-		Topic("aiEnable=6", list("aiEnable"="6"), 1) // 1 meaning no window (consistency!)
+/obj/machinery/door/airlock/AIAltClick(mob/M) // Emergency access override OR electrify
+	if(!can_still_interact_with(M))
+		return
+	if(!issilicon(M))
+		return
+	var/mob/living/silicon/S = M
+	if(S.is_antag())
+		if(!secondsElectrified) //Needs rework. See more in PR #14556
+			electrify(M)
+		else
+			unelectrify(M)
+		return
+
+	if(emergency)
+		enable_emergency_access(M)
 	else
-		// disable/6 is not in Topic; disable/5 disables both temporary and permenant shock
-		Topic("aiDisable=5", list("aiDisable"="5"), 1)
-	return
+		disable_emergency_access(M)
 
 //
 // Override AdjacentQuick for AltClicking

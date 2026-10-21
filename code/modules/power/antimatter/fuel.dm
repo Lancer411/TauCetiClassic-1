@@ -4,8 +4,8 @@
 	icon = 'icons/obj/items.dmi'
 	icon_state = "rcdammo"
 	opacity = 0
-	density = 0
-	anchored = 0.0
+	density = FALSE
+	anchored = FALSE
 	var/fuel = 0
 	var/s_time = 1.0
 	var/content = null
@@ -69,7 +69,7 @@
 
 /obj/item/weapon/fuel/examine()
 	set src in view(1)
-	if(usr && !usr.stat)
+	if(usr && usr.stat == CONSCIOUS)
 		to_chat(usr, "A magnetic storage ring, it contains [fuel]kg of [content ? content : "nothing"].")
 
 /obj/item/weapon/fuel/proc/injest(mob/M)
@@ -77,24 +77,11 @@
 		if("Anti-Hydrogen")
 			M.gib()
 		if("Hydrogen")
-			to_chat(M, "\blue You feel very light, as if you might just float away...")
+			to_chat(M, "<span class='notice'>You feel very light, as if you might just float away...</span>")
 	qdel(src)
 	return
 
 /obj/item/weapon/fuel/attack(mob/M, mob/user)
-	if (user != M)
-		var/obj/effect/equip_e/human/O = new /obj/effect/equip_e/human(  )
-		O.source = user
-		O.target = M
-		O.item = src
-		O.s_loc = user.loc
-		O.t_loc = M.loc
-		O.place = "fuel"
-		M.requests += O
-		spawn( 0 )
-			O.process()
-			return
-	else
-		for(var/mob/O in viewers(M, null))
-			O.show_message(text("\red [M] ate the [content ? content : "empty canister"]!"), 1)
-		src.injest(M)
+	if (user == M)
+		visible_message("<span class='red'>[M] ate the [content ? content : "empty canister"]!</span>")
+		injest(M)

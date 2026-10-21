@@ -4,17 +4,18 @@
 	icon = 'icons/obj/kitchen.dmi'
 	icon_state = "fryer_off"
 	layer = 2.9
-	density = 1
-	anchored = 1
-	use_power = 1
+	density = TRUE
+	anchored = TRUE
+	use_power = IDLE_POWER_USE
 	idle_power_usage = 5
+	interact_offline = TRUE
 	var/on = FALSE	//Is it deep frying already?
 	var/obj/item/frying = null	//What's being fried RIGHT NOW?
 	var/fry_time = 0.0
 
 
-/obj/machinery/deepfryer/New()
-	..()
+/obj/machinery/deepfryer/atom_init()
+	. = ..()
 	component_parts = list()
 	component_parts += new /obj/item/weapon/circuitboard/deepfryer(null)
 	component_parts += new /obj/item/weapon/stock_parts/micro_laser(null)
@@ -38,22 +39,25 @@
 				to_chat(user, "You fucked up, man.")
 
 /obj/machinery/deepfryer/attackby(obj/item/I, mob/user)
-	if(on)
-		user << "<span class='notice'>[src] is still active!</span>"
+	if(!anchored)
+		if(iswrenching(I))
+			default_unfasten_wrench(user, I)
 		return
-
+	if(on)
+		to_chat(user, "<span class='notice'>[src] is still active!</span>")
+		return
 	if(istype(I, /obj/item/weapon/reagent_containers/food/snacks/deepfryholder))
 		to_chat(user, "<span class='notice'>You cannot doublefry.</span>")
 		return
-	else if(istype(I, /obj/item/weapon/grab))
-		to_chat(user, "<span class='notice'>You cannot fry him.</span>")
-		return
-	else if (ishuman(user))
+	else if(iswrenching(I))
+		if(tgui_alert(user, "How do you want to use [I]?","You think...", list("Unfasten","Cook")) == "Unfasten")
+			default_unfasten_wrench(user, I)
+			return
+	if (ishuman(user) && !(I.flags & DROPDEL))
 		to_chat(user, "<span class='notice'>You put [I] into [src].</span>")
 		on = TRUE
-		user.drop_item()
 		frying = I
-		frying.loc = src
+		user.drop_from_inventory(frying, src)
 		icon_state = "fryer_on"
 
 
@@ -62,13 +66,16 @@
 	if(frying)
 		fry_time++
 		if(fry_time == 30)
-			playsound(src, "sound/machines/ding.ogg", 50, 1)
+			playsound(src, 'sound/machines/ding.ogg', VOL_EFFECTS_MASTER)
 			visible_message("[src] dings!")
 		else if (fry_time == 60)
 			visible_message("[src] emits an acrid smell!")
 
-
 /obj/machinery/deepfryer/attack_hand(mob/user)
+	. = ..()
+	if(.)
+		return
+
 	if(frying)
 		to_chat(user, "<span class='notice'>You eject [frying] from [src].</span>")
 		var/obj/item/weapon/reagent_containers/food/snacks/deepfryholder/S = new(loc)
@@ -90,11 +97,8 @@
 				S.desc = "A heavily fried...something.  Who can tell anymore?"
 		S.filling_color = S.color
 		qdel(frying)
-
-
 		icon_state = "fryer_off"
 		user.put_in_hands(S)
 		frying = null
 		on = FALSE
 		fry_time = 0
-		return

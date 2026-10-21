@@ -1,5 +1,11 @@
-/atom/movable/proc/nano_host()
+// todo: this is not a nano-ui only thing anymore, we need to move methods for better place and rename *_nano_interaction
+// do not mistake with tgui methods like /datum/tgui_state/default/can_use_topic
+
+/datum/proc/nano_host()
 	return src
+
+/obj/nano_module
+	flags = ABSTRACT
 
 /obj/nano_module/nano_host()
 	return loc
@@ -13,12 +19,12 @@
 	return STATUS_CLOSE // By default no mob can do anything with NanoUI
 
 /mob/dead/observer/can_use_topic()
-	if(check_rights(R_ADMIN, 0, src))
+	if(IsAdminGhost(src))
 		return STATUS_INTERACTIVE				// Admins are more equal
 	return STATUS_UPDATE						// Ghosts can view updates
 
 /mob/living/silicon/pai/can_use_topic(src_object)
-	if(src_object == src && !stat)
+	if(src_object == src && stat == CONSCIOUS)
 		return STATUS_INTERACTIVE
 	else
 		return ..()
@@ -26,7 +32,7 @@
 /mob/living/silicon/robot/can_use_topic(src_object, datum/topic_state/custom_state)
 	if(stat || !client)
 		return STATUS_CLOSE
-	if(lockcharge || stunned || weakened)
+	if(lockcharge || incapacitated(NONE))
 		return STATUS_DISABLED
 	if(isobj(src_object))
 		var/obj/O = src_object
@@ -35,7 +41,7 @@
 	if(custom_state && (custom_state.flags & NANO_IGNORE_DISTANCE))
 		return STATUS_INTERACTIVE
 	// robots can interact with things they can see within their view range
-	if((src_object in view(src)) && get_dist(src_object, src) <= src.client.view)
+	if((src_object in view(src)) && get_dist(src_object, src) <= client.view)
 		return STATUS_INTERACTIVE	// interactive (green visibility)
 	return STATUS_DISABLED			// no updates, completely disabled (red visibility)
 
@@ -46,9 +52,9 @@
 		return
 	if(z in config.admin_levels)						// Syndicate borgs can interact with everything on the admin level
 		return STATUS_INTERACTIVE
-	if(istype(get_area(src), /area/syndicate_station))	// If elsewhere, they can interact with everything on the syndicate shuttle
+	if(istype(get_area(src), /area/shuttle/syndicate))	// If elsewhere, they can interact with everything on the syndicate shuttle
 		return STATUS_INTERACTIVE
-	if(istype(src_object, /obj/machinery))				// Otherwise they can only interact with emagged machinery
+	if(ismachinery(src_object))				// Otherwise they can only interact with emagged machinery
 		var/obj/machinery/Machine = src_object
 		if(Machine.emagged)
 			return STATUS_INTERACTIVE
@@ -61,7 +67,7 @@
 	// Prevents the AI from using Topic on admin levels (by for example viewing through the court/thunderdome cameras)
 	// unless it's on the same level as the object it's interacting with.
 	var/turf/T = get_turf(src_object)
-	if(!T || !(z == T.z || (T.z in config.player_levels)))
+	if(!T || !(z == T.z || (T.z in SSmapping.levels_by_any_trait(list(ZTRAIT_STATION, ZTRAIT_MINING)))))
 		return STATUS_CLOSE
 
 	// If an object is in view then we can interact with it
@@ -81,9 +87,9 @@
 	return 	STATUS_CLOSE
 
 /mob/living/proc/shared_living_nano_interaction(src_object)
-	if (src.stat != CONSCIOUS)
+	if (stat != CONSCIOUS)
 		return STATUS_CLOSE						// no updates, close the interface
-	else if (restrained() || lying || stat || stunned || weakened)
+	else if (incapacitated())
 		return STATUS_UPDATE					// update only (orange visibility)
 	return STATUS_INTERACTIVE
 
@@ -95,7 +101,7 @@
 	if(!isturf(src_object.loc))
 		if(src_object.loc == src)				// Item in the inventory
 			return STATUS_INTERACTIVE
-		if(src.contents.Find(src_object.loc))	// A hidden uplink inside an item
+		if(contents.Find(src_object.loc))	// A hidden uplink inside an item
 			return STATUS_INTERACTIVE
 
 	if (!(src_object in view(4, src))) 	// If the src object is not in visable, disable updates
@@ -117,7 +123,7 @@
 			. = loc.contents_nano_distance(src_object, src)
 		else
 			. = shared_living_nano_distance(src_object)
-	if(STATUS_INTERACTIVE)
+	if(. == STATUS_INTERACTIVE)
 		return STATUS_UPDATE
 
 /mob/living/carbon/human/can_use_topic(src_object, datum/topic_state/custom_state)
@@ -126,6 +132,11 @@
 		. = shared_living_nano_distance(src_object)
 		if(. == STATUS_UPDATE && (TK in mutations))	// If we have telekinesis and remain close enough, allow interaction.
 			return STATUS_INTERACTIVE
+
+/mob/living/carbon/xenomorph/humanoid/can_use_topic(src_object, datum/topic_state/custom_state)
+	. = shared_living_nano_interaction(src_object)
+	if(. == STATUS_INTERACTIVE && !(custom_state && (custom_state.flags & NANO_IGNORE_DISTANCE)))
+		. = shared_living_nano_distance(src_object)
 
 /var/global/datum/topic_state/default_state = new()
 

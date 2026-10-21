@@ -2,7 +2,7 @@
 	set src in oview()
 
 	if(!usr || !src)	return
-	if( (usr.sdisabilities & BLIND || usr.blinded || usr.stat) && !istype(usr,/mob/dead/observer) )
+	if( (usr.sdisabilities & BLIND || usr.blinded || usr.stat != CONSCIOUS) && !isobserver(usr) )
 		to_chat(usr, "<span class='notice'>Something is there but you can't see it.</span>")
 		return
 
@@ -12,6 +12,8 @@
 		msg += "It is [bicon(src.handcuffed)] handcuffed!\n"
 	if (src.wear_mask)
 		msg += "It has [bicon(src.wear_mask)] \a [src.wear_mask] on its head.\n"
+	if (src.neck)
+		msg += "It has [bicon(src.neck)] \a [src.neck] on its neck.\n"
 	if (src.l_hand)
 		msg += "It has [bicon(src.l_hand)] \a [src.l_hand] in its left hand.\n"
 	if (src.r_hand)
@@ -22,13 +24,13 @@
 		msg += "<span class='deadsay'>It is limp and unresponsive, with no signs of life.</span>\n"
 	else
 		msg += "<span class='warning'>"
-		if (src.getBruteLoss())
-			if (src.getBruteLoss() < 30)
+		if (getBruteLoss())
+			if (getBruteLoss() < 30)
 				msg += "It has minor bruising.\n"
 			else
 				msg += "<B>It has severe bruising!</B>\n"
-		if (src.getFireLoss())
-			if (src.getFireLoss() < 30)
+		if (getFireLoss())
+			if (getFireLoss() < 30)
 				msg += "It has minor burns.\n"
 			else
 				msg += "<B>It has severe burns!</B>\n"
@@ -36,8 +38,8 @@
 			msg += "It isn't responding to anything around it; it seems to be asleep.\n"
 		msg += "</span>"
 
-	if (src.digitalcamo)
-		msg += "It is moving its body in an unnatural and blatantly unsimian manner.\n"
+	if(w_class)
+		msg += "It is a [get_size_flavor()] sized creature.\n"
 
 	msg += "*---------*</span>"
 

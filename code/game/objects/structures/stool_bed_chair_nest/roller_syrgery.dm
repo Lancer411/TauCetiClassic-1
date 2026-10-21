@@ -2,10 +2,10 @@
  * Roller beds
  */
 /obj/structure/stool/bed/roller/roller_surg
-	name = "advancet roller bed"
+	name = "advanced roller bed"
 	icon = 'icons/obj/rollerbed.dmi'
 	icon_state = "down"
-	anchored = 0
+	anchored = FALSE
 	type_roller = /obj/item/roller/roller_holder_surg
 
 /obj/item/roller/roller_holder_surg

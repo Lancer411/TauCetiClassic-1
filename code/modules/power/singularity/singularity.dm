@@ -1,14 +1,39 @@
+/atom/movable/singularity_effect
+	plane = SINGULARITY_EFFECT_PLANE_1
+	appearance_flags = PIXEL_SCALE | RESET_TRANSFORM
+	icon = 'icons/effects/288x288.dmi'
+	icon_state = "gravitational_lens"
+	mouse_opacity = MOUSE_OPACITY_TRANSPARENT
+
+/atom/movable/singularity_swirl
+	plane = SINGULARITY_EFFECT_PLANE_1
+	appearance_flags = PIXEL_SCALE | RESET_TRANSFORM
+	icon = 'icons/effects/288x288.dmi'
+	icon_state = "gravitational_swirl"
+	mouse_opacity = MOUSE_OPACITY_TRANSPARENT
+
+/atom/movable/singularity_lens
+	plane = SINGULARITY_EFFECT_PLANE_0
+	appearance_flags = PIXEL_SCALE | RESET_TRANSFORM
+	icon = 'icons/effects/288x288.dmi'
+	icon_state = "gravitational_lens"
+	mouse_opacity = MOUSE_OPACITY_TRANSPARENT
+
 /obj/singularity
-	name = "gravitational singularity"
-	desc = "A gravitational singularity."
-	icon = 'icons/obj/singularity.dmi'
-	icon_state = "singularity_s1"
-	anchored = 1
-	density = 1
-	layer = 6
+	name = "singularity placeholder"
+	desc = "singularity placeholder"
+	icon = 'icons/effects/96x96.dmi'
+	icon_state = "emfield_s3"
+	anchored = TRUE
+	density = TRUE
+	plane = SINGULARITY_PLANE
+	layer = SINGULARITY_LAYER
+	appearance_flags = LONG_GLIDE
+	glide_size = 0.65
 	//light_range = 6
 	unacidable = 1 //Don't comment this out.
-	var/current_size = 1
+	w_class = SIZE_MASSIVE
+	var/current_size = 1 // todo: merge with w_class
 	var/allowed_size = 1
 	var/contained = 1 //Are we going to move around?
 	var/energy = 100 //How strong are we?
@@ -24,57 +49,57 @@
 	var/last_failed_movement = 0//Will not move in the same dir if it couldnt before, will help with the getting stuck on fields thing
 	var/last_warning
 
-/obj/singularity/New(loc, var/starting_energy = 50, var/temp = 0)
+/obj/singularity/atom_init(mapload, starting_energy = 50, temp = 0)
 	//CARN: admin-alert for chuckle-fuckery.
 	admin_investigate_setup()
 
-	src.energy = starting_energy
+	energy = starting_energy
 	if(temp)
-		spawn(temp)
-			qdel(src)
+		QDEL_IN(src, temp)
 	..()
-	SSobj.processing |= src
-	poi_list |= src
+
+	update_icon(STAGE_ONE)
+
+	START_PROCESSING(SSobj, src)
+	return INITIALIZE_HINT_LATELOAD
+
+/obj/singularity/atom_init_late()
 	for(var/obj/machinery/singularity_beacon/singubeacon in machines)
 		if(singubeacon.active)
 			target = singubeacon
 			break
-	return
 
 /obj/singularity/Destroy()
-	SSobj.processing.Remove(src)
-	poi_list.Remove(src)
+	visible_message("<span class='warning'><B>[src] slows it's endless spinning down. A second passes - and reality around [src] distorts before allowing [src] to collapse into itself and disappear from existence.</B></span>")
+	STOP_PROCESSING(SSobj, src)
 	return ..()
 
 /obj/singularity/attack_hand(mob/user)
 	consume(user)
 	return 1
 
-/obj/singularity/Move(atom/newloc, direct)
-	if(current_size >= STAGE_FIVE || check_turfs_in(direct))
+/obj/singularity/attack_tk(mob/user)
+	return FALSE
+
+/obj/singularity/Move(NewLoc, Dir = 0, step_x = 0, step_y = 0)
+	if(current_size >= STAGE_FIVE || check_turfs_in(Dir))
 		last_failed_movement = 0//Reset this because we moved
 		return ..()
 	else
-		last_failed_movement = direct
-		return 0
+		last_failed_movement = Dir
+		return FALSE
 
 /obj/singularity/blob_act(severity)
 	return
 
 /obj/singularity/ex_act(severity)
 	switch(severity)
-		if(1.0)
+		if(EXPLODE_DEVASTATE)
 			if(current_size <= 3)
-				investigate_log("has been destroyed by a heavy explosion.","singulo")
+				log_investigate("has been destroyed by a heavy explosion.",INVESTIGATE_SINGULO)
 				qdel(src)
 				return
-			else
-				energy -= round(((energy+1)/2),1)
-		if(2.0)
-			energy -= round(((energy+1)/3),1)
-		if(3.0)
-			energy -= round(((energy+1)/4),1)
-	return
+	energy -= round(((energy + 1) / (severity + 1)), 1)
 
 /obj/singularity/Bump(atom/A)
 	consume(A)
@@ -100,12 +125,15 @@
 /obj/singularity/attack_ai() //to prevent ais from gibbing themselves when they click on one.
 	return
 
+/obj/singularity/update_icon(stage)
+	return
+
 /obj/singularity/proc/admin_investigate_setup()
 	last_warning = world.time
 	var/count = locate(/obj/machinery/containment_field) in orange(30, src)
 	if(!count)
-		message_admins("A singulo has been created without containment fields active ([x],[y],[z]) (<A HREF='?_src_=holder;adminplayerobservecoodjump=1;X=[src.x];Y=[src.y];Z=[src.z]'>JMP</a>)")
-	investigate_log("was created. [count?"":"<font color='red'>No containment fields were active</font>"]","singulo")
+		message_admins("A singulo has been created without containment fields active [COORD(src)] [ADMIN_JMP(src)]")
+	log_investigate("was created. [count?"":"<font color='red'>No containment fields were active</font>"]",INVESTIGATE_SINGULO)
 
 /obj/singularity/proc/dissipate()
 	if(!dissipate)
@@ -123,10 +151,7 @@
 	switch(temp_allowed_size)
 		if(STAGE_ONE)
 			current_size = STAGE_ONE
-			icon = 'icons/obj/singularity.dmi'
-			icon_state = "singularity_s1"
-			pixel_x = 0
-			pixel_y = 0
+			w_class = SIZE_HUMAN
 			grav_pull = 4
 			consume_range = 0
 			dissipate_delay = 10
@@ -134,10 +159,7 @@
 			dissipate_strength = 1
 		if(STAGE_TWO)//1 to 3 does not check for the turfs if you put the gens right next to a 1x1 then its going to eat them
 			current_size = STAGE_TWO
-			icon = 'icons/effects/96x96.dmi'
-			icon_state = "singularity_s3"
-			pixel_x = -32
-			pixel_y = -32
+			w_class = SIZE_MASSIVE
 			grav_pull = 6
 			consume_range = 1
 			dissipate_delay = 5
@@ -146,43 +168,39 @@
 		if(STAGE_THREE)
 			if((check_turfs_in(1,2))&&(check_turfs_in(2,2))&&(check_turfs_in(4,2))&&(check_turfs_in(8,2)))
 				current_size = STAGE_THREE
-				icon = 'icons/effects/160x160.dmi'
-				icon_state = "singularity_s5"
-				pixel_x = -64
-				pixel_y = -64
+				w_class = SIZE_GYGANT
 				grav_pull = 8
-				consume_range = 2
+				consume_range = 1
 				dissipate_delay = 4
 				dissipate_track = 0
 				dissipate_strength = 20
 		if(STAGE_FOUR)
 			if((check_turfs_in(1,3))&&(check_turfs_in(2,3))&&(check_turfs_in(4,3))&&(check_turfs_in(8,3)))
 				current_size = STAGE_FOUR
-				icon = 'icons/effects/224x224.dmi'
-				icon_state = "singularity_s7"
-				pixel_x = -96
-				pixel_y = -96
+				w_class = SIZE_GARGANTUAN
 				grav_pull = 10
-				consume_range = 3
+				consume_range = 1
 				dissipate_delay = 10
 				dissipate_track = 0
 				dissipate_strength = 10
 		if(STAGE_FIVE)//this one also lacks a check for gens because it eats everything
 			current_size = STAGE_FIVE
-			icon = 'icons/effects/288x288.dmi'
-			icon_state = "singularity_s9"
-			pixel_x = -128
-			pixel_y = -128
+			w_class = SIZE_GARGANTUAN
 			grav_pull = 10
-			consume_range = 4
+			consume_range = 1
 			dissipate = 0 //It cant go smaller due to e loss
 	if(current_size == allowed_size)
-		investigate_log("<font color='red'>grew to size [current_size]</font>","singulo")
+		log_investigate("<font color='red'>grew to size [current_size]</font>",INVESTIGATE_SINGULO)
+		update_icon(temp_allowed_size)
 		return 1
 	else if(current_size < (--temp_allowed_size))
 		expand(temp_allowed_size)
 	else
 		return 0
+
+/obj/singularity/get_current_temperature()
+	// var/total_potential_energy = energy * energy / dissipate_strength
+	return WATTS_2_CELSIUM * energy * energy / dissipate_strength
 
 /obj/singularity/proc/check_energy()
 	if(energy <= 0)
@@ -223,10 +241,10 @@
 	return
 
 /obj/singularity/Process_Spacemove() //The singularity stops drifting for no man!
-	return 0
+	return 1
 
 /obj/singularity/proc/consume(atom/A)
-	var/gain = A.singularity_act(current_size)
+	var/gain = A.singularity_act(src, current_size)
 	src.energy += gain
 	return
 
@@ -241,6 +259,9 @@
 
 	if(target && prob(60))
 		movement_dir = get_dir(src,target) //moves to a singulo beacon, if there is one
+
+	else if(prob(round(length(orbiters) * 2.5))) //These ghosts are griefers
+		movement_dir = get_dir(src, get_turf(length(global.living_list) ? pick(global.living_list) : get_turf(src)))
 
 	step(src, movement_dir)
 
@@ -272,10 +293,10 @@
 	var/dir2 = 0
 	var/dir3 = 0
 	switch(direction)
-		if(NORTH||SOUTH)
+		if(NORTH, SOUTH)
 			dir2 = 4
 			dir3 = 8
-		if(EAST||WEST)
+		if(EAST, WEST)
 			dir2 = 1
 			dir3 = 2
 	var/turf/T2 = T
@@ -324,7 +345,7 @@
 
 /obj/singularity/proc/mezzer()
 	for(var/mob/living/carbon/M in oviewers(8, src))
-		if(istype(M, /mob/living/carbon/brain)) //Ignore brains
+		if(isbrain(M)) //Ignore brains
 			continue
 
 		if(M.stat == CONSCIOUS)
@@ -335,8 +356,7 @@
 					return
 		to_chat(M, "<span class='red'>You look directly into The [src.name] and feel weak.</span>")
 		M.apply_effect(3, STUN)
-		for(var/mob/O in viewers(M, null))
-			O.show_message(text("<span class='danger'>[] stares blankly at The []!</span>", M, src), 1)
+		M.visible_message("<span class='danger'>[M] stares blankly at The [src]!</span>")
 	return
 
 /obj/singularity/proc/emp_area()
@@ -349,9 +369,141 @@
 			R.receive_pulse(energy)
 	return
 
+/obj/singularity/proc/deduce_energy(deduce)
+	energy -= deduce
+
 /obj/singularity/singularity_act()
 	var/gain = (energy/2)
 	var/dist = max((current_size - 2),1)
 	explosion(src.loc,(dist),(dist*2),(dist*4))
 	qdel(src)
 	return(gain)
+
+
+
+
+/obj/singularity/gravitational
+	name = "gravitational singularity"
+	desc = "A gravitational singularity."
+	icon = 'icons/obj/singularity.dmi'
+	icon_state = "singularity_s1"
+
+	var/atom/movable/singularity_effect/singulo_effect
+	var/atom/movable/singularity_swirl/singulo_swirl
+	var/atom/movable/singularity_lens/singulo_lens
+
+/obj/singularity/gravitational/atom_init()
+	. = ..()
+
+	add_filter("singa_ring", 1, bloom_filter(rgb(100,0,0), 2, 2, 255))
+
+	animate(src, transform = turn(matrix(), -120), time = 5, loop = -1, flags = ANIMATION_PARALLEL)
+	animate(transform = turn(matrix(), -240), time = 7, loop = -1)
+	animate(transform = turn(matrix(), 0), time = 5, loop = -1)
+
+	animate(get_filter("singa_ring"), size = 1, offset = 1, time = 5, loop = -1, easing = CIRCULAR_EASING, flags = ANIMATION_PARALLEL)
+	animate(size = 2, offset = 2, time = 10, loop = -1, easing = CIRCULAR_EASING)
+
+/obj/singularity/gravitational/Destroy()
+	vis_contents -= singulo_swirl
+	QDEL_NULL(singulo_swirl)
+	vis_contents -= singulo_effect
+	QDEL_NULL(singulo_effect)
+	vis_contents -= singulo_lens
+	QDEL_NULL(singulo_lens)
+	return ..()
+
+/obj/singularity/gravitational/update_icon(stage)
+	if(!singulo_lens)
+		singulo_lens = new(src)
+		vis_contents += singulo_lens
+
+	if(!singulo_swirl)
+		singulo_swirl = new(src)
+		vis_contents += singulo_swirl
+
+	if(!singulo_effect)
+		singulo_effect = new(src)
+		vis_contents += singulo_effect
+
+	switch(stage)
+		if(STAGE_ONE)
+			icon = 'icons/obj/singularity.dmi'
+			icon_state = "singularity_s1"
+			pixel_x = 0
+			pixel_y = 0
+			singulo_swirl.plane = SINGULARITY_EFFECT_PLANE_1
+			singulo_effect.plane = SINGULARITY_EFFECT_PLANE_1
+			animate(singulo_lens, transform = matrix().Scale(0.5), time = 25)
+			singulo_lens.pixel_x = -128
+			singulo_lens.pixel_y = -128
+			animate(singulo_swirl, transform = matrix().Scale(0.25), time = 25)
+			singulo_swirl.pixel_x = -128
+			singulo_swirl.pixel_y = -128
+			animate(singulo_effect, transform = matrix().Scale(0.015), time = 25)
+			singulo_effect.pixel_x = -128
+			singulo_effect.pixel_y = -128
+		if(STAGE_TWO )
+			icon = 'icons/effects/96x96.dmi'
+			icon_state = "singularity_s3"
+			pixel_x = -32
+			pixel_y = -32
+			singulo_swirl.plane = SINGULARITY_EFFECT_PLANE_1
+			singulo_effect.plane = SINGULARITY_EFFECT_PLANE_2
+			animate(singulo_lens, transform = matrix().Scale(0.75), time = 25)
+			singulo_lens.pixel_x = -96
+			singulo_lens.pixel_y = -96
+			animate(singulo_swirl, transform = matrix().Scale(0.5), time = 25)
+			singulo_swirl.pixel_x = -96
+			singulo_swirl.pixel_y = -96
+			animate(singulo_effect, transform = matrix().Scale(0.19), time = 25)
+			singulo_effect.pixel_x = -96
+			singulo_effect.pixel_y = -96
+		if(STAGE_THREE)
+			icon = 'icons/effects/160x160.dmi'
+			icon_state = "singularity_s5"
+			pixel_x = -64
+			pixel_y = -64
+			singulo_swirl.plane = SINGULARITY_EFFECT_PLANE_2
+			singulo_effect.plane = SINGULARITY_EFFECT_PLANE_2
+			animate(singulo_lens, transform = matrix().Scale(1.25), time = 25)
+			singulo_lens.pixel_x = -64
+			singulo_lens.pixel_y = -64
+			animate(singulo_swirl, transform = matrix().Scale(0.75), time = 25)
+			singulo_swirl.pixel_x = -64
+			singulo_swirl.pixel_y = -64
+			animate(singulo_effect, transform = matrix().Scale(0.3), time = 25)
+			singulo_effect.pixel_x = -64
+			singulo_effect.pixel_y = -64
+		if(STAGE_FOUR)
+			icon = 'icons/effects/224x224.dmi'
+			icon_state = "singularity_s7"
+			pixel_x = -96
+			pixel_y = -96
+			singulo_swirl.plane = SINGULARITY_EFFECT_PLANE_2
+			singulo_effect.plane = SINGULARITY_EFFECT_PLANE_3
+			animate(singulo_lens, transform = matrix().Scale(1.75), time = 25)
+			singulo_lens.pixel_x = -32
+			singulo_lens.pixel_y = -32
+			animate(singulo_swirl, transform = matrix().Scale(1), time = 25)
+			singulo_swirl.pixel_x = -32
+			singulo_swirl.pixel_y = -32
+			animate(singulo_effect, transform = matrix().Scale(0.41), time = 25)
+			singulo_effect.pixel_x = -32
+			singulo_effect.pixel_y = -32
+		if(STAGE_FIVE)
+			icon = 'icons/effects/288x288.dmi'
+			icon_state = "singularity_s9"
+			pixel_x = -128
+			pixel_y = -128
+			singulo_swirl.plane = SINGULARITY_EFFECT_PLANE_3
+			singulo_effect.plane = SINGULARITY_EFFECT_PLANE_3
+			animate(singulo_lens, transform = matrix().Scale(3), time = 25)
+			singulo_lens.pixel_x = 0
+			singulo_lens.pixel_y = 0
+			animate(singulo_swirl, transform = matrix().Scale(1.5), time = 25)
+			singulo_swirl.pixel_x = 0
+			singulo_swirl.pixel_y = 0
+			animate(singulo_effect, transform = matrix().Scale(0.5), time = 25)
+			singulo_effect.pixel_x = 0
+			singulo_effect.pixel_y = 0

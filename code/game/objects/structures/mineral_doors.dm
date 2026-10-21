@@ -1,234 +1,282 @@
-//NOT using the existing /obj/machinery/door type, since that has some complications on its own, mainly based on its
-//machineryness
-
 /obj/structure/mineral_door
-	name = "mineral door"
-	density = 1
-	anchored = 1
-	opacity = 1
+	desc = "It opens and closes. What a surprise!"
+	density = TRUE
+	anchored = TRUE
+	opacity = TRUE
+	can_block_air = TRUE
 
 	icon = 'icons/obj/doors/mineral_doors.dmi'
-	icon_state = "metal"
 
-	var/mineralType = "metal"
-	var/state = 0 //closed, 1 == open
-	var/isSwitchingStates = 0
-	var/oreAmount = 7
+	var/operating_sound = 'sound/effects/stonedoor_openclose.ogg'
+	var/close_state = TRUE
+	var/isSwitchingStates = FALSE
+	var/sheetAmount = 7
+	var/can_unwrench = TRUE
 
-	var/health = 100
+	var/id = "base id"
+	var/locked = FALSE
+	var/lock_broken = FALSE
 
-/obj/structure/mineral_door/New(location)
-	..()
-	icon_state = mineralType
-	name = "[mineralType] door"
-	update_nearby_tiles(need_rebuild=1)
+	var/sheetType
+
+	max_integrity = 100
+	resistance_flags = CAN_BE_HIT
+
+/obj/structure/mineral_door/atom_init()
+	. = ..()
+	update_nearby_tiles()
 
 /obj/structure/mineral_door/Destroy()
 	update_nearby_tiles()
 	return ..()
 
-/obj/structure/mineral_door/Bumped(atom/user)
-	..()
-	if(!state)
-		return TryToSwitchState(user)
-	return
+/obj/structure/mineral_door/Bumped(atom/M)
+	if(close_state)
+		if(ismob(M))
+			if(DoorChecks() && MobChecks(M))
+				add_fingerprint(M)
+				Open()
+		else if(istype(M, /obj/mecha))
+			if(DoorChecks() && MechChecks(M))
+				Open()
 
-/obj/structure/mineral_door/attack_ai(mob/user) //those aren't machinery, they're just big fucking slabs of a mineral
-	if(isAI(user)) //so the AI can't open it
-		return
-	else if(isrobot(user)) //but cyborgs can
-		if(get_dist(user,src) <= 1) //not remotely though
-			return TryToSwitchState(user)
+/obj/structure/mineral_door/attack_ai(mob/user)
+	if(isrobot(user) && get_dist(user, src) <= 1)
+		return attack_hand(user)
 
 /obj/structure/mineral_door/attack_paw(mob/user)
-	return TryToSwitchState(user)
+	return attack_hand(user)
 
 /obj/structure/mineral_door/attack_hand(mob/user)
-	return TryToSwitchState(user)
+	if(DoorChecks() && MobChecks(user))
+		add_fingerprint(user)
+		SwitchState()
 
-/obj/structure/mineral_door/CanPass(atom/movable/mover, turf/target, height=0, air_group=0)
-	if(air_group) return 0
+/obj/structure/mineral_door/c_airblock(turf/other)
+	return ..() | ZONE_BLOCKED
+
+/obj/structure/mineral_door/CanPass(atom/movable/mover, turf/target, height = 0)
 	if(istype(mover, /obj/effect/beam))
 		return !opacity
 	return !density
 
-/obj/structure/mineral_door/proc/TryToSwitchState(atom/user)
-	if(isSwitchingStates) return
-	if(ismob(user))
-		var/mob/M = user
-		if(world.time - user.last_bumped <= 60) return //NOTE do we really need that?
-		if(M.client)
-			if(iscarbon(M))
-				var/mob/living/carbon/C = M
-				if(!C.handcuffed)
-					SwitchState()
-			else
-				SwitchState()
-	else if(istype(user, /obj/mecha))
-		SwitchState()
+/obj/structure/mineral_door/proc/DoorChecks()
+	return (!isSwitchingStates && anchored)
+
+/obj/structure/mineral_door/proc/MobChecks(mob/user)
+	if(user.w_class >= SIZE_SMALL)
+		if(iscarbon(user))
+			var/mob/living/carbon/C = user
+			if(!C.handcuffed)
+				return TRUE
+		else
+			return TRUE
+	return FALSE
+
+/obj/structure/mineral_door/proc/MechChecks(obj/mecha/user)
+	return TRUE
 
 /obj/structure/mineral_door/proc/SwitchState()
-	if(state)
-		Close()
-	else
+	if(close_state)
 		Open()
+	else
+		Close()
 
 /obj/structure/mineral_door/proc/Open()
-	isSwitchingStates = 1
-	playsound(loc, 'sound/effects/stonedoor_openclose.ogg', 100, 1)
-	flick("[mineralType]opening",src)
+	if(locked)
+		playsound(src, 'sound/effects/door_locked.ogg', VOL_EFFECTS_MASTER)
+		return
+
+	isSwitchingStates = TRUE
+	playsound(src, operating_sound, VOL_EFFECTS_MASTER)
+	flick("[initial(icon_state)]_opening", src)
+	change_alt_apperance("_opening")
 	sleep(10)
-	density = 0
-	opacity = 0
-	state = 1
+	density = FALSE
+	set_opacity(FALSE)
+	close_state = FALSE
 	update_icon()
-	isSwitchingStates = 0
+	isSwitchingStates = FALSE
 	update_nearby_tiles()
 
 /obj/structure/mineral_door/proc/Close()
-	isSwitchingStates = 1
-	playsound(loc, 'sound/effects/stonedoor_openclose.ogg', 100, 1)
-	flick("[mineralType]closing",src)
+	isSwitchingStates = TRUE
+	playsound(src, operating_sound, VOL_EFFECTS_MASTER)
+	flick("[initial(icon_state)]_closing", src)
+	change_alt_apperance("_closing")
 	sleep(10)
-	density = 1
-	opacity = 1
-	state = 0
+	density = TRUE
+	set_opacity(TRUE)
+	close_state = TRUE
 	update_icon()
-	isSwitchingStates = 0
+	isSwitchingStates = FALSE
 	update_nearby_tiles()
 
 /obj/structure/mineral_door/update_icon()
-	if(state)
-		icon_state = "[mineralType]open"
+	if(close_state)
+		icon_state = initial(icon_state)
+		change_alt_apperance("")
 	else
-		icon_state = mineralType
+		icon_state = "[initial(icon_state)]_open"
+		change_alt_apperance("_open")
+
+/obj/structure/mineral_door/proc/change_alt_apperance(icon_state_postfix)
+	if(alternate_appearances)
+		for(var/name in alternate_appearances)
+			var/datum/atom_hud/alternate_appearance/basic/AA = alternate_appearances[name]
+			if(!AA.alternate_obj || !istype(AA.alternate_obj, /obj/structure/mineral_door))
+				continue
+			AA.theImage.icon_state = "[initial(AA.alternate_obj.icon_state)][icon_state_postfix]"
 
 /obj/structure/mineral_door/attackby(obj/item/weapon/W, mob/user)
-	if(istype(W,/obj/item/weapon/pickaxe))
-		var/obj/item/weapon/pickaxe/digTool = W
-		to_chat(user, "You start digging the [name].")
-		if(do_after(user,digTool.digspeed, target = src) && src)
-			to_chat(user, "You finished digging.")
-			Dismantle()
-	else if(istype(W, /obj/item/weapon))
-		if (istype(W, /obj/item/weapon/weldingtool))
-			if(istype(src, /obj/structure/mineral_door/resin) || istype(src, /obj/structure/mineral_door/wood))
-				health -= W.force
-				CheckHealth()
-				return ..()
-			var/obj/item/weapon/weldingtool/WT = W
-			if(!src || !WT.isOn())
-				return ..()
-			if(WT.remove_fuel(0, user))
-				playsound(src.loc, 'sound/items/Welder2.ogg', 50, 1)
-				user.visible_message("[user] dissassembles [src].", "You start to dissassemble [src].")
-				if(do_after(user, 60, target = src))
-					to_chat(user, "\blue You dissasembled [src]!")
-					Dismantle()
-				else
-					return
-			else
-				to_chat(user, "\blue You need more welding fuel.")
-				return
-		else if (istype(W, /obj/item/weapon/wrench))
-			if(!istype(src, /obj/structure/mineral_door/wood))
-				health -= W.force
-				CheckHealth()
-				return ..()
-			playsound(src.loc, 'sound/items/Ratchet.ogg', 100, 1)
-			user.visible_message("[user] dissassembles [src].", "You start to dissassemble [src].")
-			if(do_after(user, 40, target = src))
-				to_chat(user, "\blue You dissasembled [src]!")
-				Dismantle()
-			else
-				return
-		health -= W.force
-		CheckHealth()
-		return ..()
-	else
-		attack_hand(user)
-	return
+	if(istype(W, /obj/item/weapon/pickaxe) && !(istype(src, /obj/structure/mineral_door/wood) || istype(src, /obj/structure/mineral_door/metal)))
+		if(user.is_busy(src))
+			return
+		to_chat(user, "<span class='notice'>You start digging the [name].</span>")
+		if(W.use_tool(src, user, 50, volume = 100))
+			to_chat(user, "<span class='notice'>You finished digging!</span>")
+			deconstruct(TRUE)
 
-/obj/structure/mineral_door/proc/CheckHealth()
-	if(health <= 0)
-		Dismantle(1)
-
-/obj/structure/mineral_door/proc/Dismantle(devastated = 0)
-	if(!devastated)
-		if (mineralType == "metal")
-			var/ore = /obj/item/stack/sheet/metal
-			for(var/i = 1, i <= oreAmount, i++)
-				new ore(get_turf(src))
+	else if(iswrenching(W) && can_unwrench)
+		if(user.is_busy(src))
+			return
+		if(anchored)
+			to_chat(user, "<span class='notice'>You start dissassembling the [name].</span>")
+			if(W.use_tool(src, user, 40, volume = 100, quality = QUALITY_WRENCHING))
+				to_chat(user, "<span class='notice'>You dissassembled the [name]!</span>")
+				anchored = FALSE
+				name = "disassembled [name]"
+				desc = "Needs assembly."
+				icon_state = "[initial(icon_state)]_disassembled"
+				density = FALSE
+				set_opacity(FALSE)
 		else
-			var/ore = text2path("/obj/item/stack/sheet/mineral/[mineralType]")
-			for(var/i = 1, i <= oreAmount, i++)
-				new ore(get_turf(src))
-	else
-		if (mineralType == "metal")
-			var/ore = /obj/item/stack/sheet/metal
-			for(var/i = 3, i <= oreAmount, i++)
-				new ore(get_turf(src))
-		else
-			var/ore = text2path("/obj/item/stack/sheet/mineral/[mineralType]")
-			for(var/i = 3, i <= oreAmount, i++)
-				new ore(get_turf(src))
-	qdel(src)
+			to_chat(user, "<span class='notice'>You start assembling the [name]!</span>")
+			if(W.use_tool(src, user, 40, volume = 100, quality = QUALITY_WRENCHING))
+				to_chat(user, "<span class='notice'>You assembled the [name]!</span>")
+				anchored = TRUE
+				name = initial(name)
+				desc = initial(desc)
+				density = TRUE
+				icon_state = initial(icon_state)
+				if(!istype(src, /obj/structure/mineral_door/transparent))
+					set_opacity(TRUE)
 
-/obj/structure/mineral_door/ex_act(severity = 1)
-	switch(severity)
-		if(1)
-			Dismantle(1)
-		if(2)
+	else if(istype(W, /obj/item/weapon/key))
+		var/obj/item/weapon/key/K = W
+		try_key(K, user)
+
+	else if(istype(W, /obj/item/weapon/storage/keyring))
+		var/obj/item/weapon/storage/keyring/KR = W
+		for(var/obj/item/weapon/key/K in KR.contents)
+			if(try_key(K, user))
+				break
+
+	else if(isscrewing(W))
+		if(lock_broken)
+			to_chat(user, "<span class='notice'>Замок этой двери уже сломан!</span>")
+			return
+		playsound(src, "sound/effects/door_lock[pick(1,4)].ogg", VOL_EFFECTS_MASTER)
+		if(do_after(user, 2 SECOND, target = src))
 			if(prob(20))
-				Dismantle(1)
+				locked = FALSE
+				lock_broken = TRUE
+				to_chat(user, "<span class='notice'>Вы сломали замок!</span>")
 			else
-				health--
-				CheckHealth()
-		if(3)
-			health -= 0.1
-			CheckHealth()
-	return
+				to_chat(user, "<span class='notice'>Замок не поддаётся!</span>")
 
-/obj/structure/mineral_door/proc/update_nearby_tiles(need_rebuild) //Copypasta from airlock code
-	if(!SSair)
-		return 0
-	SSair.mark_for_update(get_turf(src))
-	return 1
+	else
+		..()
 
-/obj/structure/mineral_door/iron
-	mineralType = "metal"
-	health = 300
+/obj/structure/mineral_door/proc/try_key(obj/item/weapon/key/K, mob/user)
+	if(!close_state)
+		to_chat(user, "<span class='notice'>Сперва закройте дверь!</span>")
+		return TRUE
+	playsound(src, "sound/effects/door_lock[pick(1,4)].ogg", VOL_EFFECTS_MASTER)
+	if(do_after(user, 1 SECOND, target = src))
+		if(K.id == id && !lock_broken)
+			user.visible_message("<span class='notice'>[user] [locked ? "unlocked" : "locked"] the [src]!</span>", "<span class='notice'>You [locked ? "unlocked" : "locked"] the [src]!</span>")
+			locked = !locked
+			return TRUE
+		to_chat(user, "<span class='notice'>Ключ не подходит к этой двери!</span>")
+		return FALSE
+	return TRUE
+
+/obj/structure/mineral_door/examine(mob/user)
+	..()
+	if(lock_broken)
+		to_chat(user, "Кажется замок этой двери сломан.")
+
+/obj/structure/mineral_door/deconstruct(disassembled)
+	if(flags & NODECONSTRUCT || !sheetType)
+		return ..()
+	var/turf/T = get_turf(src)
+	for(var/i in (disassembled ? 1 : 3) to sheetAmount)
+		new sheetType(T)
+	..()
+
+/obj/structure/mineral_door/metal
+	name = "metal door"
+	icon_state = "metal"
+	max_integrity = 300
+	sheetType = /obj/item/stack/sheet/metal
+	can_unwrench = FALSE
+
+/obj/structure/mineral_door/metal/attackby(obj/item/weapon/W, mob/user)
+	if(iswelding(W))
+		if(user.is_busy())
+			return
+		var/obj/item/weapon/weldingtool/WT = W
+		if(WT.use(0, user))
+			to_chat(user, "<span class='notice'>You start dissassembling the [name] to the metal sheets.</span>")
+			if(WT.use_tool(src, user, 60, volume = 100, quality = QUALITY_WELDING))
+				to_chat(user, "<span class='notice'>You dissassembled the [name] to the metal sheets!</span>")
+				deconstruct(TRUE)
+		else
+			to_chat(user, "<span class='warning'>You need more welding fuel!</span>")
+		return
+	..()
 
 /obj/structure/mineral_door/silver
-	mineralType = "silver"
-	health = 300
+	name = "silver door"
+	icon_state = "silver"
+	max_integrity = 300
+	sheetType = /obj/item/stack/sheet/mineral/silver
 
 /obj/structure/mineral_door/gold
-	mineralType = "gold"
+	name = "golden door"
+	icon_state = "gold"
+	sheetType = /obj/item/stack/sheet/mineral/gold
 
 /obj/structure/mineral_door/uranium
-	mineralType = "uranium"
-	health = 300
+	name = "uranium door"
+	icon_state = "uranium"
+	max_integrity = 300
 	light_range = 2
+	sheetType = /obj/item/stack/sheet/mineral/uranium
 
 /obj/structure/mineral_door/sandstone
-	mineralType = "sandstone"
-	health = 50
+	name = "sandstone door"
+	icon_state = "sandstone"
+	max_integrity = 50
+	sheetType = /obj/item/stack/sheet/mineral/sandstone
 
 /obj/structure/mineral_door/transparent
-	opacity = 0
+	opacity = FALSE
 
 /obj/structure/mineral_door/transparent/Close()
 	..()
-	opacity = 0
+	opacity = FALSE
 
 /obj/structure/mineral_door/transparent/phoron
-	mineralType = "phoron"
+	name = "phoron door"
+	icon_state = "phoron"
+	sheetType = /obj/item/stack/sheet/mineral/phoron
 
 /obj/structure/mineral_door/transparent/phoron/attackby(obj/item/weapon/W, mob/user)
-	if(istype(W,/obj/item/weapon/weldingtool))
+	if(iswelding(W))
 		var/obj/item/weapon/weldingtool/WT = W
-		if(WT.remove_fuel(0, user))
+		if(WT.use(0, user))
 			TemperatureAct(100)
 	..()
 
@@ -237,95 +285,133 @@
 		TemperatureAct(exposed_temperature)
 
 /obj/structure/mineral_door/transparent/phoron/proc/TemperatureAct(temperature)
-	for(var/turf/simulated/floor/target_tile in range(2,loc))
-
-		var/datum/gas_mixture/napalm = new
-
-		var/phoronToDeduce = temperature/10
-
-		napalm.phoron = phoronToDeduce
-		napalm.temperature = 200+T0C
-
-		target_tile.assume_air(napalm)
-		spawn (0) target_tile.hotspot_expose(temperature, 400)
-
-		health -= phoronToDeduce/100
-		CheckHealth()
+	var/phoronToDeduce = temperature * 0.012
+	var/tiles = 0
+	for(var/turf/simulated/floor/target_tile in range(2, loc))
+		tiles++
+		target_tile.assume_gas("phoron", phoronToDeduce)
+		target_tile.hotspot_expose(temperature, 400)
+	take_damage(tiles * phoronToDeduce * 0.01, BURN, FIRE, FALSE)
 
 /obj/structure/mineral_door/transparent/diamond
-	mineralType = "diamond"
-	health = 1000
+	name = "diamond door"
+	icon_state = "diamond"
+	max_integrity = 1000
+	sheetType = /obj/item/stack/sheet/mineral/diamond
 
 /obj/structure/mineral_door/wood
-	mineralType = "wood"
+	name = "wooden door"
+	icon_state = "wood"
+	sheetType = /obj/item/stack/sheet/wood
+	operating_sound = 'sound/effects/doorcreaky.ogg'
 
-/obj/structure/mineral_door/wood/Open()
-	isSwitchingStates = 1
-	playsound(loc, 'sound/effects/doorcreaky.ogg', 100, 1)
-	flick("[mineralType]opening",src)
-	sleep(10)
-	density = 0
-	opacity = 0
-	state = 1
-	update_icon()
-	isSwitchingStates = 0
+	hit_particle_type = /particles/tool/digging/wood
 
-/obj/structure/mineral_door/wood/Close()
-	isSwitchingStates = 1
-	playsound(loc, 'sound/effects/doorcreaky.ogg', 100, 1)
-	flick("[mineralType]closing",src)
-	sleep(10)
-	density = 1
-	opacity = 1
-	state = 0
-	update_icon()
-	isSwitchingStates = 0
-
-/obj/structure/mineral_door/wood/Dismantle(devastated = 0)
-	if(!devastated)
-		for(var/i = 1, i <= oreAmount, i++)
-			new/obj/item/stack/sheet/wood(get_turf(src))
-	qdel(src)
+/obj/structure/mineral_door/wood/attackby(obj/item/weapon/W, mob/user)
+	if(istype(W, /obj/item/weapon/fireaxe))
+		if(user.is_busy())
+			return
+		to_chat(user, "<span class='notice'>You start cutting the [name] with the axe.</span>")
+		if(W.use_tool(src, user, 40, volume = 100))
+			to_chat(user, "<span class='notice'>You finished cutting the [name]!</span>")
+			deconstruct(TRUE)
+		return
+	..()
 
 /obj/structure/mineral_door/resin
 	icon = 'icons/mob/alien.dmi'
-	mineralType = "resin"
-	health = 150
+	operating_sound = 'sound/effects/attackblob.ogg'
+	icon_state = "resin"
+	max_integrity = 250
+	can_unwrench = FALSE
+	id = "xeno"
 	var/close_delay = 100
 
-/obj/structure/mineral_door/resin/TryToSwitchState(atom/user)
-	if(isalien(user))
-		return ..()
+/obj/structure/mineral_door/resin/c_airblock(turf/other)
+	return BLOCKED
+
+/obj/structure/mineral_door/resin/MobChecks(mob/user)
+	return isxeno(user)
+
+/obj/structure/mineral_door/resin/MechChecks(obj/mecha/user)
+	return FALSE
 
 /obj/structure/mineral_door/resin/Open()
-	isSwitchingStates = 1
-	playsound(loc, 'sound/effects/attackblob.ogg', 100, 1)
-	flick("[mineralType]opening",src)
-	sleep(10)
-	density = 0
-	opacity = 0
-	state = 1
-	update_icon()
-	isSwitchingStates = 0
-
-	spawn(close_delay)
-		if(!isSwitchingStates && state == 1)
-			Close()
-
-/obj/structure/mineral_door/resin/Close()
-	isSwitchingStates = 1
-	playsound(loc, 'sound/effects/attackblob.ogg', 100, 1)
-	flick("[mineralType]closing",src)
-	sleep(10)
-	density = 1
-	opacity = 1
-	state = 0
-	update_icon()
-	isSwitchingStates = 0
-
-/obj/structure/mineral_door/resin/Dismantle(devastated = 0)
-	qdel(src)
-
-/obj/structure/mineral_door/resin/CheckHealth()
-	playsound(loc, 'sound/effects/attackblob.ogg', 100, 1)
 	..()
+	addtimer(CALLBACK(src, PROC_REF(TryToClose)), close_delay)
+
+/obj/structure/mineral_door/resin/proc/TryToClose()
+	if(!isSwitchingStates && !close_state)
+		Close()
+
+/obj/structure/mineral_door/resin/play_attack_sound(damage_amount, damage_type, damage_flag)
+	switch(damage_type)
+		if(BRUTE)
+			playsound(src, 'sound/effects/attackblob.ogg', VOL_EFFECTS_MASTER)
+		if(BURN)
+			playsound(src, 'sound/items/welder.ogg', VOL_EFFECTS_MASTER, 100, TRUE)
+
+/obj/structure/mineral_door/resin/attack_alien(mob/living/carbon/xenomorph/humanoid/user)
+	if(isxenoadult(user) && user.a_intent == INTENT_HARM)
+		attack_generic(user, 50, BRUTE, MELEE)
+		if(QDELING(src))
+			user.visible_message("<span class='danger'>[user] slices the [name] to pieces!</span>")
+		else
+			user.visible_message("<span class='danger'>[user] claws at the resin!</span>")
+	else if(!isSwitchingStates)
+		add_fingerprint(user)
+		SwitchState()
+
+
+/obj/item/weapon/key
+	name = "key"
+	desc = "Открывает какую-то дверь."
+	icon_state = "key"
+	item_state_world = "key_world"
+	w_class = SIZE_MINUSCULE
+	var/id = "base id"
+
+/obj/item/weapon/key/examine(mob/user)
+	..()
+	if(id == null)
+		to_chat(user, "Кажется этот ключ сломан.")
+	else
+		to_chat(user, "There is a small tag reading [id].")
+
+/obj/item/weapon/key/red
+	icon_state = "key_red"
+	item_state_world = "key_red_world"
+
+/obj/item/weapon/key/green
+	icon_state = "key_green"
+	item_state_world = "key_green_world"
+
+/obj/item/weapon/key/yellow
+	icon_state = "key_yellow"
+	item_state_world = "key_yellow_world"
+
+/obj/item/weapon/key/blue
+	icon_state = "key_blue"
+	item_state_world = "key_blue_world"
+
+/obj/item/weapon/key/purple
+	icon_state = "key_purple"
+	item_state_world = "key_purple_world"
+
+/obj/item/weapon/storage/keyring
+	name = "keyring"
+	desc = "Кольцо для хранения ключей."
+	can_hold = list(/obj/item/weapon/key)
+	storage_slots = 6
+	icon_state = "keyring0"
+	w_class = SIZE_MINUSCULE
+
+/obj/item/weapon/storage/keyring/atom_init(mapload)
+	. = ..()
+	if(mapload)
+		for(var/obj/item/weapon/key/K in src.loc)
+			K.forceMove(src)
+	update_icon()
+
+/obj/item/weapon/storage/keyring/update_icon()
+	icon_state = "keyring[min(contents.len, 3)]"

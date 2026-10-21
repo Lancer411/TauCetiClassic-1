@@ -1,39 +1,39 @@
-//This file was auto-corrected by findeclaration.exe on 25.5.2012 20:42:33
-
 /obj/machinery/particle_accelerator/control_box
 	name = "Particle Accelerator Control Computer"
 	desc = "This controls the density of the particles."
 	icon = 'icons/obj/machines/particle_accelerator2.dmi'
 	icon_state = "control_box"
 	reference = "control_box"
-	anchored = 0
-	density = 1
-	use_power = 0
+	anchored = FALSE
+	density = TRUE
+	use_power = NO_POWER_USE
 	idle_power_usage = 500
 	active_power_usage = 10000
 	construction_state = 0
 	active = 0
 	dir = 1
+	allowed_checks = ALLOWED_CHECK_TOPIC
 	var/list/obj/structure/particle_accelerator/connected_parts
 	var/assembled = 0
 	var/parts = null
+	required_skills = list(/datum/skill/engineering = SKILL_LEVEL_PRO)
 
-/obj/machinery/particle_accelerator/control_box/New()
+/obj/machinery/particle_accelerator/control_box/atom_init()
 	connected_parts = list()
-	..()
+	. = ..()
 
 /obj/machinery/particle_accelerator/control_box/Destroy()
 	if(active)
 		toggle_power()
 	return ..()
 
-/obj/machinery/particle_accelerator/control_box/attack_hand(mob/user)
+/obj/machinery/particle_accelerator/control_box/interact(mob/user)
 	if(construction_state >= 3)
-		interact(user)
+		..()
 
 /obj/machinery/particle_accelerator/control_box/update_state()
 	if(construction_state < 3)
-		use_power = 0
+		set_power_use(NO_POWER_USE)
 		assembled = 0
 		active = 0
 		for(var/obj/structure/particle_accelerator/part in connected_parts)
@@ -43,11 +43,9 @@
 		connected_parts = list()
 		return
 	if(!part_scan())
-		use_power = 1
+		set_power_use(IDLE_POWER_USE)
 		active = 0
 		connected_parts = list()
-
-	return
 
 /obj/machinery/particle_accelerator/control_box/update_icon()
 	if(active)
@@ -71,31 +69,26 @@
 	return
 
 /obj/machinery/particle_accelerator/control_box/Topic(href, href_list)
-	if(href_list["close"])
-		usr.unset_machine(src)
-		usr << browse(null, "window=pacontrol")
-		return FALSE
-
 	. = ..()
 	if(!.)
 		return
 
 	if(href_list["togglep"])
-		src.toggle_power()
-		investigate_log("turned [active?"<font color='red'>ON</font>":"<font color='green'>OFF</font>"] by [usr.key]","singulo")
+		toggle_power()
+		log_investigate("turned [active?"<font color='red'>ON</font>":"<font color='green'>OFF</font>"] by [key_name(usr)]",INVESTIGATE_SINGULO)
 		if (active)
-			message_admins("PA Control Computer turned ON by [key_name(usr, usr.client)](<A HREF='?_src_=holder;adminmoreinfo=\ref[usr]'>?</A>) in ([x],[y],[z] - <A HREF='?_src_=holder;adminplayerobservecoodjump=1;X=[x];Y=[y];Z=[z]'>JMP</a>)",0,1)
-			log_game("PA Control Computer turned ON by [usr.ckey]([usr]) in ([x],[y],[z])")
+			message_admins("PA Control Computer turned ON by [key_name(usr, usr.client)](<A href='byond://?_src_=holder;adminmoreinfo=\ref[usr]'>?</A>) in ([COORD(src)] - [ADMIN_JMP(src)])",0,1)
+			log_game("PA Control Computer turned ON by [usr.ckey]([usr]) in [COORD(src)]")
 	else if(href_list["scan"])
-		src.part_scan()
+		part_scan()
 	else if(href_list["strengthup"])
 		strength++
 		if(strength > 2)
 			strength = 2
 		else
-			message_admins("PA Control Computer increased to [strength] by [key_name(usr, usr.client)](<A HREF='?_src_=holder;adminmoreinfo=\ref[usr]'>?</A>) in ([x],[y],[z] - <A HREF='?_src_=holder;adminplayerobservecoodjump=1;X=[x];Y=[y];Z=[z]'>JMP</a>)",0,1)
-			log_game("PA Control Computer increased to [strength] by [usr.ckey]([usr]) in ([x],[y],[z])")
-			investigate_log("increased to <font color='red'>[strength]</font> by [usr.key]","singulo")
+			message_admins("PA Control Computer increased to [strength] by [key_name(usr, usr.client)](<A href='byond://?_src_=holder;adminmoreinfo=\ref[usr]'>?</A>) in ([COORD(src)] - [ADMIN_JMP(src)])",0,1)
+			log_game("PA Control Computer increased to [strength] by [usr.ckey]([usr]) in [COORD(src)]")
+			log_investigate("increased to <font color='red'>[strength]</font> by [key_name(usr)]",INVESTIGATE_SINGULO)
 		for(var/obj/structure/particle_accelerator/part in connected_parts)
 			part.strength = strength
 			part.update_icon()
@@ -105,22 +98,22 @@
 		if(strength < 0)
 			strength = 0
 		else
-			investigate_log("decreased to <font color='green'>[strength]</font> by [usr.key]","singulo")
+			log_investigate("decreased to <font color='green'>[strength]</font> by [key_name(usr)]",INVESTIGATE_SINGULO)
 		for(var/obj/structure/particle_accelerator/part in connected_parts)
 			part.strength = strength
 			part.update_icon()
 
-	src.updateDialog()
-	src.update_icon()
+	updateDialog()
+	update_icon()
 
 
 /obj/machinery/particle_accelerator/control_box/power_change()
 	..()
 	if(stat & NOPOWER)
 		active = 0
-		use_power = 0
-	else if(!stat && construction_state == 3)
-		use_power = 1
+		set_power_use(NO_POWER_USE)
+	else if(stat == CONSCIOUS && construction_state == 3)
+		set_power_use(IDLE_POWER_USE)
 	return
 
 
@@ -128,8 +121,8 @@
 	if(src.active)
 		//a part is missing!
 		if( length(connected_parts) < 6 )
-			investigate_log("lost a connected part; It <font color='red'>powered down</font>.","singulo")
-			src.toggle_power()
+			log_investigate("lost a connected part; It <font color='red'>powered down</font>.",INVESTIGATE_SINGULO)
+			toggle_power()
 			return
 		//emit some particles
 		for(var/obj/structure/particle_accelerator/particle_emitter/PE in connected_parts)
@@ -140,7 +133,7 @@
 
 /obj/machinery/particle_accelerator/control_box/proc/part_scan()
 	for(var/obj/structure/particle_accelerator/fuel_chamber/F in orange(1,src))
-		src.dir = F.dir
+		set_dir(F.dir)
 	connected_parts = list()
 	var/tally = 0
 	var/ldir = turn(dir,-90)
@@ -182,7 +175,7 @@
 	if(istype(PA, type))
 		if(PA.connect_master(src))
 			if(PA.report_ready(src))
-				src.connected_parts.Add(PA)
+				connected_parts.Add(PA)
 				return 1
 	return 0
 
@@ -190,13 +183,13 @@
 /obj/machinery/particle_accelerator/control_box/proc/toggle_power()
 	src.active = !src.active
 	if(src.active)
-		src.use_power = 2
+		set_power_use(ACTIVE_POWER_USE)
 		for(var/obj/structure/particle_accelerator/part in connected_parts)
 			part.strength = src.strength
 			part.powered = 1
 			part.update_icon()
 	else
-		src.use_power = 1
+		set_power_use(IDLE_POWER_USE)
 		for(var/obj/structure/particle_accelerator/part in connected_parts)
 			part.strength = null
 			part.powered = 0
@@ -204,21 +197,17 @@
 	return 1
 
 
-/obj/machinery/particle_accelerator/control_box/interact(mob/user)
-	if((get_dist(src, user) > 1) || (stat & (BROKEN|NOPOWER)))
-		if(!istype(user, /mob/living/silicon))
-			user.unset_machine()
-			user << browse(null, "window=pacontrol")
-			return
-	user.set_machine(src)
+/obj/machinery/particle_accelerator/control_box/ui_interact(mob/user)
+	if(!Adjacent(user) && !issilicon(user) && !isobserver(user))
+		user.unset_machine()
+		user << browse(null, "window=pacontrol")
+		return
 
-	var/dat = ""
-	dat += "Particle Accelerator Control Panel<BR>"
-	dat += "<A href='?src=\ref[src];close=1'>Close</A><BR><BR>"
+	var/dat
 	dat += "Status:<BR>"
 	if(!assembled)
 		dat += "Unable to detect all parts!<BR>"
-		dat += "<A href='?src=\ref[src];scan=1'>Run Scan</A><BR><BR>"
+		dat += "<A href='byond://?src=\ref[src];scan=1'>Run Scan</A><BR><BR>"
 	else
 		dat += "All parts in place.<BR><BR>"
 		dat += "Power:"
@@ -226,10 +215,10 @@
 			dat += "On<BR>"
 		else
 			dat += "Off <BR>"
-		dat += "<A href='?src=\ref[src];togglep=1'>Toggle Power</A><BR><BR>"
+		dat += "<A href='byond://?src=\ref[src];togglep=1'>Toggle Power</A><BR><BR>"
 		dat += "Particle Strength: [src.strength] "
-		dat += "<A href='?src=\ref[src];strengthdown=1'>--</A>|<A href='?src=\ref[src];strengthup=1'>++</A><BR><BR>"
+		dat += "<A href='byond://?src=\ref[src];strengthdown=1'>--</A>|<A href='byond://?src=\ref[src];strengthup=1'>++</A><BR><BR>"
 
-	user << browse(dat, "window=pacontrol;size=420x500")
-	onclose(user, "pacontrol")
-	return
+	var/datum/browser/popup = new(user, "pacontrol", "Particle Accelerator Control Panel", 420,500)
+	popup.set_content(dat)
+	popup.open()

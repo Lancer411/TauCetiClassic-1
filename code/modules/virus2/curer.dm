@@ -2,50 +2,44 @@
 	name = "Cure Research Machine"
 	icon = 'icons/obj/computer.dmi'
 	icon_state = "dna"
+	state_broken_preset = "crewb"
+	state_nopower_preset = "crew0"
 	circuit = /obj/item/weapon/circuitboard/curefab
 	var/curing
 	var/virusing
 
 	var/obj/item/weapon/reagent_containers/container = null
+	required_skills = list(/datum/skill/chemistry = SKILL_LEVEL_TRAINED, /datum/skill/research = SKILL_LEVEL_TRAINED, /datum/skill/medical = SKILL_LEVEL_PRO)
 
 /obj/machinery/computer/curer/attackby(obj/I, mob/user)
 	if(istype(I,/obj/item/weapon/reagent_containers))
 		var/mob/living/carbon/C = user
 		if(!container)
 			container = I
-			C.drop_item()
-			I.loc = src
+			C.drop_from_inventory(I, src)
 		return
-	if(istype(I,/obj/item/weapon/virusdish))
+
+	if(istype(I, /obj/item/weapon/virusdish))
 		if(virusing)
-			to_chat(user, "<b>The pathogen materializer is still recharging..")
+			to_chat(user, "<b>The pathogen materializer is still recharging..</b>")
+			return
+		if(!do_skill_checks(user))
 			return
 		var/obj/item/weapon/reagent_containers/glass/beaker/product = new(src.loc)
 
-		var/list/data = list("donor"=null,"viruses"=null,"blood_DNA"=null,"blood_type"=null,"resistances"=null,"trace_chem"=null,"virus2"=list(),"antibodies"=0)
-		data["virus2"] |= I:virus2
-		product.reagents.add_reagent("blood",30,data)
+		var/obj/item/weapon/virusdish/Vd = I
+		var/list/data = list("virus2" = virus_copylist(Vd.virus2))
+		product.reagents.add_reagent("blood", 30, data)
 
-		virusing = 1
-		spawn(1200) virusing = 0
+		virusing = TRUE
+		VARSET_IN(src, virusing, FALSE, 1200)
 
 		state("The [src.name] Buzzes", "blue")
 		return
-	..()
-	return 
 
-/obj/machinery/computer/curer/attack_ai(mob/user)
-	return src.attack_hand(user)
+	return ..()
 
-/obj/machinery/computer/curer/attack_paw(mob/user)
-
-	return src.attack_hand(user)
-	return
-
-/obj/machinery/computer/curer/attack_hand(mob/user)
-	if(..())
-		return
-	user.machine = src
+/obj/machinery/computer/curer/ui_interact(mob/user)
 	var/dat
 	if(curing)
 		dat = "Antibody production in progress"
@@ -58,18 +52,20 @@
 		if(B)
 			dat = "Blood sample inserted."
 			var/code = ""
-			for(var/V in ANTIGENS) if(text2num(V) & B.data["antibodies"]) code += ANTIGENS[V]
-			dat += "<BR>Antibodies: [code]"
-			dat += "<BR><A href='?src=\ref[src];antibody=1'>Begin antibody production</a>"
+			for(var/V in ANTIGENS)
+				if(text2num(V) & B.data["antibodies"])
+					code += ANTIGENS[V]
+					dat += "<BR>Antibodies: [code]"
+					dat += "<BR><A href='byond://?src=\ref[src];antibody=1'>Begin antibody production</a>"
 		else
 			dat += "<BR>Please check container contents."
-		dat += "<BR><A href='?src=\ref[src];eject=1'>Eject container</a>"
+		dat += "<BR><A href='byond://?src=\ref[src];eject=1'>Eject container</a>"
 	else
 		dat = "Please insert a container."
 
-	user << browse(dat, "window=computer;size=400x500")
-	onclose(user, "computer")
-	return
+	var/datum/browser/popup = new(user, "computer", "[src.name]", 400, 500)
+	popup.set_content(dat)
+	popup.open()
 
 /obj/machinery/computer/curer/process()
 	..()
@@ -96,7 +92,7 @@
 		container.loc = src.loc
 		container = null
 
-	src.updateUsrDialog()
+	updateUsrDialog()
 
 
 /obj/machinery/computer/curer/proc/createcure(obj/item/weapon/reagent_containers/container)

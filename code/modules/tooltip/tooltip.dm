@@ -8,17 +8,17 @@ Configuration:
 - Set control to the correct skin element (remember to actually place the skin element)
 - Set file to the correct path for the .html file (remember to actually place the html file)
 - Attach the datum to the user client on login, e.g.
-	/client/New()
-		src.tooltips = new /datum/tooltip(src)
+/client/New()
+	src.tooltips = new /datum/tooltip(src)
 
 Usage:
 - Define mouse event procs on your (probably HUD) object and simply call the show and hide procs respectively:
-	/obj/screen/hud
-		MouseEntered(location, control, params)
-			usr.client.tooltip.show(params, title = src.name, content = src.desc)
+/atom/movable/screen/hud
+	MouseEntered(location, control, params)
+		usr.client.tooltip.show(params, title = src.name, content = src.desc)
 
-		MouseExited()
-			usr.client.tooltip.hide()
+	MouseExited()
+		usr.client.tooltip.hide()
 
 Customization:
 - Theming can be done by passing the theme var to show() and using css in the html file to change the look
@@ -38,16 +38,26 @@ Notes:
 	var/showing = 0
 	var/queueHide = 0
 	var/init = 0
+	var/atom/last_target
 
 /datum/tooltip/New(client/C)
 	if (C)
 		owner = C
-		owner << browse(file2text(file), "window=[control]")
+		var/datum/asset/stuff = get_asset_datum(/datum/asset/simple/jquery)
+		stuff.send(owner)
+		owner << browse(file2text(file), "window=[control];size=1x1")
 	..()
 
 /datum/tooltip/proc/show(atom/movable/thing, params = null, title = null, content = null, theme = "default", special = "none")
 	if (!thing || !params || (!title && !content) || !owner || !isnum(world.icon_size))
 		return 0
+
+	// BYOND drops MouseExited when the hovered object is deleted (radial slices, action buttons),
+	// leaving the tooltip stuck. Hide it ourselves when its source goes away.
+	if (last_target)
+		UnregisterSignal(last_target, COMSIG_PARENT_QDELETING)
+	RegisterSignal(thing, COMSIG_PARENT_QDELETING, PROC_REF(on_target_qdel))
+	last_target = thing
 
 	if (!init)
 		//Initialize some vars
@@ -68,7 +78,7 @@ Notes:
 	params = {"{ "cursor": "[params]", "screenLoc": "[thing.screen_loc]" }"}
 
 	//Send stuff to the tooltip
-	owner << output(list2params(list(params, owner.view, "[title][content]", theme, special)), "[control]:tooltip.update")
+	owner << output(list2params(list(params, owner.view, "[title][content]", theme, special, owner.window_pixelratio)), "[control]:tooltip.update")
 
 	//If a hide() was hit while we were showing, run hide() again to avoid stuck tooltips
 	showing = 0
@@ -77,8 +87,9 @@ Notes:
 
 	return 1
 
-
 /datum/tooltip/proc/hide()
+	if (owner)
+		owner << output(null, "[control]:tooltip.hide") //cancels a pending async show that would otherwise re-show us
 	if (queueHide)
 		spawn(1)
 			winshow(owner, control, 0)
@@ -88,6 +99,15 @@ Notes:
 	queueHide = showing ? 1 : 0
 
 	return 1
+
+/datum/tooltip/proc/on_target_qdel()
+	SIGNAL_HANDLER
+	last_target = null
+	hide()
+
+/datum/tooltip/Destroy(force)
+	last_target = null
+	return ..()
 
 
 /* TG SPECIFIC CODE */

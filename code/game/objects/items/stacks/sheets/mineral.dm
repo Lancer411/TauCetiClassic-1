@@ -20,60 +20,60 @@ Mineral Sheets
  * Recipes
  */
 var/global/list/datum/stack_recipe/sandstone_recipes = list ( \
-	new/datum/stack_recipe("pile of dirt", /obj/machinery/hydroponics/soil, 3, time = 10, one_per_turf = 1, on_floor = 1), \
-	new/datum/stack_recipe("sandstone door", /obj/structure/mineral_door/sandstone, 10, one_per_turf = 1, on_floor = 1), \
+	new/datum/stack_recipe("pile of dirt", /obj/machinery/hydroponics/soil, 3, time = 10, max_per_place = 1, build_outline = TRUE), \
+	new/datum/stack_recipe("sandstone door", /obj/structure/mineral_door/sandstone, 10, max_per_place = 1, build_outline = TRUE), \
 	)
 
 var/global/list/datum/stack_recipe/diamond_recipes = list ( \
-	new/datum/stack_recipe("diamond door", /obj/structure/mineral_door/transparent/diamond, 10, one_per_turf = 1, on_floor = 1), \
+	new/datum/stack_recipe("diamond door", /obj/structure/mineral_door/transparent/diamond, 10, max_per_place = 1, build_outline = TRUE), \
 	)
 
 var/global/list/datum/stack_recipe/phoron_recipes = list ( \
-	new/datum/stack_recipe("phoron door", /obj/structure/mineral_door/transparent/phoron, 10, one_per_turf = 1, on_floor = 1), \
+	new/datum/stack_recipe("phoron door", /obj/structure/mineral_door/transparent/phoron, 10, max_per_place = 1, build_outline = TRUE), \
 	)
 
 var/global/list/datum/stack_recipe/uranium_recipes = list ( \
-	new/datum/stack_recipe("uranium door", /obj/structure/mineral_door/uranium, 10, one_per_turf = 1, on_floor = 1), \
+	new/datum/stack_recipe("uranium door", /obj/structure/mineral_door/uranium, 10, max_per_place = 1, build_outline = TRUE), \
 	)
 
 var/global/list/datum/stack_recipe/plastic_recipes = list ( \
-	new/datum/stack_recipe("plastic crate", /obj/structure/closet/crate/plastic, 10, one_per_turf = 1, on_floor = 1), \
-	new/datum/stack_recipe("plastic ashtray", /obj/item/ashtray/plastic, 2, one_per_turf = 1, on_floor = 1), \
-	new/datum/stack_recipe("plastic fork", /obj/item/weapon/kitchen/utensil/pfork, 1, on_floor = 1), \
-	new/datum/stack_recipe("plastic spoon", /obj/item/weapon/kitchen/utensil/pspoon, 1, on_floor = 1), \
-	new/datum/stack_recipe("plastic knife", /obj/item/weapon/kitchen/utensil/pknife, 1, on_floor = 1), \
-	new/datum/stack_recipe("plastic bag", /obj/item/weapon/storage/bag/plasticbag, 3, on_floor = 1), \
+	new/datum/stack_recipe("plastic crate", /obj/structure/closet/crate/plastic, 10, max_per_place = 1, build_outline = TRUE), \
+	new/datum/stack_recipe("plastic ashtray", /obj/item/ashtray/plastic, 2, max_per_place = 1, build_outline = TRUE), \
+	new/datum/stack_recipe("plastic fork", /obj/item/weapon/kitchen/utensil/pfork, 1, build_outline = TRUE), \
+	new/datum/stack_recipe("plastic spoon", /obj/item/weapon/kitchen/utensil/pspoon, 1, build_outline = TRUE), \
+	new/datum/stack_recipe("plastic knife", /obj/item/weapon/kitchenknife/plastic, 1, build_outline = TRUE), \
+	new/datum/stack_recipe("plastic bag", /obj/item/weapon/storage/bag/plasticbag, 3, build_outline = TRUE), \
+	new/datum/stack_recipe("plastic noticeboard", /obj/item/noticeboard_frame/plastic, 10, time = 20, build_outline = TRUE), \
+	new/datum/stack_recipe("sign backing", /obj/item/sign_backing, 4, build_outline = TRUE), \
+	new/datum/stack_recipe_list("curtains", list(
+		new/datum/stack_recipe("curtain", /obj/structure/curtain, 5, max_per_place = 1, build_outline = TRUE),
+		new/datum/stack_recipe("transparent curtain", /obj/structure/curtain/transparent, 5, max_per_place = 1, build_outline = TRUE),
+		), 5),
 	)
-
-var/global/list/datum/stack_recipe/iron_recipes = list ( \
-	new/datum/stack_recipe("iron door", /obj/structure/mineral_door/iron, 20, one_per_turf = 1, on_floor = 1), \
-	null, \
-)
-
 var/global/list/datum/stack_recipe/gold_recipes = list ( \
-	new/datum/stack_recipe("golden door", /obj/structure/mineral_door/gold, 10, one_per_turf = 1, on_floor = 1), \
+	new/datum/stack_recipe("golden door", /obj/structure/mineral_door/gold, 10, max_per_place = 1, build_outline = TRUE), \
 	)
 
 var/global/list/datum/stack_recipe/silver_recipes = list ( \
-	new/datum/stack_recipe("silver door", /obj/structure/mineral_door/silver, 10, one_per_turf = 1, on_floor = 1), \
+	new/datum/stack_recipe("silver door", /obj/structure/mineral_door/silver, 10, max_per_place = 1, build_outline = TRUE), \
 	)
 
 
-/obj/item/stack/sheet/mineral/sandstone/New(var/loc, var/amount=null)
+/obj/item/stack/sheet/mineral/sandstone/atom_init()
 	recipes = sandstone_recipes
 	pixel_x = rand(0,4)-4
 	pixel_y = rand(0,4)-4
-	..()
+	. = ..()
 
 /obj/item/stack/sheet/mineral
 	force = 5.0
 	throwforce = 5
-	w_class = 3.0
+	w_class = SIZE_SMALL
 	throw_speed = 3
 	throw_range = 3
 
-/obj/item/stack/sheet/mineral/New()
-	..()
+/obj/item/stack/sheet/mineral/atom_init()
+	. = ..()
 	pixel_x = rand(0,4)-4
 	pixel_y = rand(0,4)-4
 
@@ -89,11 +89,6 @@ var/global/list/datum/stack_recipe/silver_recipes = list ( \
 	color = "#333333"
 	perunit = 3750
 
-
-/obj/item/stack/sheet/mineral/iron/New()
-	..()
-	recipes = iron_recipes
-
 /*
  * Sandstone
  */
@@ -106,10 +101,11 @@ var/global/list/datum/stack_recipe/silver_recipes = list ( \
 	throw_range = 5
 	origin_tech = "materials=1"
 	sheettype = "sandstone"
+	can_be_wall = TRUE
 
 
-/obj/item/stack/sheet/mineral/sandstone/New()
-	..()
+/obj/item/stack/sheet/mineral/sandstone/atom_init()
+	. = ..()
 	recipes = sandstone_recipes
 
 /*
@@ -121,10 +117,10 @@ var/global/list/datum/stack_recipe/silver_recipes = list ( \
 	origin_tech = "materials=6"
 	perunit = 3750
 	sheettype = "diamond"
+	can_be_wall = TRUE
 
-
-/obj/item/stack/sheet/mineral/diamond/New()
-	..()
+/obj/item/stack/sheet/mineral/diamond/atom_init()
+	. = ..()
 	recipes = diamond_recipes
 
 /*
@@ -136,10 +132,10 @@ var/global/list/datum/stack_recipe/silver_recipes = list ( \
 	origin_tech = "materials=5"
 	perunit = 2000
 	sheettype = "uranium"
+	can_be_wall = TRUE
 
-
-/obj/item/stack/sheet/mineral/uranium/New()
-	..()
+/obj/item/stack/sheet/mineral/uranium/atom_init()
+	. = ..()
 	recipes = uranium_recipes
 
 /*
@@ -151,17 +147,18 @@ var/global/list/datum/stack_recipe/silver_recipes = list ( \
 	origin_tech = "phorontech=2;materials=2"
 	perunit = 2000
 	sheettype = "phoron"
+	is_fusion_fuel = TRUE
+	can_be_wall = TRUE
 
-
-/obj/item/stack/sheet/mineral/phoron/New()
-	..()
+/obj/item/stack/sheet/mineral/phoron/atom_init()
+	. = ..()
 	recipes = phoron_recipes
 
 /*
  * Plastic
  */
 /obj/item/stack/sheet/mineral/plastic
-	name = "Plastic"
+	name = "plastic"
 	icon_state = "sheet-plastic"
 	origin_tech = "materials=3"
 	perunit = 2000
@@ -172,8 +169,8 @@ var/global/list/datum/stack_recipe/silver_recipes = list ( \
 	perunit = 2000
 
 
-/obj/item/stack/sheet/mineral/plastic/New()
-	..()
+/obj/item/stack/sheet/mineral/plastic/atom_init()
+	. = ..()
 	recipes = plastic_recipes
 
 /*
@@ -184,17 +181,16 @@ var/global/list/datum/stack_recipe/silver_recipes = list ( \
 	icon_state = "sheet-gold"
 	force = 5.0
 	throwforce = 5
-	w_class = 3.0
+	w_class = SIZE_SMALL
 	throw_speed = 3
 	throw_range = 3
 	origin_tech = "materials=4"
 	perunit = 2000
 	sheettype = "gold"
+	can_be_wall = TRUE
 
-
-
-/obj/item/stack/sheet/mineral/gold/New()
-	..()
+/obj/item/stack/sheet/mineral/gold/atom_init()
+	. = ..()
 	recipes = gold_recipes
 
 /*
@@ -206,11 +202,10 @@ var/global/list/datum/stack_recipe/silver_recipes = list ( \
 	origin_tech = "materials=3"
 	perunit = 2000
 	sheettype = "silver"
+	can_be_wall = TRUE
 
-
-
-/obj/item/stack/sheet/mineral/silver/New()
-	..()
+/obj/item/stack/sheet/mineral/silver/atom_init()
+	. = ..()
 	recipes = silver_recipes
 
 /*
@@ -221,16 +216,12 @@ var/global/list/datum/stack_recipe/silver_recipes = list ( \
 	icon_state = "sheet-clown"
 	force = 5.0
 	throwforce = 5
-	w_class = 3.0
+	w_class = SIZE_SMALL
 	throw_speed = 3
 	throw_range = 3
 	origin_tech = "materials=4"
 	perunit = 2000
 	sheettype = "clown"
-
-
-/obj/item/stack/sheet/mineral/clown/New()
-	..()
 
 
 /****************************** Others ****************************/
@@ -265,6 +256,7 @@ var/global/list/datum/stack_recipe/silver_recipes = list ( \
 	origin_tech = "materials=6;powerstorage=5;magnets=5"
 	sheettype = "mhydrogen"
 	perunit = 2000
+	is_fusion_fuel = TRUE
 
 /*
  * Tritium
@@ -277,6 +269,7 @@ var/global/list/datum/stack_recipe/silver_recipes = list ( \
 	origin_tech = "materials=5"
 	color = "#777777"
 	perunit = 2000
+	is_fusion_fuel = TRUE
 
 /*
  * Osmium
@@ -286,5 +279,15 @@ var/global/list/datum/stack_recipe/silver_recipes = list ( \
 	icon_state = "sheet-silver"
 	sheettype = "osmium"
 	origin_tech = "materials=5"
-	color = "#9999FF"
+	color = "#9999ff"
 	perunit = 2000
+
+// Fusion fuel.
+/obj/item/stack/sheet/mineral/deuterium
+	name = "deuterium"
+	icon_state = "sheet-silver"
+	sheettype = "deuterium"
+	origin_tech = "materials=3"
+	color = "#999999"
+	perunit = 2000
+	is_fusion_fuel = TRUE

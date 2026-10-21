@@ -4,10 +4,10 @@
 	gender = PLURAL
 	icon = 'icons/obj/items.dmi'
 	icon_state = "handcuff"
-	flags = FPRINT | TABLEPASS | CONDUCT
-	slot_flags = SLOT_BELT
+	flags = CONDUCT
+	slot_flags = SLOT_FLAGS_BELT
 	throwforce = 5
-	w_class = 2.0
+	w_class = SIZE_TINY
 	throw_speed = 2
 	throw_range = 5
 	m_amt = 500
@@ -17,16 +17,18 @@
 	var/cuff_sound = 'sound/weapons/handcuffs.ogg'
 
 /obj/item/weapon/handcuffs/attack(mob/living/carbon/C, mob/user)
-	if (!istype(user, /mob/living/carbon/human))
-		to_chat(user, "\red You don't have the dexterity to do this!")
+	if (!ishuman(user) && !isIAN(user))
+		to_chat(user, "<span class='warning'>You don't have the dexterity to do this!</span>")
 		return
-	if ((CLUMSY in usr.mutations) && prob(50))
-		to_chat(user, "\red Uh ... how do those things work?!")
+	if(!istype(C))
+		return
+	if (user.ClumsyProbabilityCheck(50))
+		to_chat(user, "<span class='warning'>Uh ... how do those things work?!</span>")
 		place_handcuffs(user, user)
 		return
 	if(!C.handcuffed)
-		if (C == user)
-			place_handcuffs(user, user)
+		if (C == user || isIAN(user))
+			place_handcuffs(C, user)
 			return
 
 		//check for an aggressive grab
@@ -34,67 +36,40 @@
 			if (G.loc == user && G.state >= GRAB_AGGRESSIVE)
 				place_handcuffs(C, user)
 				return
-		to_chat(user, "\red You need to have a firm grip on [C] before you can put \the [src] on!")
+		to_chat(user, "<span class='warning'>You need to have a firm grip on [C] before you can put \the [src] on!</span>")
 
 /obj/item/weapon/handcuffs/proc/place_handcuffs(mob/living/carbon/target, mob/user)
-	playsound(src.loc, cuff_sound, 30, 1, -2)
+	if(user.is_busy(target))
+		return FALSE
 
-	if (ishuman(target))
-		var/mob/living/carbon/human/H = target
-		H.attack_log += text("\[[time_stamp()]\] <font color='orange'>Has been handcuffed (attempt) by [user.name] ([user.ckey])</font>")
-		user.attack_log += text("\[[time_stamp()]\] <font color='red'>Attempted to handcuff [H.name] ([H.ckey])</font>")
-		msg_admin_attack("[key_name(user)] attempted to handcuff [key_name(H)]")
+	playsound(src, cuff_sound, VOL_EFFECTS_MASTER, 30, FALSE, null, -2)
 
-		var/obj/effect/equip_e/human/O = new /obj/effect/equip_e/human(  )
-		O.source = user
-		O.target = H
-		O.item = user.get_active_hand()
-		O.s_loc = user.loc
-		O.t_loc = H.loc
-		O.place = "handcuff"
-		H.requests += O
-		spawn( 0 )
-			feedback_add_details("handcuffs","H")
-			O.process()
-		return
-	
-	if (ismonkey(target))
-		var/mob/living/carbon/monkey/M = target
-		var/obj/effect/equip_e/monkey/O = new /obj/effect/equip_e/monkey(  )
-		O.source = user
-		O.target = M
-		O.item = user.get_active_hand()
-		O.s_loc = user.loc
-		O.t_loc = M.loc
-		O.place = "handcuff"
-		M.requests += O
-		spawn( 0 )
-			O.process()
-		return
+	if (ishuman(target) || isIAN(target) || ismonkey(target))
+		target.log_combat(user, "handcuffed (attempt) with [name]")
+		target.visible_message("<span class='warning'><B>[user]</B> attempts to handcuff <B>[target]</B>!</span>", \
+			"<span class='warning'><B>[user]</B> attempts to handcuff you!</span>")
+		var/time = apply_skill_bonus(user, HUMAN_STRIP_DELAY, list(/datum/skill/police = SKILL_LEVEL_TRAINED), multiplier = -0.3) // -30% for each police level
+		if(do_mob(user, target, time) && mob_can_equip(target, SLOT_HANDCUFFED))
+			if(!isrobot(user) && !isIAN(user) && user != target)
+				var/grabbing = FALSE
+				for (var/obj/item/weapon/grab/G in target.grabbed_by)
+					if (G.loc == user && G.state >= GRAB_AGGRESSIVE)
+						grabbing = TRUE
+						break
+				if (!grabbing)
+					to_chat(user, "<span class='warning'>Your grasp was broken before you could restrain [target]!</span>")
+					return FALSE
 
-var/last_chew = 0
-/mob/living/carbon/human/RestrainedClickOn(atom/A)
-	if (A != src) return ..()
-	if (last_chew + 26 > world.time) return
+			var/obj/item/weapon/handcuffs/cuffs = src
+			if(!dispenser)
+				user.remove_from_mob(cuffs)
+			else
+				cuffs = new type
 
-	var/mob/living/carbon/human/H = A
-	if (!H.handcuffed) return
-	if (H.a_intent != "hurt") return
-	if (H.zone_sel.selecting != "mouth") return
-	if (H.wear_mask) return
-	if (istype(H.wear_suit, /obj/item/clothing/suit/straight_jacket)) return
-
-	var/datum/organ/external/O = H.organs_by_name[H.hand?"l_hand":"r_hand"]
-	if (!O) return
-
-	var/s = "\red [H.name] chews on \his [O.display_name]!"
-	H.visible_message(s, "\red You chew on your [O.display_name]!")
-	H.attack_log += text("\[[time_stamp()]\] <font color='red'>[s] ([H.ckey])</font>")
-	log_attack("[s] ([H.ckey])")
-
-	O.take_damage(3,0,1,1,"teeth marks")
-
-	last_chew = world.time
+			target.equip_to_slot_if_possible(cuffs, SLOT_HANDCUFFED)
+			target.attack_log += "\[[time_stamp()]\] <font color='orange'>[user.name] ([user.ckey]) placed on our [target.slot_id_to_name(SLOT_HANDCUFFED)] ([cuffs])</font>"
+			user.attack_log += "\[[time_stamp()]\] <font color='red'>Placed on [target.name]'s ([target.ckey]) [target.slot_id_to_name(SLOT_HANDCUFFED)] ([cuffs])</font>"
+			return TRUE
 
 /obj/item/weapon/handcuffs/cable
 	name = "cable restraints"
@@ -103,41 +78,38 @@ var/last_chew = 0
 	breakouttime = 300 //Deciseconds = 30s
 	cuff_sound = 'sound/weapons/cablecuff.ogg'
 
+/obj/item/weapon/handcuffs/cable/CheckParts(list/parts_list)
+	..()
+	for(var/obj/item/stack/cable_coil/C in contents)
+		color = C.color
+
 /obj/item/weapon/handcuffs/cable/red
-	color = "#DD0000"
+	color = "#dd0000"
 
 /obj/item/weapon/handcuffs/cable/yellow
-	color = "#DDDD00"
+	color = "#dddd00"
 
 /obj/item/weapon/handcuffs/cable/blue
-	color = "#0000DD"
+	color = "#0000dd"
 
 /obj/item/weapon/handcuffs/cable/green
-	color = "#00DD00"
+	color = "#00dd00"
 
 /obj/item/weapon/handcuffs/cable/pink
-	color = "#DD00DD"
+	color = "#dd00dd"
 
 /obj/item/weapon/handcuffs/cable/orange
-	color = "#DD8800"
+	color = "#dd8800"
 
 /obj/item/weapon/handcuffs/cable/cyan
-	color = "#00DDDD"
+	color = "#00dddd"
 
 /obj/item/weapon/handcuffs/cable/white
-	color = "#FFFFFF"
+	color = "#ffffff"
 
 /obj/item/weapon/handcuffs/cyborg
 	dispenser = 1
 
 /obj/item/weapon/handcuffs/cyborg/attack(mob/living/carbon/C, mob/user)
-	if(!C.handcuffed)
-		var/turf/p_loc = user.loc
-		var/turf/p_loc_m = C.loc
-		playsound(src.loc, cuff_sound, 30, 1, -2)
-		user.visible_message("\red <B>[user] is trying to put handcuffs on [C]!</B>")
-		spawn(30)
-			if(!C)	return
-			if(p_loc == user.loc && p_loc_m == C.loc)
-				C.handcuffed = new /obj/item/weapon/handcuffs(C)
-				C.update_inv_handcuffed() 
+	if(istype(C) && !C.handcuffed)
+		place_handcuffs(C, user)

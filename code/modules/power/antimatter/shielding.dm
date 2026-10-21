@@ -1,5 +1,5 @@
 //like orange but only checks north/south/east/west for one step
-proc/cardinalrange(center)
+/proc/cardinalrange(center)
 	var/list/things = list()
 	for(var/direction in cardinal)
 		var/turf/T = get_step(center, direction)
@@ -13,12 +13,14 @@ proc/cardinalrange(center)
 
 	icon = 'icons/obj/machines/antimatter.dmi'
 	icon_state = "shield"
-	anchored = 1
-	density = 1
+	anchored = TRUE
+	density = TRUE
 	dir = 1
-	use_power = 0//Living things generally dont use power
+	use_power = NO_POWER_USE//Living things generally dont use power
 	idle_power_usage = 0
 	active_power_usage = 0
+
+	resistance_flags = FULL_INDESTRUCTIBLE
 
 	var/obj/machinery/power/am_control_unit/control_unit = null
 	var/processing = 0//To track if we are in the update list or not, we need to be when we are damaged and if we ever
@@ -26,12 +28,12 @@ proc/cardinalrange(center)
 	var/efficiency = 1//How many cores this core counts for when doing power processing, phoron in the air and stability could affect this
 
 
-/obj/machinery/am_shielding/New(loc)
-	..(loc)
-	spawn(10)
-		controllerscan()
-	return
+/obj/machinery/am_shielding/atom_init()
+	..()
+	return INITIALIZE_HINT_LATELOAD
 
+/obj/machinery/am_shielding/atom_init_late()
+	controllerscan()
 
 /obj/machinery/am_shielding/proc/controllerscan(priorscan = 0)
 	//Make sure we are the only one here
@@ -50,7 +52,6 @@ proc/cardinalrange(center)
 			break
 
 	if(!control_unit)//No other guys nearby look for a control unit
-		for(var/direction in cardinal)
 		for(var/obj/machinery/power/am_control_unit/AMC in cardinalrange(src))
 			if(AMC.add_shielding(src))
 				break
@@ -68,14 +69,13 @@ proc/cardinalrange(center)
 /obj/machinery/am_shielding/Destroy()
 	if(control_unit)	control_unit.remove_shielding(src)
 	if(processing)	shutdown_core()
-	visible_message("\red The [src.name] melts!")
+	visible_message("<span class='warning'>The [src.name] melts!</span>")
 	//Might want to have it leave a mess on the floor but no sprites for now
 	return ..()
 
 
-/obj/machinery/am_shielding/CanPass(atom/movable/mover, turf/target, height=0, air_group=0)
-	if(air_group || (height==0))	return 1
-	return 0
+/obj/machinery/am_shielding/CanPass(atom/movable/mover, turf/target, height=0)
+	return FALSE
 
 
 /obj/machinery/am_shielding/process()
@@ -93,9 +93,9 @@ proc/cardinalrange(center)
 	stability -= 20
 	if(prob(100-stability))
 		if(prob(10))//Might create a node
-			new /obj/effect/blob/node(src.loc,150)
+			new /obj/structure/blob/node(loc, 150)
 		else
-			new /obj/effect/blob(src.loc,60)
+			new /obj/structure/blob(loc,60)
 		spawn(0)
 			qdel(src)
 		return
@@ -105,31 +105,30 @@ proc/cardinalrange(center)
 
 /obj/machinery/am_shielding/ex_act(severity)
 	switch(severity)
-		if(1.0)
+		if(EXPLODE_DEVASTATE)
 			stability -= 80
-		if(2.0)
+		if(EXPLODE_HEAVY)
 			stability -= 40
-		if(3.0)
+		if(EXPLODE_LIGHT)
 			stability -= 20
 	check_stability()
 	return
 
 
-/obj/machinery/am_shielding/bullet_act(obj/item/projectile/Proj)
-	if(Proj.flag != "bullet")
+/obj/machinery/am_shielding/bullet_act(obj/item/projectile/Proj, def_zone)
+	. = ..()
+	if(Proj.flag != BULLET)
 		stability -= Proj.force/2
-	return 0
-
 
 /obj/machinery/am_shielding/update_icon()
-	overlays.Cut()
+	cut_overlays()
 	for(var/direction in alldirs)
 		var/machine = locate(/obj/machinery, get_step(loc, direction))
 		if((istype(machine, /obj/machinery/am_shielding) && machine:control_unit == control_unit)||(istype(machine, /obj/machinery/power/am_control_unit) && machine == control_unit))
-			overlays += "shield_[direction]"
+			add_overlay("shield_[direction]")
 
 	if(core_check())
-		overlays += "core"
+		add_overlay("core")
 		if(!processing) setup_core()
 	else if(processing) shutdown_core()
 
@@ -138,6 +137,7 @@ proc/cardinalrange(center)
 	if(!istype(W) || !user) return
 	if(W.force > 10)
 		stability -= W.force/2
+		user.SetNextMove(CLICK_CD_MELEE)
 		check_stability()
 	..()
 	return
@@ -204,18 +204,16 @@ proc/cardinalrange(center)
 	icon = 'icons/obj/machines/antimatter.dmi'
 	icon_state = "box"
 	item_state = "electronic"
-	w_class = 4.0
-	flags = FPRINT | TABLEPASS | CONDUCT
+	w_class = SIZE_NORMAL
+	flags = CONDUCT
 	throwforce = 5
 	throw_speed = 1
 	throw_range = 2
 	m_amt = 100
-	w_amt = 2000
 
-/obj/item/device/am_shielding_container/attackby(obj/item/I, mob/user)
-	if(istype(I, /obj/item/device/multitool) && istype(src.loc,/turf))
-		new/obj/machinery/am_shielding(src.loc)
+/obj/item/device/am_shielding_container/attackby(obj/item/I, mob/user, params)
+	if(ispulsing(I) && istype(loc, /turf))
+		new/obj/machinery/am_shielding(loc)
 		qdel(src)
 		return
-	..()
-	return
+	return ..()

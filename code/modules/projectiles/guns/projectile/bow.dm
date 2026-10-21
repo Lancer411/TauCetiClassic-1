@@ -1,124 +1,98 @@
 /obj/item/weapon/arrow
 
 	name = "bolt"
-	desc = "It's got a tip for you - get the point?"
+	cases = list("болт", "болта", "болту", "болт", "болтом", "болте")
+	desc = "У меня есть подсказка для тебя - найди цель"
 	icon = 'icons/obj/weapons.dmi'
 	icon_state = "bolt"
 	item_state = "bolt"
-	flags =  FPRINT | TABLEPASS
 	throwforce = 8
-	w_class = 3.0
+	w_class = SIZE_TINY
 	sharp = 1
 	edge = 0
-
-/obj/item/weapon/arrow/proc/removed() //Helper for metal rods falling apart.
-	return
 
 /obj/item/weapon/arrow/quill
 
 	name = "vox quill"
-	desc = "A wickedly barbed quill from some bizarre animal."
+	desc = "Колючее перо какого-то диковинного животного."
 	icon = 'icons/obj/weapons.dmi'
 	icon_state = "quill"
 	item_state = "quill"
 	throwforce = 5
 
-/obj/item/weapon/arrow/rod
-
-	name = "metal rod"
-	desc = "Don't cry for me, Orithena."
-	icon_state = "metal-rod"
-
-/obj/item/weapon/arrow/rod/removed(mob/user)
-	if(throwforce == 15) // The rod has been superheated - we don't want it to be useable when removed from the bow.
-		to_chat(user, "[src] shatters into a scattering of overstressed metal shards as it leaves the crossbow.")
-		var/obj/item/weapon/shard/shrapnel/S = new()
-		S.loc = get_turf(src)
-		qdel(src)
-
 /obj/item/weapon/crossbow
-
 	name = "powered crossbow"
-	desc = "A 2557AD twist on an old classic. Pick up that can."
+	cases = list("арбалет", "арбалета", "арбалету", "арбалет", "арбалетом", "арбалете")
 	icon = 'icons/obj/weapons.dmi'
 	icon_state = "crossbow"
 	item_state = "crossbow-solid"
-	w_class = 5.0
-	flags =  FPRINT | TABLEPASS | CONDUCT
-	slot_flags = SLOT_BELT | SLOT_BACK
-
-	w_class = 3.0
+	flags =  CONDUCT
+	slot_flags = SLOT_FLAGS_BELT | SLOT_FLAGS_BACK
+	w_class = SIZE_SMALL
 
 	var/tension = 0                       // Current draw on the bow.
-	var/max_tension = 5                   // Highest possible tension.
-	var/release_speed = 5                 // Speed per unit of tension.
+	var/max_tension = 3                   // Highest possible tension.
+	var/release_speed = 4                 // Speed per unit of tension.
 	var/mob/living/current_user = null    // Used to see if the person drawing the bow started drawing it.
 	var/obj/item/weapon/arrow = null      // Nocked arrow.
 	var/obj/item/weapon/stock_parts/cell/cell = null  // Used for firing special projectiles like rods.
 
-/obj/item/weapon/crossbow/attackby(obj/item/W, mob/user)
+/obj/item/weapon/crossbow/atom_init()
+	. = ..()
+	desc = "Старая классика в стиле [gamestory_start_year+2]. Подними эту банку!"
+
+/obj/item/weapon/crossbow/attackby(obj/item/I, mob/user, params)
 	if(!arrow)
-		if (istype(W,/obj/item/weapon/arrow))
-			user.drop_item()
-			arrow = W
-			arrow.loc = src
-			user.visible_message("[user] slides [arrow] into [src].","You slide [arrow] into [src].")
+		if(istype(I, /obj/item/weapon/arrow))
+			user.drop_from_inventory(I, src)
+			arrow = I
+			user.visible_message("[user] вставляет [CASE(arrow, ACCUSATIVE_CASE)] в [CASE(src, ACCUSATIVE_CASE)].","Вы вставляете [CASE(arrow, ACCUSATIVE_CASE)] в [CASE(src, ACCUSATIVE_CASE)].")
 			icon_state = "crossbow-nocked"
-			return
-		else if(istype(W,/obj/item/stack/rods))
-			var/obj/item/stack/rods/R = W
-			R.use(1)
-			arrow = new /obj/item/weapon/arrow/rod(src)
-			arrow.fingerprintslast = src.fingerprintslast
-			arrow.loc = src
-			icon_state = "crossbow-nocked"
-			user.visible_message("[user] haphazardly jams [arrow] into [src].","You jam [arrow] into [src].")
 			if(cell)
 				if(cell.charge >= 500)
-					to_chat(user, "<span class='notice'>[arrow] plinks and crackles as it begins to glow red-hot.</span>")
+					to_chat(user, "<span class='notice'>В результате [CASE(arrow, ACCUSATIVE_CASE)] начинает раскаляться докрасна.</span>")
 					arrow.throwforce = 15
 					arrow.icon_state = "metal-rod-superheated"
 					cell.use(500)
 			return
 
-	if(istype(W, /obj/item/weapon/stock_parts/cell))
+	if(istype(I, /obj/item/weapon/stock_parts/cell))
 		if(!cell)
-			user.drop_item()
-			W.loc = src
-			cell = W
-			to_chat(user, "<span class='notice'>You jam [cell] into [src] and wire it to the firing coil.</span>")
+			user.drop_from_inventory(I, src)
+			cell = I
+			to_chat(user, "<span class='notice'>Вы вставляете батарейку в [CASE(src, ACCUSATIVE_CASE)] и подключаете его к катушке зажигания.</span>")
 			if(arrow)
-				if(istype(arrow,/obj/item/weapon/arrow/rod) && arrow.throwforce < 15 && cell.charge >= 500)
-					to_chat(user, "<span class='notice'>[arrow] plinks and crackles as it begins to glow red-hot.</span>")
+				if(istype(arrow,/obj/item/weapon/arrow) && arrow.throwforce < 15 && cell.charge >= 500)
+					to_chat(user, "<span class='notice'>[capitalize(CASE(arrow, ACCUSATIVE_CASE))] мерцает и трещит, раскаляясь докрасна.</span>")
 					arrow.throwforce = 15
 					arrow.icon_state = "metal-rod-superheated"
 					cell.use(500)
 		else
-			to_chat(user, "<span class='notice'>[src] already has a cell installed.</span>")
+			to_chat(user, "<span class='notice'>Батарейка уже установлена в [CASE(src, ACCUSATIVE_CASE)]</span>")
 
-	else if(istype(W, /obj/item/weapon/screwdriver))
+	else if(isscrewing(I))
 		if(cell)
 			var/obj/item/C = cell
-			C.loc = get_turf(user)
+			C.forceMove(get_turf(user))
 			cell = null
-			to_chat(user, "<span class='notice'>You jimmy [cell] out of [src] with [W].</span>")
+			to_chat(user, "<span class='notice'>Вы вынимаете батарейку из [CASE(src, GENITIVE_CASE)] [I].</span>")
 		else
-			to_chat(user, "<span class='notice'>[src] doesn't have a cell installed.</span>")
+			to_chat(user, "<span class='notice'>[capitalize(CASE(src, ACCUSATIVE_CASE))] не имеет батарейки внутри.</span>")
 
 	else
-		..()
+		return ..()
 
 /obj/item/weapon/crossbow/attack_self(mob/living/user)
 	if(tension)
 		if(arrow)
-			user.visible_message("[user] relaxes the tension on [src]'s string and removes [arrow].","You relax the tension on [src]'s string and remove [arrow].")
+			user.visible_message("[user] ослабляет натяжение тетивы [CASE(src, GENITIVE_CASE)] и вытаскивает [CASE(arrow, ACCUSATIVE_CASE)].","Вы ослабляете натяжение тетивы [CASE(src, GENITIVE_CASE)] и вытаскиваете [CASE(arrow, ACCUSATIVE_CASE)].")
 			var/obj/item/weapon/arrow/A = arrow
 			A.loc = get_turf(src)
-			A.removed(user)
 			arrow = null
 		else
-			user.visible_message("[user] relaxes the tension on [src]'s string.","You relax the tension on [src]'s string.")
+			user.visible_message("[user] ослабляет натяжение тетивы [CASE(src, GENITIVE_CASE)].", "Вы ослабляете натяжение тетивы [CASE(src, GENITIVE_CASE)].")
 		tension = 0
+		flags_2 &= ~CANT_BE_INSERTED
 		icon_state = "crossbow"
 	else
 		draw(user)
@@ -126,7 +100,7 @@
 /obj/item/weapon/crossbow/proc/draw(mob/user)
 
 	if(!arrow)
-		to_chat(user, "You don't have anything nocked to [src].")
+		to_chat(user, "У вас нет стрелы в [CASE(src, PREPOSITIONAL_CASE)].")
 		return
 
 	if(user.restrained())
@@ -134,8 +108,9 @@
 
 	current_user = user
 
-	user.visible_message("[user] begins to draw back the string of [src].","You begin to draw back the string of [src].")
+	user.visible_message("[user] начинает натягивать тетиву [CASE(src, GENITIVE_CASE)].","Вы начинаете натягивать тетиву [CASE(src, GENITIVE_CASE)].")
 	tension = 1
+	flags_2 |= CANT_BE_INSERTED
 	spawn(25) increase_tension(user)
 
 /obj/item/weapon/crossbow/proc/increase_tension(mob/user)
@@ -148,18 +123,13 @@
 
 	if(tension>=max_tension)
 		tension = max_tension
-		to_chat(usr, "[src] clunks as you draw the string to its maximum tension!")
+		to_chat(user, "[capitalize(CASE(src, ACCUSATIVE_CASE))] лязгает, когда вы натягиваете тетиву до максимального натяжения!")
 	else
-		user.visible_message("[usr] draws back the string of [src]!","You continue drawing back the string of [src]!")
+		user.visible_message("[user] натягивает тетиву [CASE(src, GENITIVE_CASE)]!", "Вы продолжаете натягивать тетиву [CASE(src, GENITIVE_CASE)]!")
 		spawn(25) increase_tension(user)
 
-/obj/item/weapon/crossbow/afterattack(atom/target, mob/living/user, flag, params)
-
-	if (istype(target, /obj/item/weapon/storage/backpack ))
-		src.dropped()
-		return
-
-	else if (target.loc == user.loc)
+/obj/item/weapon/crossbow/afterattack(atom/target, mob/user, proximity, params)
+	if (target.loc == user.loc)
 		return
 
 	else if (locate (/obj/structure/table, src.loc))
@@ -169,16 +139,21 @@
 		return
 
 	if(!tension)
-		to_chat(user, "You haven't drawn back the bolt!")
+		to_chat(user, "Вы не натянули тетиву!")
 		return 0
 
 	if (!arrow)
-		to_chat(user, "You have no arrow nocked to [src]!")
+		to_chat(user, "Болт отсутствует в арбалете!")
 		return 0
 	else
 		spawn(0) Fire(target,user,params)
 
 /obj/item/weapon/crossbow/proc/Fire(atom/target, mob/living/user, params, reflex = 0)
+	if(ishuman(user))
+		var/mob/living/carbon/human/H = user
+		if(H.wear_suit && istype(H.wear_suit, /obj/item/clothing/suit))
+			var/obj/item/clothing/suit/V = H.wear_suit
+			V.attack_reaction(H, REACTION_GUN_FIRE)
 
 	add_fingerprint(user)
 
@@ -187,110 +162,54 @@
 	if (!istype(targloc) || !istype(curloc))
 		return
 
-	user.visible_message("<span class='danger'>[user] releases [src] and sends [arrow] streaking toward [target]!</span>","<span class='danger'>You release [src] and send [arrow] streaking toward [target]!</span>")
+	user.visible_message("<span class='danger'>[user] стреляет из [CASE(src, GENITIVE_CASE)] и [CASE(arrow, ACCUSATIVE_CASE)] летит в направлении [target]!</span>","<span class='danger'>Вы отпускаете тетиву [CASE(src, GENITIVE_CASE)] и отправляете в полёт [CASE(arrow, ACCUSATIVE_CASE)] навстречу [target]!</span>")
 
 	var/obj/item/weapon/arrow/A = arrow
 	A.loc = get_turf(user)
-	A.throw_at(target,26,tension*release_speed,user) //26 because speed must be < than distance
+	A.throw_at(target, (tension * release_speed) + 1, tension * release_speed, user)
 	arrow = null
+	flags_2 &= ~CANT_BE_INSERTED
 	tension = 0
 	icon_state = "crossbow"
 
-/obj/item/weapon/crossbow/dropped(mob/user)
-	if(arrow)
-		var/obj/item/weapon/arrow/A = arrow
-		A.loc = get_turf(src)
-		A.removed(user)
-		arrow = null
-		tension = 0
-		icon_state = "crossbow"
+// *(CROSSBOW craft in recipes.dm)*
 
-// Crossbow construction.
-
-/obj/item/weapon/crossbowframe
-	name = "crossbow frame"
-	desc = "A half-finished crossbow."
-	icon_state = "crossbowframe0"
+/obj/item/weapon/crossbowframe1
+	name = "crossbow(1 stage)"
+	desc = "Чтобы завершить, вам нужно: добавить 3 стержня; заварить швы; добавить 5 проводов; добавить 3 пластика; добавить 5 проводов; затянуть болты с помощью отвертки."
+	icon_state = "crossbowframe1"
 	item_state = "crossbow-solid"
 
-	var/buildstate = 0
+/obj/item/weapon/crossbowframe2
+	name = "crossbow(2 stage)"
+	desc = "Чтобы завершить, вам нужно: заварить швы; добавить 5 проводов; добавить 3 пластика; добавить 5 проводов; затянуть болты с помощью отвертки."
+	icon_state = "crossbowframe2"
+	item_state = "crossbow-solid"
 
-/obj/item/weapon/crossbowframe/update_icon()
-	icon_state = "crossbowframe[buildstate]"
+/obj/item/weapon/crossbowframe3
+	name = "crossbow(3 stage)"
+	desc = "Чтобы завершить, вам нужно: добавить 5 проводов; добавить 3 пластика; добавить 5 проводов; затянуть болты с помощью отвертки."
+	icon_state = "crossbowframe3"
+	item_state = "crossbow-solid"
 
-/obj/item/weapon/crossbowframe/examine(mob/user)
-	..()
-	switch(buildstate)
-		if(1)
-			to_chat(user, "It has a loose rod frame in place.")
-		if(2)
-			to_chat(user, "It has a steel backbone welded in place.")
-		if(3)
-			to_chat(user, "It has a steel backbone and a cell mount installed.")
-		if(4)
-			to_chat(user, "It has a steel backbone, plastic lath and a cell mount installed.")
-		if(5)
-			to_chat(user, "It has a steel cable loosely strung across the lath.")
+/obj/item/weapon/crossbowframe4
+	name = "crossbow(4 stage)"
+	desc = "Чтобы завершить, вам нужно: добавить 3 пластика; добавить 5 проводов; затянуть болты с помощью отвертки."
+	icon_state = "crossbowframe4"
+	item_state = "crossbow-solid"
 
-/obj/item/weapon/crossbowframe/attackby(obj/item/W, mob/user)
-	if(istype(user, /mob/living/silicon/robot)) return
-	if(istype(W,/obj/item/stack/rods))
-		if(buildstate == 0)
-			var/obj/item/stack/rods/R = W
-			if(R.amount >= 3)
-				R.use(3)
-				to_chat(user, "\blue You assemble a backbone of rods around the wooden stock.")
-				buildstate++
-				update_icon()
-			else
-				to_chat(user, "\blue You need at least three rods to complete this task.")
-			return
-	else if(istype(W,/obj/item/weapon/weldingtool))
-		if(buildstate == 1)
-			var/obj/item/weapon/weldingtool/T = W
-			if(T.remove_fuel(0,user))
-				if(!src || !T.isOn()) return
-				playsound(src.loc, 'sound/items/Welder2.ogg', 100, 1)
-				to_chat(user, "\blue You weld the rods into place.")
-			buildstate++
-			update_icon()
-		return
-	else if(istype(W,/obj/item/weapon/cable_coil))
-		var/obj/item/weapon/cable_coil/C = W
-		if(buildstate == 2)
-			if(C.amount >= 5)
-				C.use(5)
-				to_chat(user, "\blue You wire a crude cell mount into the top of the crossbow.")
-				buildstate++
-				update_icon()
-			else
-				to_chat(user, "\blue You need at least five segments of cable coil to complete this task.")
-			return
-		else if(buildstate == 4)
-			if(C.amount >= 5)
-				C.use(5)
-				to_chat(user, "\blue You string a steel cable across the crossbow's lath.")
-				buildstate++
-				update_icon()
-			else
-				to_chat(user, "\blue You need at least five segments of cable coil to complete this task.")
-			return
-	else if(istype(W,/obj/item/stack/sheet/mineral/plastic))
-		if(buildstate == 3)
-			var/obj/item/stack/sheet/mineral/plastic/P = W
-			if(P.amount >= 3)
-				P.use(3)
-				to_chat(user, "\blue You assemble and install a heavy plastic lath onto the crossbow.")
-				buildstate++
-				update_icon()
-			else
-				to_chat(user, "\blue You need at least three plastic sheets to complete this task.")
-			return
-	else if(istype(W,/obj/item/weapon/screwdriver))
-		if(buildstate == 5)
-			to_chat(user, "\blue You secure the crossbow's various parts.")
-			new /obj/item/weapon/crossbow(get_turf(src))
-			qdel(src)
-		return
-	else
-		..()
+/obj/item/weapon/crossbowframe5
+	name = "crossbow(5 stage)"
+	desc = "Чтобы завершить, вам нужно: добавить 5 проводов; затянуть болты с помощью отвертки."
+	icon_state = "crossbowframe5"
+	item_state = "crossbow-solid"
+
+/obj/item/weapon/crossbowframe6
+	name = "crossbow(6 stage)"
+	desc = "Чтобы завершить, вам нужно: затянуть болты с помощью отвертки."
+	icon_state = "crossbowframe6"
+	item_state = "crossbow-solid"
+
+/obj/item/weapon/crossbow/vox
+	max_tension = 5
+	release_speed = 5

@@ -1,13 +1,12 @@
-
 /obj/machinery/radiocarbon_spectrometer
 	name = "Radiocarbon spectrometer"
 	desc = "A specialised, complex scanner for gleaning information on all manner of small things."
-	anchored = 1
-	density = 1
-	icon = 'icons/obj/virology.dmi'
-	icon_state = "analyser"
+	anchored = TRUE
+	density = TRUE
+	icon = 'icons/obj/xenoarchaeology/machinery.dmi'
+	icon_state = "spectrometer"
 
-	use_power = 1			//1 = idle, 2 = active
+	use_power = IDLE_POWER_USE // 1 = idle, 2 = active
 	idle_power_usage = 20
 	active_power_usage = 300
 
@@ -21,13 +20,13 @@
 	var/last_process_worldtime = 0
 	//
 	var/scanner_progress = 0
-	var/scanner_rate = 1.25			//80 seconds per scan
+	var/scanner_rate = 1.25 // 80 seconds per scan
 	var/scanner_rpm = 0
 	var/scanner_rpm_dir = 1
 	var/scanner_temperature = 0
 	var/scanner_seal_integrity = 100
 	//
-	var/coolant_usage_rate = 0		//measured in u/microsec
+	var/coolant_usage_rate = 0 // measured in u/microsec
 	var/fresh_coolant = 0
 	var/coolant_purity = 0
 	var/datum/reagents/coolant_reagents
@@ -40,12 +39,14 @@
 	var/tleft_retarget_optimal_wavelength = 0
 	var/maser_efficiency = 0
 	//
-	var/radiation = 0				//0-100 mSv
+	var/radiation = 0 // 0-100 mSv
 	var/t_left_radspike = 0
 	var/rad_shield = 0
+	required_skills = list(/datum/skill/research = SKILL_LEVEL_TRAINED)
 
-/obj/machinery/radiocarbon_spectrometer/New()
-	..()
+
+/obj/machinery/radiocarbon_spectrometer/atom_init()
+	. = ..()
 	create_reagents(500)
 	coolant_reagents_purity["water"] = 0.5
 	coolant_reagents_purity["icecoffee"] = 0.6
@@ -55,28 +56,25 @@
 	coolant_reagents_purity["kelotane"] = 0.7
 	coolant_reagents_purity["sterilizine"] = 0.7
 	coolant_reagents_purity["dermaline"] = 0.7
-	coolant_reagents_purity["hyperzine"] = 0.8
 	coolant_reagents_purity["cryoxadone"] = 0.9
 	coolant_reagents_purity["coolant"] = 1
 	coolant_reagents_purity["adminordrazine"] = 2
-
-/obj/machinery/radiocarbon_spectrometer/attack_hand(mob/user)
-	ui_interact(user)
 
 /obj/machinery/radiocarbon_spectrometer/attackby(obj/I, mob/user)
 	if(scanning)
 		to_chat(user, "<span class='warning'>You can't do that while [src] is scanning!</span>")
 	else
+		user.SetNextMove(CLICK_CD_INTERACT)
 		if(istype(I, /obj/item/stack/nanopaste))
-			var/choice = alert("What do you want to do with the nanopaste?","Radiometric Scanner","Scan nanopaste","Fix seal integrity")
+			var/choice = tgui_alert(usr, "What do you want to do with the nanopaste?","Radiometric Scanner", list("Scan nanopaste","Fix seal integrity"))
 			if(choice == "Fix seal integrity")
 				var/obj/item/stack/nanopaste/N = I
-				var/amount_used = min(N.amount, 10 - scanner_seal_integrity / 10)
+				var/amount_used = min(N.get_amount(), 10 - scanner_seal_integrity / 10)
 				N.use(amount_used)
 				scanner_seal_integrity = round(scanner_seal_integrity + amount_used * 10)
 				return
 		if(istype(I, /obj/item/weapon/reagent_containers/glass))
-			var/choice = alert("What do you want to do with the container?","Radiometric Scanner","Add coolant","Empty coolant","Scan container")
+			var/choice = tgui_alert(usr, "What do you want to do with the container?","Radiometric Scanner", list("Add coolant","Empty coolant","Scan container"))
 			if(choice == "Add coolant")
 				var/obj/item/weapon/reagent_containers/glass/G = I
 				var/amount_transferred = min(src.reagents.maximum_volume - src.reagents.total_volume, G.reagents.total_volume)
@@ -87,13 +85,15 @@
 			else if(choice == "Empty coolant")
 				var/obj/item/weapon/reagent_containers/glass/G = I
 				var/amount_transferred = min(G.reagents.maximum_volume - G.reagents.total_volume, src.reagents.total_volume)
-				src.reagents.trans_to(G, amount_transferred)
+				reagents.trans_to(G, amount_transferred)
 				to_chat(user, "<span class='info'>You remove [amount_transferred]u of coolant from [src].</span>")
 				update_coolant()
 				return
-		user.drop_item()
-		I.loc = src
-		scanned_item = I
+		if(!scanned_item)
+			user.drop_from_inventory(I, src)
+			scanned_item = I
+		else
+			to_chat(user, "<span class='warning'>There is already something in [src].</span>")
 
 /obj/machinery/radiocarbon_spectrometer/proc/update_coolant()
 	var/total_purity = 0
@@ -116,9 +116,8 @@
 
 /obj/machinery/radiocarbon_spectrometer/ui_interact(mob/user, ui_key = "main", datum/nanoui/ui = null)
 
-	if(user.stat)
+	if(user.stat != CONSCIOUS && !isobserver(user))
 		return
-
 	// this is the data which will be sent to the ui
 	var/data[0]
 	data["scanned_item"] = (scanned_item ? scanned_item.name : "")
@@ -144,15 +143,15 @@
 	data["radiation"] = round(radiation)
 	data["t_left_radspike"] = round(t_left_radspike)
 	data["rad_shield_on"] = rad_shield
-	
+
 	// update the ui if it exists, returns null if no ui is passed/found
-	ui = nanomanager.try_update_ui(user, src, ui_key, ui, data)	
+	ui = nanomanager.try_update_ui(user, src, ui_key, ui, data)
 	if (!ui)
 		// the ui does not exist, so we'll create a new() one
         // for a list of parameters and their descriptions see the code docs in \code\modules\nano\nanoui.dm
 		ui = new(user, src, ui_key, "geoscanner.tmpl", "High Res Radiocarbon Spectrometer", 900, 600)
 		// when the ui is first opened this is the data it will use
-		ui.set_initial_data(data)		
+		ui.set_initial_data(data)
 		// open the new ui window
 		ui.open()
 		// auto update every Master Controller tick
@@ -160,6 +159,7 @@
 
 /obj/machinery/radiocarbon_spectrometer/process()
 	if(scanning)
+		icon_state = "spectrometer_processing"
 		if(!scanned_item || scanned_item.loc != src)
 			scanned_item = null
 			stop_scanning()
@@ -194,8 +194,8 @@
 					radiation = rand() * 15 + 85
 					if(!rad_shield)
 						//irradiate nearby mobs
-						for(var/mob/living/M in view(7,src))
-							M.apply_effect(radiation / 25, IRRADIATE, 0)
+						irradiate_in_dist(get_turf(src), radiation / 25, 7)
+
 				else
 					t_left_radspike = pick(10,15,25)
 
@@ -231,19 +231,20 @@
 			//emergency stop if seal integrity reaches 0
 			if(scanner_seal_integrity <= 0 || (scanner_temperature >= 1273 && !rad_shield))
 				stop_scanning()
-				src.visible_message("\blue [bicon(src)] buzzes unhappily. It has failed mid-scan!", 2)
+				visible_message("<span class='notice'>[bicon(src)] [src] buzzes unhappily. It has failed mid-scan!</span>", 2)
 
 			if(prob(5))
-				src.visible_message("\blue [bicon(src)] [pick("whirrs","chuffs","clicks")][pick(" excitedly"," energetically"," busily")].", 2)
+				visible_message("<span class='notice'>[bicon(src)] [src] [pick("whirrs", "chuffs", "clicks")][pick(" excitedly", " energetically", " busily")].</span>", 2)
 	else
 		//gradually cool down over time
 		if(scanner_temperature > 0)
 			scanner_temperature = max(scanner_temperature - 5 - 10 * rand(), 0)
 		if(prob(0.75))
-			src.visible_message("\blue [bicon(src)] [pick("plinks","hisses")][pick(" quietly"," softly"," sadly"," plaintively")].", 2)
+			visible_message("<span class='notice'>[bicon(src)] [src] [pick("plinks", "hisses")][pick(" quietly", " softly", " sadly", " plaintively")].</span>", 2)
 	last_process_worldtime = world.time
 
 /obj/machinery/radiocarbon_spectrometer/proc/stop_scanning()
+	icon_state = "spectrometer"
 	scanning = 0
 	scanner_rpm_dir = 1
 	scanner_rpm = 0
@@ -254,18 +255,19 @@
 	radiation = 0
 	t_left_radspike = 0
 	if(used_coolant)
-		src.reagents.remove_any(used_coolant)
+		reagents.remove_any(used_coolant)
 		used_coolant = 0
 
 /obj/machinery/radiocarbon_spectrometer/proc/complete_scan()
-	src.visible_message("\blue [bicon(src)] makes an insistent chime.", 2)
+	visible_message("<span class='notice'>[bicon(src)] [src] makes an insistent chime.</span>", 2)
 
 	if(scanned_item)
 		//create report
 		var/obj/item/weapon/paper/P = new(src)
 		P.name = "[src] report #[++report_num]: [scanned_item.name]"
-		P.stamped = list(/obj/item/weapon/stamp)
-		P.overlays = list("paper_stamped")
+
+		var/obj/item/weapon/stamp/S = new
+		S.stamp_paper(P)
 
 		//work out data
 		var/data = " - Mundane object: [scanned_item.desc ? scanned_item.desc : "No information on record."]<br>"
@@ -285,7 +287,7 @@
 				data = " - Mundane object (archaic xenos origins)<br>"
 
 				var/obj/item/weapon/archaeological_find/A = scanned_item
-				if(A.talking_atom)
+				if(A.GetComponent(/datum/component/talking_atom))
 					data = " - Exhibits properties consistent with sonic reproduction and audio capture technologies.<br>"
 
 		var/anom_found = 0
@@ -314,6 +316,7 @@
 
 		P.info = "<b>[src] analysis report #[report_num]</b><br>"
 		P.info += "<b>Scanned item:</b> [scanned_item.name]<br><br>" + data
+		P.update_icon()
 		last_scan_data = P.info
 		P.loc = src.loc
 

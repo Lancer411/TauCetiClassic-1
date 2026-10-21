@@ -4,14 +4,9 @@
 /obj/machinery/shield_gen/external
 	name = "hull shield generator"
 
-/obj/machinery/shield_gen/external/New()
-	..()
-
 /obj/machinery/shield_gen/external/get_shielded_turfs()
-	var
-		list
-			open = list(get_turf(src))
-			closed = list()
+	var/list/open = list(get_turf(src))
+	var/list/closed = list()
 
 	while(open.len)
 		for(var/turf/T in open)
@@ -19,7 +14,7 @@
 				if(get_dist(O,src) > field_radius)
 					continue
 				var/add_this_turf = 0
-				if(istype(O,/turf/space))
+				if(isenvironmentturf(O))
 					for(var/turf/simulated/G in orange(1, O))
 						add_this_turf = 1
 						break

@@ -1,5 +1,5 @@
 /mob/living/silicon/robot/syndicate
-	icon_state = "syndie_bloodhound"
+	icon_state = "syndie_android"
 	lawupdate = 0
 	scrambledcodes = 1
 	modtype = "Syndicate"
@@ -7,27 +7,55 @@
 //	designation = "Syndicate"
 	braintype = "Robot"
 	req_access = list(access_syndicate)
+	w_class = SIZE_BIG
 
-/mob/living/silicon/robot/syndicate/New(loc)
-	..()
+	typing_indicator_type = "syndibot"
+
+	var/static/image/sword_overlay
+
+	spawner_args = list(/datum/spawner/living/robot/syndi, 2 MINUTES)
+
+/mob/living/silicon/robot/syndicate/atom_init()
+	. = ..()
 	updatename("Syndicate")
-	connected_ai = null
+	set_ai_link(null)
 	cell.maxcharge = 25000
 	cell.charge = 25000
 	radio = new /obj/item/device/radio/borg/syndicate(src)
 	module = new /obj/item/weapon/robot_module/syndicate(src)
 	laws = new /datum/ai_laws/syndicate_override()
+	if(!sword_overlay)
+		sword_overlay = image(icon, "syndie_android_sword", "layer" = 4.5)
+		sword_overlay.plane = GAME_PLANE
+
+/mob/living/silicon/robot/syndicate/updateicon()
+	..()
+	if(istype(module_active, /obj/item/weapon/melee/energy/sword/cyborg))
+		var/obj/item/weapon/melee/energy/sword/cyborg/SW = module_active
+		if(SW.active)
+			add_overlay(sword_overlay)
 
 /obj/item/device/radio/borg/syndicate
 	syndie = 1
 	keyslot = new /obj/item/device/encryptionkey/syndicate
 
-/obj/item/device/radio/borg/syndicate/New()
-	..()
+/obj/item/device/radio/borg/syndicate/atom_init()
+	. = ..()
 	set_frequency(SYND_FREQ)
+	INVOKE_ASYNC(src, PROC_REF(recalculateChannels))
 
 /obj/item/weapon/melee/energy/sword/cyborg
+	blade_color = "blue"
 	var/hitcost = 500
+
+/obj/item/weapon/melee/energy/sword/cyborg/attack_self(mob/living/user)
+	..()
+	if(istype(user, /mob/living/silicon/robot/syndicate))
+		var/mob/living/silicon/robot/syndicate/S = user
+		if(active)
+			S.add_overlay(S.sword_overlay)
+		else
+			S.cut_overlay(S.sword_overlay)
 
 /obj/item/weapon/melee/energy/sword/cyborg/attack(mob/M, mob/living/silicon/robot/R)
 	if(R.cell)

@@ -1,86 +1,109 @@
-/turf/space
+/turf/environment/space
 	icon = 'icons/turf/space.dmi'
-	name = "\proper space"
+	name = "space"
 	icon_state = "0"
-	dynamic_lighting = 0
+
+	oxygen = 0
+	carbon_dioxide = 0
+	nitrogen = 0
+	phoron = 0
 
 	temperature = TCMB
 	thermal_conductivity = OPEN_HEAT_TRANSFER_COEFFICIENT
 	plane = PLANE_SPACE
-//	heat_capacity = 700000 No.
+	heat_capacity = HEAT_CAPACITY_VACUUM
 
-/turf/space/New()
-	if(!istype(src, /turf/space/transit))
-		icon_state = SPACE_ICON_STATE
-	update_starlight()
-	..()
+	flags = NOBLOODY | NOSTEPSOUND
 
-/turf/space/Destroy()
+	level_light_source = TRUE
+
+/**
+  * Space Initialize
+  *
+  * Doesn't call parent, see [/atom/proc/atom_init]
+  * With any changes here keep in mind HOW MANY space turfs we have
+  */
+/turf/environment/space/atom_init()
+	SHOULD_CALL_PARENT(FALSE)
+	if(initialized)
+		stack_trace("Warning: [src]([type]) initialized multiple times!")
+	initialized = TRUE
+	icon_state = SPACE_ICON_STATE
+
+	if(level_light_source)
+		LEVEL_LIGHTING_SOURCE(src)
+
+	if(light_power && light_range)
+		update_light()
+
+	if(opacity)
+		has_opaque_atom = TRUE
+
+	return INITIALIZE_HINT_NORMAL
+
+/turf/environment/space/Destroy()
+	SHOULD_CALL_PARENT(FALSE)
 	return QDEL_HINT_LETMELIVE
 
-/turf/space/proc/update_starlight()
-	for(var/turf/simulated/T in RANGE_TURFS(1,src)) //RANGE_TURFS is in code\__HELPERS\game.dm
-		set_light(2,2)
-		return
-	set_light(0)
+/turf/environment/space/attack_paw(mob/user)
+	return attack_hand(user)
 
-/turf/space/attack_paw(mob/user)
-	return src.attack_hand(user)
-
-/turf/space/attackby(obj/item/C, mob/user)
-
+/turf/proc/build_floor_support(obj/item/C, mob/user, volume = 50)
 	if (istype(C, /obj/item/stack/rods))
 		var/obj/item/stack/rods/R = C
 		var/obj/structure/lattice/L = locate(/obj/structure/lattice, src)
+		user.SetNextMove(CLICK_CD_RAPID)
 		if(L)
-			if(R.amount < 2)
-				to_chat(user, "\red You don't have enough rods to do that.")
+			if(R.get_amount() < 2)
+				to_chat(user, "<span class='warning'>Недостаточно стержней.</span>")
 				return
-			to_chat(user, "\blue You begin to build a catwalk.")
-			if(do_after(user,30,target = src))
-				playsound(src, 'sound/weapons/Genhit.ogg', 50, 1)
-				to_chat(user, "\blue You build a catwalk!")
-				R.use(2)
+			if(user.is_busy()) return
+			to_chat(user, "<span class='notice'>Вы начинаете собирать помост.</span>")
+			if(R.use_tool(src, user, 30, amount = 2, volume = volume))
+				to_chat(user, "<span class='notice'>Вы собрали помост!</span>")
 				ChangeTurf(/turf/simulated/floor/plating/airless/catwalk)
 				qdel(L)
 				return
 
-		to_chat(user, "\blue Constructing support lattice ...")
-		playsound(src, 'sound/weapons/Genhit.ogg', 50, 1)
+		if(!R.use(1))
+			return
+		to_chat(user, "<span class='notice'>Создание поддерживающей решетки...</span>")
+		playsound(src, 'sound/weapons/Genhit.ogg', VOL_EFFECTS_MASTER)
 		ReplaceWithLattice()
-		R.use(1)
-		return
 
-	if (istype(C, /obj/item/stack/tile/plasteel))
+	else if (istype(C, /obj/item/stack/tile/plasteel))
 		var/obj/structure/lattice/L = locate(/obj/structure/lattice, src)
 		if(L)
 			var/obj/item/stack/tile/plasteel/S = C
+			if(!S.use(1))
+				return
 			qdel(L)
-			playsound(src, 'sound/weapons/Genhit.ogg', 50, 1)
+			user.SetNextMove(CLICK_CD_RAPID)
+			playsound(src, 'sound/weapons/Genhit.ogg', VOL_EFFECTS_MASTER)
 			S.build(src)
-			S.use(1)
 			return
 		else
-			to_chat(user, "\red The plating is going to need some support.")
-	return
+			to_chat(user, "<span class='warning'>Для покрытия нужна опора.</span>")
 
+/turf/environment/space/attackby(obj/item/C, mob/user)
+	build_floor_support(C, user)
 
 // Ported from unstable r355
 
-/turf/space/Entered(atom/movable/A as mob|obj)
+/turf/environment/space/Entered(atom/movable/A as mob|obj)
 	if(movement_disabled)
-		to_chat(usr, "\red Movement is admin-disabled.")//This is to identify lag problems
+		to_chat(usr, "<span class='warning'>Передвижение отключено администрацией.</span>")//This is to identify lag problems
 		return
 	..()
 	if ((!(A) || src != A.loc))	return
 
-	if(ticker && ticker.mode)
+	if(SSticker && SSticker.mode)
 
 		// Okay, so let's make it so that people can travel z levels but not nuke disks!
-		// if(ticker.mode.name == "nuclear emergency")	return
-		if(A.z > ZLEVEL_EMPTY) return
+		if(!SSmapping.has_level(A.z))
+			return
 		if (A.x <= TRANSITIONEDGE || A.x >= (world.maxx - TRANSITIONEDGE - 1) || A.y <= TRANSITIONEDGE || A.y >= (world.maxy - TRANSITIONEDGE - 1))
-			if(istype(A, /obj/effect/meteor)||istype(A, /obj/effect/space_dust))
+			if(istype(A, /obj/effect/meteor))
 				qdel(A)
 				return
 
@@ -90,10 +113,10 @@
 
 			var/list/disk_search = A.search_contents_for(/obj/item/weapon/disk/nuclear)
 			if(!isemptylist(disk_search))
-				if(istype(A, /mob/living))
+				if(isliving(A))
 					var/mob/living/MM = A
-					if(MM.client && !MM.stat)
-						to_chat(MM, "\red Something you are carrying is preventing you from leaving. Don't play stupid; you know exactly what it is.")
+					if(MM.client && MM.stat == CONSCIOUS)
+						to_chat(MM, "<span class='warning'>Вы имеете что-то, что мешает улететь. Не прикидывайтесь: вы знаете, что это.</span>")
 						if(MM.x <= TRANSITIONEDGE)
 							MM.inertia_dir = 4
 						else if(MM.x >= world.maxx -TRANSITIONEDGE)
@@ -110,15 +133,11 @@
 						qdel(N)//Make the disk respawn if it is floating on its own
 				return
 
-			var/move_to_z = src.z
-			var/safety = 1
+			var/datum/space_level/L = SSmapping.get_level(z)
+			if(!L)
+				return
 
-			while(move_to_z == src.z)
-				var/move_to_z_str = pickweight(accessable_z_levels)
-				move_to_z = text2num(move_to_z_str)
-				safety++
-				if(safety > 10)
-					break
+			var/move_to_z = L.get_next_z()
 
 			if(!move_to_z)
 				return
@@ -141,11 +160,16 @@
 				A.y = TRANSITIONEDGE + 1
 				A.x = rand(TRANSITIONEDGE + 2, world.maxx - TRANSITIONEDGE - 2)
 
+			if(ismob(A))
+				var/mob/M = A
+				if(M.pulling)
+					M.pulling.forceMove(get_turf(M), TRUE)
 
-			sleep(0)//Let a diagonal move finish, if necessary
+
+			stoplag()//Let a diagonal move finish, if necessary
 			A.newtonian_move(A.inertia_dir)
 
-/turf/space/proc/Sandbox_Spacemove(atom/movable/A)
+/turf/environment/space/proc/Sandbox_Spacemove(atom/movable/A)
 	var/cur_x
 	var/cur_y
 	var/next_x
@@ -154,11 +178,11 @@
 	var/list/y_arr
 
 	if(src.x <= 1)
-		if(istype(A, /obj/effect/meteor)||istype(A, /obj/effect/space_dust))
+		if(istype(A, /obj/effect/meteor))
 			qdel(A)
 			return
 
-		var/list/cur_pos = src.get_global_map_pos()
+		var/list/cur_pos = get_global_map_pos()
 		if(!cur_pos) return
 		cur_x = cur_pos["x"]
 		cur_y = cur_pos["y"]
@@ -183,7 +207,7 @@
 			qdel(A)
 			return
 
-		var/list/cur_pos = src.get_global_map_pos()
+		var/list/cur_pos = get_global_map_pos()
 		if(!cur_pos) return
 		cur_x = cur_pos["x"]
 		cur_y = cur_pos["y"]
@@ -207,7 +231,7 @@
 		if(istype(A, /obj/effect/meteor))
 			qdel(A)
 			return
-		var/list/cur_pos = src.get_global_map_pos()
+		var/list/cur_pos = get_global_map_pos()
 		if(!cur_pos) return
 		cur_x = cur_pos["x"]
 		cur_y = cur_pos["y"]
@@ -229,10 +253,10 @@
 					A.loc.Entered(A)
 
 	else if (src.y >= world.maxy)
-		if(istype(A, /obj/effect/meteor)||istype(A, /obj/effect/space_dust))
+		if(istype(A, /obj/effect/meteor))
 			qdel(A)
 			return
-		var/list/cur_pos = src.get_global_map_pos()
+		var/list/cur_pos = get_global_map_pos()
 		if(!cur_pos) return
 		cur_x = cur_pos["x"]
 		cur_y = cur_pos["y"]
@@ -254,8 +278,5 @@
 					A.loc.Entered(A)
 	return
 
-/turf/space/ChangeTurf(turf/N, force_lighting_update = 0)
-	return ..(N, 1)
-
-/turf/space/singularity_act()
+/turf/environment/space/singularity_act()
 	return

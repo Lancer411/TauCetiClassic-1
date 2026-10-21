@@ -22,6 +22,11 @@
 
 	assembly_type = /obj/structure/door_assembly/door_assembly_med
 
+/obj/machinery/door/airlock/virology
+	icon = 'icons/obj/doors/airlocks/station/virology.dmi'
+
+	assembly_type = /obj/structure/door_assembly/door_assembly_viro
+
 /obj/machinery/door/airlock/maintenance
 	name = "maintenance access"
 	icon = 'icons/obj/doors/airlocks/station/maintenance.dmi'
@@ -82,6 +87,10 @@
 	opacity = FALSE
 	glass   = TRUE
 
+/obj/machinery/door/airlock/virology/glass
+	opacity = FALSE
+	glass   = TRUE
+
 /obj/machinery/door/airlock/research/glass
 	opacity = FALSE
 	glass   = TRUE
@@ -136,8 +145,7 @@
 	..()
 
 /obj/machinery/door/airlock/uranium/proc/radiate()
-	for(var/mob/living/L in range (3,src))
-		L.apply_effect(15, IRRADIATE, 0)
+	irradiate_in_dist(get_turf(src), 15, 3)
 
 /obj/machinery/door/airlock/phoron
 	name = "phoron airlock"
@@ -155,17 +163,12 @@
 
 /obj/machinery/door/airlock/phoron/proc/PhoronBurn(temperature)
 	for(var/turf/simulated/floor/target_tile in range(2, loc))
-		var/datum/gas_mixture/napalm = new
-		var/phoronToDeduce = 35
-		napalm.phoron = phoronToDeduce
-		napalm.temperature = 400 + T0C
-		target_tile.assume_air(napalm)
-		spawn(0)
-			target_tile.hotspot_expose(temperature, 400)
+		target_tile.assume_gas("phoron", 35, 400 + T0C)
+		INVOKE_ASYNC(target_tile, TYPE_PROC_REF(/turf/simulated/floor, hotspot_expose), temperature, 400)
 
 	for(var/obj/structure/falsewall/phoron/F in range(3, src))//Hackish as fuck, but until temperature_expose works, there is nothing I can do -Sieve
 		var/turf/T = get_turf(F)
-		T.ChangeTurf(/turf/simulated/wall/mineral/phoron/)
+		T.ChangeTurf(/turf/simulated/wall/mineral/phoron)
 		qdel(F)
 
 	for(var/turf/simulated/wall/mineral/phoron/W in range(3, src))
@@ -265,6 +268,8 @@
 
 	assembly_type = /obj/structure/door_assembly/door_assembly_vault
 
+	max_integrity = 600
+
 
 /***************
 * Hatch airlocks
@@ -315,6 +320,28 @@
 
 	assembly_type = /obj/structure/door_assembly/door_assembly_neutral
 
+/obj/machinery/door/airlock/erokez/med
+	icon          = 'icons/obj/doors/airlocks/shuttle/med.dmi'
+	overlays_file = 'icons/obj/doors/airlocks/shuttle/overlays.dmi'
+
+	assembly_type = /obj/structure/door_assembly/door_assembly_neutral
+	opacity       = FALSE
+	glass         = TRUE
+
+/obj/machinery/door/airlock/erokez/sec
+	icon          = 'icons/obj/doors/airlocks/shuttle/sec.dmi'
+	overlays_file = 'icons/obj/doors/airlocks/shuttle/overlays.dmi'
+
+	assembly_type = /obj/structure/door_assembly/door_assembly_neutral
+	opacity       = FALSE
+	glass         = TRUE
+
+/obj/machinery/door/airlock/erokez/eng
+	icon          = 'icons/obj/doors/airlocks/shuttle/eng.dmi'
+	overlays_file = 'icons/obj/doors/airlocks/shuttle/overlays.dmi'
+
+	assembly_type = /obj/structure/door_assembly/door_assembly_neutral
+
 
 /*****************
 * Centcom airlocks
@@ -322,7 +349,9 @@
 
 /obj/machinery/door/airlock/centcom
 	icon          = 'icons/obj/doors/airlocks/centcom/centcom.dmi'
-	overlays_file = 'icons/obj/doors/airlocks/centcom/overlays.dmi'
+	overlays_file = 'icons/obj/doors/airlocks/highsec/overlays.dmi'
+
+	resistance_flags = FULL_INDESTRUCTIBLE
 
 
 /******************
@@ -332,8 +361,8 @@
 /obj/machinery/door/airlock/multi_tile
 	var/width = 2
 
-/obj/machinery/door/airlock/multi_tile/New()
-	..()
+/obj/machinery/door/airlock/multi_tile/atom_init()
+	. = ..()
 	if(dir in list(EAST, WEST))
 		bound_width  = world.icon_size
 		bound_height = width * world.icon_size
@@ -341,8 +370,12 @@
 		bound_width  = width * world.icon_size
 		bound_height = world.icon_size
 
-/obj/machinery/door/airlock/multi_tile/Move()
+/obj/machinery/door/airlock/multi_tile/Move(NewLoc, Dir = 0, step_x = 0, step_y = 0)
 	. = ..()
+
+	if(moving_diagonally)
+		return .
+
 	if(dir in list(EAST, WEST))
 		bound_width  = world.icon_size
 		bound_height = width * world.icon_size
@@ -363,7 +396,7 @@
 	if(istype(C, /obj/item/weapon/airlock_painter))
 		to_chat(user, "<span class='red'>This airlock cannot be painted.</span>")
 	else
-		..()
+		return ..()
 
 
 /*******************

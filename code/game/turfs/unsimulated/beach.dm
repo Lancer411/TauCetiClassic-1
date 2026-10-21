@@ -14,7 +14,8 @@
 /turf/unsimulated/beach/water
 	name = "Water"
 	icon_state = "water"
+	static_fluid_depth = 800
 
-/turf/unsimulated/beach/water/New()
-	..()
-	overlays += image("icon"='icons/misc/beach.dmi',"icon_state"="water2","layer"=MOB_LAYER+0.1)
+/turf/unsimulated/beach/water/atom_init()
+	. = ..()
+	add_overlay(image("icon"='icons/misc/beach.dmi',"icon_state"="water2","layer"=MOB_LAYER+0.1))

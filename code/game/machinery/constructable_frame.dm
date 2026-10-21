@@ -1,12 +1,10 @@
-//This file was auto-corrected by findeclaration.exe on 25.5.2012 20:42:31
-
 /obj/machinery/constructable_frame //Made into a seperate type to make future revisions easier.
 	name = "machine frame"
 	icon = 'icons/obj/stock_parts.dmi'
 	icon_state = "box_0"
-	density = 1
-	anchored = 1
-	use_power = 0
+	density = TRUE
+	anchored = TRUE
+	use_power = NO_POWER_USE
 	var/obj/item/weapon/circuitboard/circuit = null
 	var/list/components = null
 	var/list/req_components = null
@@ -53,6 +51,20 @@
 	else
 		desc += "."
 
+/obj/machinery/constructable_frame/deconstruct(disassembled)
+	if(flags & NODECONSTRUCT)
+		return ..()
+	new /obj/item/stack/sheet/metal(loc, 5)
+	if(circuit)
+		circuit.forceMove(loc)
+		circuit = null
+	if(state >= 2)
+		new /obj/item/stack/cable_coil(loc , 5)
+	for(var/obj/item/I in components)
+		I.forceMove(loc)
+	LAZYCLEARLIST(components)
+	..()
+
 /obj/machinery/constructable_frame/machine_frame/attackby(obj/item/P, mob/user)
 	if(P.crit_fail)
 		to_chat(user, "<span class='danger'>This part is faulty, you cannot add this to the machine!</span>")
@@ -62,43 +74,48 @@
 			if(istype(P, /obj/item/weapon/circuitboard))
 				to_chat(user, "<span class='warning'>The frame needs wiring first!</span>")
 				return
-			if(istype(P, /obj/item/weapon/cable_coil))
-				var/obj/item/weapon/cable_coil/C = P
-				if(C.amount >= 5)
-					playsound(src.loc, 'sound/items/Deconstruct.ogg', 50, 1)
-					to_chat(user, "<span class='notice'>You start to add cables to the frame.</span>")
-					if(do_after(user, 20/P.toolspeed, target = src))
-						if(C && state == 1)
-							C.amount -= 5
-							if(!C.amount) qdel(C)
-							to_chat(user, "<span class='notice'>You add cables to the frame.</span>")
-							state = 2
-							icon_state = "box_1"
-				else
+
+			else if(iscoil(P))
+				var/obj/item/stack/cable_coil/C = P
+				if(C.get_amount() < 5)
 					to_chat(user, "<span class='warning'>You need five length of cable to wire the frame!</span>")
 					return
-			if(istype(P, /obj/item/weapon/screwdriver) && !anchored)
-				playsound(src.loc, 'sound/items/Screwdriver.ogg', 50, 1)
+				if(user.is_busy(src))
+					return
+				to_chat(user, "<span class='notice'>You start to add cables to the frame.</span>")
+				if(P.use_tool(src, user, SKILL_TASK_EASY, target = src, volume = 50, required_skills_override = list(/datum/skill/construction = SKILL_LEVEL_PRO)))
+					if(state == 1)
+						if(!C.use(5))
+							return
+
+						to_chat(user, "<span class='notice'>You add cables to the frame.</span>")
+						state = 2
+						icon_state = "box_1"
+
+			else if(isscrewing(P) && !anchored)
+				if(user.is_busy(src))
+					return
 				user.visible_message("<span class='warning'>[user] disassembles the frame.</span>", \
 									"<span class='notice'>You start to disassemble the frame...</span>", "You hear banging and clanking.")
-				if(do_after(user, 40/P.toolspeed, target = src))
+				if(P.use_tool(src, user, SKILL_TASK_AVERAGE, volume = 50, quality = QUALITY_SCREWING))
 					if(state == 1)
 						to_chat(user, "<span class='notice'>You disassemble the frame.</span>")
-						var/obj/item/stack/sheet/metal/M = new (loc, 5)
-						M.add_fingerprint(user)
-						qdel(src)
-			if(istype(P, /obj/item/weapon/wrench))
+						deconstruct(TRUE)
+
+			else if(iswrenching(P))
+				if(user.is_busy())
+					return
 				to_chat(user, "<span class='notice'>You start [anchored ? "un" : ""]securing [name]...</span>")
-				playsound(src.loc, 'sound/items/Ratchet.ogg', 75, 1)
-				if(do_after(user, 40/P.toolspeed, target = src))
+				if(P.use_tool(src, user, SKILL_TASK_AVERAGE, volume = 75, quality = QUALITY_WRENCHING))
 					if(state == 1)
 						to_chat(user, "<span class='notice'>You [anchored ? "un" : ""]secure [name].</span>")
 						anchored = !anchored
 		if(2)
-			if(istype(P, /obj/item/weapon/wrench))
+			if(iswrenching(P))
+				if(user.is_busy())
+					return
 				to_chat(user, "<span class='notice'>You start [anchored ? "un" : ""]securing [name]...</span>")
-				playsound(src.loc, 'sound/items/Ratchet.ogg', 75, 1)
-				if(do_after(user, 40/P.toolspeed, target = src))
+				if(P.use_tool(src, user, SKILL_TASK_AVERAGE, volume = 75, quality = QUALITY_WRENCHING))
 					to_chat(user, "<span class='notice'>You [anchored ? "un" : ""]secure [name].</span>")
 					anchored = !anchored
 
@@ -108,12 +125,11 @@
 					return
 				var/obj/item/weapon/circuitboard/B = P
 				if(B.board_type == "machine")
-					if(!user.drop_item())
+					if(!user.drop_from_inventory(P, src))
 						return
-					playsound(src.loc, 'sound/items/Deconstruct.ogg', 50, 1)
+					playsound(src, 'sound/items/Deconstruct.ogg', VOL_EFFECTS_MASTER)
 					to_chat(user, "<span class='notice'>You add the circuit board to the frame.</span>")
 					circuit = P
-					P.loc = src
 					icon_state = "box_2"
 					state = 3
 					components = list()
@@ -122,17 +138,16 @@
 					update_req_desc()
 				else
 					to_chat(user, "<span class='warning'>This frame does not accept circuit boards of this type!</span>")
-			if(istype(P, /obj/item/weapon/wirecutters))
-				playsound(src.loc, 'sound/items/Wirecutter.ogg', 50, 1)
+			if(iscutter(P))
+				playsound(src, 'sound/items/Wirecutter.ogg', VOL_EFFECTS_MASTER)
 				to_chat(user, "<span class='notice'>You remove the cables.</span>")
 				state = 1
 				icon_state = "box_0"
-				var/obj/item/weapon/cable_coil/A = new /obj/item/weapon/cable_coil( src.loc )
-				A.amount = 5
+				new /obj/item/stack/cable_coil/red(loc, 5)
 
 		if(3)
-			if(istype(P, /obj/item/weapon/crowbar))
-				playsound(src.loc, 'sound/items/Crowbar.ogg', 50, 1)
+			if(isprying(P))
+				playsound(src, 'sound/items/Crowbar.ogg', VOL_EFFECTS_MASTER)
 				state = 2
 				circuit.loc = src.loc
 				components.Remove(circuit)
@@ -148,15 +163,18 @@
 				components = null
 				icon_state = "box_1"
 
-			if(istype(P, /obj/item/weapon/screwdriver))
+			if(isscrewing(P))
 				var/component_check = 1
 				for(var/R in req_components)
 					if(req_components[R] > 0)
 						component_check = 0
 						break
 				if(component_check)
-					playsound(src.loc, 'sound/items/Screwdriver.ogg', 50, 1)
-					var/obj/machinery/new_machine = new src.circuit.build_path(src.loc)
+					if(!handle_fumbling(user, src, SKILL_TASK_AVERAGE, list(/datum/skill/construction = SKILL_LEVEL_PRO), "<span class='notice'>You fumble around, figuring out how to construct machine.</span>"))
+						return
+					playsound(src, 'sound/items/Screwdriver.ogg', VOL_EFFECTS_MASTER)
+					var/obj/machinery/new_machine = new circuit.build_path(src.loc)
+					transfer_fingerprints_to(new_machine)
 					new_machine.construction()
 					for(var/obj/O in new_machine.component_parts)
 						qdel(O)
@@ -175,18 +193,18 @@
 
 				//Assemble a list of current parts, then sort them by their rating!
 				for(var/obj/item/weapon/stock_parts/co in replacer)
-					part_list += co
+					if(!co.crit_fail)
+						part_list += co
 				//Sort the parts. This ensures that higher tier items are applied first.
-				part_list = sortTim(part_list, /proc/cmp_rped_sort)
+				part_list = sortTim(part_list, GLOBAL_PROC_REF(cmp_rped_sort))
 
 				for(var/path in req_components)
 					while(req_components[path] > 0 && (locate(path) in part_list))
 						var/obj/item/part = (locate(path) in part_list)
-						if(!part.crit_fail)
-							added_components[part] = path
-							replacer.remove_from_storage(part, src)
-							req_components[path]--
-							part_list -= part
+						added_components[part] = path
+						replacer.remove_from_storage(part, src)
+						req_components[path]--
+						part_list -= part
 
 				for(var/obj/item/weapon/stock_parts/part in added_components)
 					components += part
@@ -196,23 +214,21 @@
 				update_req_desc()
 				return
 
-			if(istype(P, /obj/item) && get_req_components_amt())
+			if(isitem(P) && get_req_components_amt())
 				for(var/I in req_components)
 					if(istype(P, I) && (req_components[I] > 0))
-						if(istype(P, /obj/item/weapon/cable_coil))
-							var/obj/item/weapon/cable_coil/CP = P
-							var/cable_color = CP.item_color
+						if(iscoil(P))
+							var/obj/item/stack/cable_coil/CP = P
 							if(CP.use(1))
-								var/obj/item/weapon/cable_coil/CC = new /obj/item/weapon/cable_coil(src, 1, cable_color)
+								var/obj/item/stack/cable_coil/CC = new(src, 1, CP.color)
 								components += CC
 								req_components[I]--
 								update_req_desc()
 							else
 								to_chat(user, "<span class='warning'>You need more cable!</span>")
 							return
-						if(!user.drop_item())
+						if(!user.drop_from_inventory(P, src))
 							break
-						P.loc = src
 						components += P
 						req_components[I]--
 						update_req_desc()
@@ -236,32 +252,52 @@ to destroy them and players will be able to make replacements.
 	req_components = list(
 							/obj/item/weapon/vending_refill/boozeomat = 3)
 
-/obj/item/weapon/circuitboard/vendor/attackby(obj/item/I, mob/user)
-	if(istype(I, /obj/item/weapon/screwdriver))
-		var/list/names = list(/obj/machinery/vending/boozeomat = "Booze-O-Mat",
-							/obj/machinery/vending/coffee = "Getmore Chocolate Corp",
-							/obj/machinery/vending/snack = "Hot Drinks",
-							/obj/machinery/vending/cola = "Robust Softdrinks",
-							/obj/machinery/vending/cigarette = "Cigarette")
-//							/obj/machinery/vending/autodrobe = "AutoDrobe")
+/obj/item/weapon/circuitboard/vendor/attackby(obj/item/I, mob/user, params)
+	if(isscrewing(I))
+		var/static/list/names_of_vendings = list()
+		var/static/list/radial_icons = list()
 
-		build_path = pick(names)
-		name = "circuit board ([names[build_path]] Vendor)"
-		to_chat(user, "<span class='notice'>You set the board to [names[build_path]].</span>")
-		req_components = list(text2path("/obj/item/weapon/vending_refill/[copytext("[build_path]", 24)]") = 3)       //Never before has i used a method as horrible as this one, im so sorry
+		if(names_of_vendings.len == 0)
+			for(var/obj/machinery/vending/type as anything in typesof(/obj/machinery/vending))
+				if(!initial(type.refill_canister))
+					continue
+				var/full_name
+				if(initial(type.subname))
+					full_name = "[initial(type.name)] ([initial(type.subname)])"
+				else
+					full_name = initial(type.name)
+
+				ASSERT(!names_of_vendings[full_name])
+
+				names_of_vendings[full_name] = type
+				radial_icons[full_name] = icon(initial(type.icon), initial(type.icon_state))
+
+		var/vending_name = show_radial_menu(user, src, radial_icons, require_near = TRUE, tooltips = TRUE)
+		if(isnull(vending_name))
+			return
+
+		var/obj/machinery/vending/vending_type = names_of_vendings[vending_name]
+
+		to_chat(user, "<span class='notice'>You set the board to [vending_name].</span>")
+
+		name = "circuit board ([vending_name] Vendor)"
+		build_path = vending_type
+		req_components = list(initial(vending_type.refill_canister) = 3)
+		return
+	return ..()
 
 /obj/item/weapon/circuitboard/smes
-	name = "circuit board (SMES)"
+	details = "circuit board (SMES)"
 	build_path = /obj/machinery/power/smes
 	board_type = "machine"
 	origin_tech = "programming=4;powerstorage=5;engineering=5"
 	req_components = list(
-							/obj/item/weapon/cable_coil = 5,
+							/obj/item/stack/cable_coil = 5,
 							/obj/item/weapon/stock_parts/cell = 5,
 							/obj/item/weapon/stock_parts/capacitor = 1)
 
 /obj/item/weapon/circuitboard/emitter
-	name = "circuit board (Emitter)"
+	details = "circuit board (Emitter)"
 	build_path = /obj/machinery/power/emitter
 	board_type = "machine"
 	origin_tech = "programming=4;powerstorage=5;engineering=5"
@@ -270,34 +306,34 @@ to destroy them and players will be able to make replacements.
 							/obj/item/weapon/stock_parts/manipulator = 1)
 
 /obj/item/weapon/circuitboard/power_compressor
-	name = "circuit board (Power Compressor)"
+	details = "circuit board (Power Compressor)"
 	build_path = /obj/machinery/compressor
 	board_type = "machine"
 	origin_tech = "programming=4;powerstorage=5;engineering=4"
 	req_components = list(
-							/obj/item/weapon/cable_coil = 5,
+							/obj/item/stack/cable_coil = 5,
 							/obj/item/weapon/stock_parts/manipulator = 6)
 
 /obj/item/weapon/circuitboard/power_turbine
-	name = "circuit board (Power Turbine)"
+	details = "circuit board (Power Turbine)"
 	build_path = /obj/machinery/power/turbine
 	board_type = "machine"
 	origin_tech = "programming=4;powerstorage=4;engineering=5"
 	req_components = list(
-							/obj/item/weapon/cable_coil = 5,
+							/obj/item/stack/cable_coil = 5,
 							/obj/item/weapon/stock_parts/capacitor = 6)
 
 /obj/item/weapon/circuitboard/mech_recharger
-	name = "circuit board (Mechbay Recharger)"
+	details = "circuit board (Mechbay Recharger)"
 	build_path = /obj/machinery/mech_bay_recharge_port
 	board_type = "machine"
 	origin_tech = "programming=3;powerstorage=4;engineering=4"
 	req_components = list(
-							/obj/item/weapon/cable_coil = 1,
+							/obj/item/stack/cable_coil = 1,
 							/obj/item/weapon/stock_parts/capacitor = 5)
 
 /obj/item/weapon/circuitboard/teleporter_hub
-	name = "circuit board (Teleporter Hub)"
+	details = "circuit board (Teleporter Hub)"
 	build_path = /obj/machinery/teleport/hub
 	board_type = "machine"
 	origin_tech = "programming=3;engineering=5;bluespace=5;materials=4"
@@ -306,7 +342,7 @@ to destroy them and players will be able to make replacements.
 							/obj/item/weapon/stock_parts/matter_bin = 1)
 
 /obj/item/weapon/circuitboard/teleporter_station
-	name = "circuit board (Teleporter Station)"
+	details = "circuit board (Teleporter Station)"
 	build_path = /obj/machinery/teleport/station
 	board_type = "machine"
 	origin_tech = "programming=4;engineering=4;bluespace=4"
@@ -316,83 +352,99 @@ to destroy them and players will be able to make replacements.
 							/obj/item/weapon/stock_parts/console_screen = 1)
 
 /obj/item/weapon/circuitboard/telesci_pad
-	name = "circuit board (Telepad)"
+	details = "circuit board (Telepad)"
 	build_path = /obj/machinery/telepad
 	board_type = "machine"
 	origin_tech = "programming=4;engineering=3;materials=3;bluespace=4"
 	req_components = list(
 							/obj/item/bluespace_crystal = 2,
 							/obj/item/weapon/stock_parts/capacitor = 1,
-							/obj/item/weapon/cable_coil = 1,
+							/obj/item/stack/cable_coil = 1,
 							/obj/item/weapon/stock_parts/console_screen = 1)
 
 /obj/item/weapon/circuitboard/sleeper
-	name = "circuit board (Sleeper)"
+	details = "circuit board (Sleeper)"
 	build_path = /obj/machinery/sleeper
 	board_type = "machine"
 	origin_tech = "programming=3;biotech=2;engineering=3;materials=3"
 	req_components = list(
 							/obj/item/weapon/stock_parts/matter_bin = 1,
 							/obj/item/weapon/stock_parts/manipulator = 1,
-							/obj/item/weapon/cable_coil = 1,
+							/obj/item/stack/cable_coil = 1,
 							/obj/item/weapon/stock_parts/console_screen = 2)
-
 /obj/item/weapon/circuitboard/cryo_tube
-	name = "circuit board (Cryotube)"
-	build_path = /obj/machinery/atmospherics/unary/cryo_cell
+	details = "circuit board (Cryotube)"
+	build_path = /obj/machinery/atmospherics/components/unary/cryo_cell
 	board_type = "machine"
 	origin_tech = "programming=4;biotech=3;engineering=4"
 	req_components = list(
 							/obj/item/weapon/stock_parts/matter_bin = 1,
-							/obj/item/weapon/cable_coil = 1,
+							/obj/item/stack/cable_coil = 1,
 							/obj/item/weapon/stock_parts/console_screen = 4)
 
-/obj/item/weapon/circuitboard/thermomachine
-	name = "circuit board (Cooler)"
-	desc = "Use screwdriver to switch between heating and cooling modes."
-	build_path = /obj/machinery/atmospherics/unary/cold_sink/freezer
+/obj/item/weapon/circuitboard/heater
+	details = "circuit board (Heater)"
+	build_path = /obj/machinery/atmospherics/components/unary/thermomachine/heater
 	board_type = "machine"
-	origin_tech = "programming=3;phorontech=3"
+	origin_tech = "powerstorage=2;engineering=1)"
 	req_components = list(
-							/obj/item/weapon/stock_parts/matter_bin = 2,
-							/obj/item/weapon/stock_parts/micro_laser = 2,
-							/obj/item/weapon/cable_coil = 1,
-							/obj/item/weapon/stock_parts/console_screen = 1)
+							/obj/item/stack/cable_coil = 5,
+							/obj/item/weapon/stock_parts/matter_bin = 1,
+							/obj/item/weapon/stock_parts/capacitor = 2)
 
-/obj/item/weapon/circuitboard/thermomachine/attackby(obj/item/I, mob/user)
-	if(istype(I, /obj/item/weapon/screwdriver))
-		if(build_path == /obj/machinery/atmospherics/unary/cold_sink/freezer)
-			build_path = /obj/machinery/atmospherics/unary/heat_reservoir/heater
-			name = "circuit board (Heater)"
-			to_chat(user, "<span class='notice'>You set the board to heating.</span>")
-		else
-			build_path = /obj/machinery/atmospherics/unary/cold_sink/freezer
-			name = "circuit board (Cooler)"
-			to_chat(user, "<span class='notice'>You set the board to cooling.</span>")
+
+/obj/item/weapon/circuitboard/reagentgrinder
+	details = "circuit board (All-In-One Grinder)"
+	board_type = "machine"
+	build_path = /obj/machinery/reagentgrinder
+	origin_tech = "biotech=2;engineering=1;materials=2"
+	req_components = list(
+		/obj/item/weapon/stock_parts/manipulator = 1)
+
+/obj/item/weapon/circuitboard/cooler
+	details = "circuit board (Cooler)"
+	build_path = /obj/machinery/atmospherics/components/unary/thermomachine/freezer
+	board_type = "machine"
+	origin_tech = "magnets=2;engineering=2"
+	req_components = list(
+							/obj/item/stack/cable_coil = 2,
+							/obj/item/weapon/stock_parts/matter_bin = 1,
+							/obj/item/weapon/stock_parts/capacitor = 2,
+							/obj/item/weapon/stock_parts/manipulator = 1)
 
 /obj/item/weapon/circuitboard/space_heater
-	name = "circuit board (Space Heater)"
+	details = "circuit board (Space Heater)"
 	build_path = /obj/machinery/space_heater
 	board_type = "machine"
 	origin_tech = "programming=2;engineering=2"
 	req_components = list(
 							/obj/item/weapon/stock_parts/micro_laser = 1,
 							/obj/item/weapon/stock_parts/capacitor = 1,
-							/obj/item/weapon/cable_coil = 3)
+							/obj/item/stack/cable_coil = 3)
 
-obj/item/weapon/circuitboard/biogenerator
-	name = "circuit board (Biogenerator)"
+/obj/item/weapon/circuitboard/color_mixer
+	details = "circuit board (Color Mixer)"
+	build_path = /obj/machinery/color_mixer
+	origin_tech = "programming=2;materials=2"
+	board_type = "machine"
+	req_components = list(
+							/obj/item/weapon/stock_parts/manipulator = 2,
+							/obj/item/stack/cable_coil = 1)
+
+
+/obj/item/weapon/circuitboard/biogenerator
+	details = "circuit board (Biogenerator)"
 	build_path = /obj/machinery/biogenerator
 	board_type = "machine"
 	origin_tech = "programming=3;biotech=2;materials=3"
 	req_components = list(
 							/obj/item/weapon/stock_parts/matter_bin = 1,
 							/obj/item/weapon/stock_parts/manipulator = 1,
-							/obj/item/weapon/cable_coil = 1,
+							/obj/item/stack/cable_coil = 1,
 							/obj/item/weapon/stock_parts/console_screen = 1)
 
 /obj/item/weapon/circuitboard/hydroponics
-	name = "circuit board (Hydroponics Tray)"
+	details = "circuit board (Hydroponics Tray)"
 	build_path = /obj/machinery/hydroponics/constructable
 	board_type = "machine"
 	origin_tech = "programming=1;biotech=1"
@@ -402,62 +454,62 @@ obj/item/weapon/circuitboard/biogenerator
 							/obj/item/weapon/stock_parts/console_screen = 1)
 
 /obj/item/weapon/circuitboard/deepfryer
-	name = "circuit board (Deep Fryer)"
+	details = "circuit board (Deep Fryer)"
 	build_path = /obj/machinery/deepfryer
 	board_type = "machine"
 	origin_tech = "programming=1"
 	req_components = list(
 							/obj/item/weapon/stock_parts/micro_laser = 1,
 							/obj/item/weapon/stock_parts/matter_bin = 1,
-							/obj/item/weapon/cable_coil = 2,
+							/obj/item/stack/cable_coil = 2,
 							/obj/item/weapon/stock_parts/console_screen = 1)
 
 /obj/item/weapon/circuitboard/microwave
-	name = "circuit board (Microwave)"
+	details = "circuit board (Microwave)"
 	build_path = /obj/machinery/kitchen_machine/microwave
 	board_type = "machine"
 	origin_tech = "programming=1"
 	req_components = list(
 							/obj/item/weapon/stock_parts/micro_laser = 1,
 							/obj/item/weapon/stock_parts/matter_bin = 1,
-							/obj/item/weapon/cable_coil = 2,
+							/obj/item/stack/cable_coil = 2,
 							/obj/item/weapon/stock_parts/console_screen = 1)
 
 /obj/item/weapon/circuitboard/oven
-	name = "circuit board (Oven)"
+	details = "circuit board (Oven)"
 	build_path = /obj/machinery/kitchen_machine/oven
 	board_type = "machine"
 	origin_tech = "programming=1"
 	req_components = list(
 							/obj/item/weapon/stock_parts/micro_laser = 1,
 							/obj/item/weapon/stock_parts/matter_bin = 1,
-							/obj/item/weapon/cable_coil = 2,
+							/obj/item/stack/cable_coil = 2,
 							/obj/item/weapon/stock_parts/console_screen = 1)
 
 /obj/item/weapon/circuitboard/grill
-	name = "circuit board (Grill)"
+	details = "circuit board (Grill)"
 	build_path = /obj/machinery/kitchen_machine/grill
 	board_type = "machine"
 	origin_tech = "programming=1"
 	req_components = list(
 							/obj/item/weapon/stock_parts/micro_laser = 1,
 							/obj/item/weapon/stock_parts/matter_bin = 1,
-							/obj/item/weapon/cable_coil = 2,
+							/obj/item/stack/cable_coil = 2,
 							/obj/item/weapon/stock_parts/console_screen = 1)
 
 /obj/item/weapon/circuitboard/candymaker
-	name = "circuit board (Candy)"
+	details = "circuit board (Candy)"
 	build_path = /obj/machinery/kitchen_machine/candymaker
 	board_type = "machine"
 	origin_tech = "programming=1"
 	req_components = list(
 							/obj/item/weapon/stock_parts/micro_laser = 1,
 							/obj/item/weapon/stock_parts/matter_bin = 1,
-							/obj/item/weapon/cable_coil = 2,
+							/obj/item/stack/cable_coil = 2,
 							/obj/item/weapon/stock_parts/console_screen = 1)
 
 /obj/item/weapon/circuitboard/gibber
-	name = "circuit board (Gibber)"
+	details = "circuit board (Gibber)"
 	build_path = /obj/machinery/gibber
 	board_type = "machine"
 	origin_tech = "programming=1"
@@ -466,7 +518,7 @@ obj/item/weapon/circuitboard/biogenerator
 							/obj/item/weapon/stock_parts/manipulator = 1)
 
 /obj/item/weapon/circuitboard/processor
-	name = "circuit board (Food processor)"
+	details = "circuit board (Food processor)"
 	build_path = /obj/machinery/processor
 	board_type = "machine"
 	origin_tech = "programming=1"
@@ -475,7 +527,7 @@ obj/item/weapon/circuitboard/biogenerator
 							/obj/item/weapon/stock_parts/manipulator = 1)
 
 //obj/item/weapon/circuitboard/recycler
-//	name = "circuit board (Recycler)"
+//	details = "circuit board (Recycler)"
 //	build_path = /obj/machinery/recycler
 //	board_type = "machine"
 //	origin_tech = "programming=1"
@@ -484,7 +536,7 @@ obj/item/weapon/circuitboard/biogenerator
 //							/obj/item/weapon/stock_parts/manipulator = 1)
 
 /obj/item/weapon/circuitboard/seed_extractor
-	name = "circuit board (Seed Extractor)"
+	details = "circuit board (Seed Extractor)"
 	build_path = /obj/machinery/seed_extractor
 	board_type = "machine"
 	origin_tech = "programming=1"
@@ -493,15 +545,63 @@ obj/item/weapon/circuitboard/biogenerator
 							/obj/item/weapon/stock_parts/manipulator = 1)
 
 /obj/item/weapon/circuitboard/smartfridge
-	name = "circuit board (Smartfridge)"
+	details = "circuit board (Smartfridge)"
 	build_path = /obj/machinery/smartfridge
 	board_type = "machine"
 	origin_tech = "programming=1"
 	req_components = list(
 							/obj/item/weapon/stock_parts/matter_bin = 1)
 
+/obj/item/weapon/circuitboard/smartfridge/attackby(obj/item/I, mob/user, params)
+	if(isscrewing(I))
+		var/static/list/names_of_smartfridges
+		var/static/list/radial_icons
+
+		if (!names_of_smartfridges || !radial_icons)
+			names_of_smartfridges = list()
+			radial_icons = list()
+
+			var/available_designs = list(
+				/obj/machinery/smartfridge/seeds,
+				/obj/machinery/smartfridge/chemistry,
+				/obj/machinery/smartfridge/secure/extract,
+				/obj/machinery/smartfridge/secure/virology,
+				/obj/machinery/smartfridge/drinks,
+				/obj/machinery/smartfridge) // Food
+
+			for(var/obj/machinery/smartfridge/type as anything in available_designs)
+				var/full_name = initial(type.name)
+				names_of_smartfridges[full_name] = type
+				// Icon stuff
+				var/atom/fridge_icon = image(initial(type.icon), initial(type.icon_state))
+				fridge_icon.add_overlay(icon(initial(type.icon), initial(type.content_overlay)))
+				fridge_icon.add_overlay(icon(initial(type.icon), "smartfridge-glass"))
+				radial_icons[full_name] = fridge_icon
+
+		var/smartfridge_name = show_radial_menu(user, src, radial_icons, require_near = TRUE, tooltips = TRUE)
+		if(isnull(smartfridge_name))
+			return
+
+		var/obj/machinery/smartfridge_type = names_of_smartfridges[smartfridge_name]
+		to_chat(user, "<span class='notice'>You set the board to [smartfridge_name].</span>")
+		details = "circuit board ([smartfridge_name])"
+		build_path = smartfridge_type
+
+		return
+	return ..()
+
+/obj/item/weapon/circuitboard/smartfridge/secure/bluespace
+	details = "circuit board (Bluespace Storage)"
+	build_path = /obj/machinery/smartfridge/secure/bluespace
+	board_type = "machine"
+	origin_tech = "programming=4;engineering=4;bluespace=4"
+	req_components = list(
+							/obj/item/weapon/stock_parts/matter_bin/adv/super/bluespace = 3,
+							/obj/item/weapon/stock_parts/capacitor/adv/super/quadratic = 1,
+							/obj/item/weapon/stock_parts/console_screen = 1)
+
 /obj/item/weapon/circuitboard/monkey_recycler
-	name = "circuit board (Monkey Recycler)"
+	details = "circuit board (Monkey Recycler)"
 	build_path = /obj/machinery/monkey_recycler
 	board_type = "machine"
 	origin_tech = "programming=1"
@@ -510,7 +610,7 @@ obj/item/weapon/circuitboard/biogenerator
 							/obj/item/weapon/stock_parts/manipulator = 1)
 
 /obj/item/weapon/circuitboard/holopad
-	name = "circuit board (AI Holopad)"
+	details = "circuit board (AI Holopad)"
 	build_path = /obj/machinery/hologram/holopad
 	board_type = "machine"
 	origin_tech = "programming=1"
@@ -518,7 +618,7 @@ obj/item/weapon/circuitboard/biogenerator
 							/obj/item/weapon/stock_parts/capacitor = 1)
 
 /obj/item/weapon/circuitboard/chem_dispenser
-	name = "circuit board (Portable Chem Dispenser)"
+	details = "circuit board (Portable Chem Dispenser)"
 	build_path = /obj/machinery/chem_dispenser/constructable
 	board_type = "machine"
 	origin_tech = "materials=4;engineering=4;programming=4;phorontech=3;biotech=3"
@@ -530,7 +630,7 @@ obj/item/weapon/circuitboard/biogenerator
 							/obj/item/weapon/stock_parts/cell = 1)
 
 /obj/item/weapon/circuitboard/chem_master
-	name = "circuit board (Chem Master 2999)"
+	details = "circuit board (Chem Master 2999)"
 	build_path = /obj/machinery/chem_master/constructable
 	board_type = "machine"
 	origin_tech = "materials=2;programming=2;biotech=1"
@@ -540,7 +640,7 @@ obj/item/weapon/circuitboard/biogenerator
 							/obj/item/weapon/stock_parts/console_screen = 1)
 
 /obj/item/weapon/circuitboard/destructive_analyzer
-	name = "Circuit board (Destructive Analyzer)"
+	details = "circuit board (Destructive Analyzer)"
 	build_path = /obj/machinery/r_n_d/destructive_analyzer
 	board_type = "machine"
 	origin_tech = "magnets=2;engineering=2;programming=2"
@@ -550,7 +650,7 @@ obj/item/weapon/circuitboard/biogenerator
 							/obj/item/weapon/stock_parts/micro_laser = 1)
 
 /obj/item/weapon/circuitboard/autolathe
-	name = "Circuit board (Autolathe)"
+	details = "circuit board (Autolathe)"
 	build_path = /obj/machinery/autolathe
 	board_type = "machine"
 	origin_tech = "engineering=2;programming=2"
@@ -560,7 +660,7 @@ obj/item/weapon/circuitboard/biogenerator
 							/obj/item/weapon/stock_parts/console_screen = 1)
 
 /obj/item/weapon/circuitboard/protolathe
-	name = "Circuit board (Protolathe)"
+	details = "circuit board (Protolathe)"
 	build_path = /obj/machinery/r_n_d/protolathe
 	board_type = "machine"
 	origin_tech = "engineering=2;programming=2"
@@ -571,7 +671,7 @@ obj/item/weapon/circuitboard/biogenerator
 
 
 /obj/item/weapon/circuitboard/circuit_imprinter
-	name = "Circuit board (Circuit Imprinter)"
+	details = "circuit board (Circuit Imprinter)"
 	build_path = /obj/machinery/r_n_d/circuit_imprinter
 	board_type = "machine"
 	origin_tech = "engineering=2;programming=2"
@@ -581,37 +681,48 @@ obj/item/weapon/circuitboard/biogenerator
 							/obj/item/weapon/reagent_containers/glass/beaker = 2)
 
 /obj/item/weapon/circuitboard/pacman
-	name = "Circuit Board (PACMAN-type Generator)"
+	details = "circuit board (PACMAN-type Generator)"
 	build_path = /obj/machinery/power/port_gen/pacman
 	board_type = "machine"
 	origin_tech = "programming=3:powerstorage=3;phorontech=3;engineering=3"
 	req_components = list(
 							/obj/item/weapon/stock_parts/matter_bin = 1,
 							/obj/item/weapon/stock_parts/micro_laser = 1,
-							/obj/item/weapon/cable_coil = 2,
+							/obj/item/stack/cable_coil = 2,
 							/obj/item/weapon/stock_parts/capacitor = 1)
 
 /obj/item/weapon/circuitboard/pacman/super
-	name = "Circuit Board (SUPERPACMAN-type Generator)"
+	details = "circuit board (SUPERPACMAN-type Generator)"
 	build_path = /obj/machinery/power/port_gen/pacman/super
 	origin_tech = "programming=3;powerstorage=4;engineering=4"
 
 /obj/item/weapon/circuitboard/pacman/mrs
-	name = "Circuit Board (MRSPACMAN-type Generator)"
+	details = "circuit board (MRSPACMAN-type Generator)"
 	build_path = /obj/machinery/power/port_gen/pacman/mrs
 	origin_tech = "programming=3;powerstorage=5;engineering=5"
 
+/obj/item/weapon/circuitboard/pacman/money
+	details = "circuit board (ANCAPMAN-type Generator)"
+	build_path = /obj/machinery/power/port_gen/pacman/money
+	origin_tech = "programming=3;powerstorage=5;engineering=5"
+	req_components = list(
+							/obj/item/weapon/stock_parts/matter_bin = 1,
+							/obj/item/weapon/stock_parts/micro_laser = 1,
+							/obj/item/stack/cable_coil = 2,
+							/obj/item/weapon/stock_parts/capacitor = 1,
+							/obj/item/weapon/storage/wallet = 1)
+
 /obj/item/weapon/circuitboard/rdserver
-	name = "Circuit Board (R&D Server)"
+	details = "circuit board (R&D Server)"
 	build_path = /obj/machinery/r_n_d/server
 	board_type = "machine"
 	origin_tech = "programming=3"
 	req_components = list(
-							/obj/item/weapon/cable_coil = 2,
+							/obj/item/stack/cable_coil = 2,
 							/obj/item/weapon/stock_parts/scanning_module = 1)
 
 /obj/item/weapon/circuitboard/mechfab
-	name = "Circuit board (Exosuit Fabricator)"
+	details = "circuit board (Exosuit Fabricator)"
 	build_path = /obj/machinery/mecha_part_fabricator
 	board_type = "machine"
 	origin_tech = "programming=3;engineering=3"
@@ -622,10 +733,10 @@ obj/item/weapon/circuitboard/biogenerator
 							/obj/item/weapon/stock_parts/console_screen = 1)
 
 /obj/item/weapon/circuitboard/minefab
-	name = "Circuit board (Mining Fabricator)"
+	details = "circuit board (Mining Fabricator)"
 	build_path = /obj/machinery/mecha_part_fabricator/mining_fabricator
 	board_type = "machine"
-	origin_tech = "programming=3;engineering=3"
+	origin_tech = "powerstorage=3;programming=3;engineering=4;magnets=4;materials=4"
 	req_components = list(
 							/obj/item/weapon/stock_parts/matter_bin = 2,
 							/obj/item/weapon/stock_parts/manipulator = 1,
@@ -634,18 +745,18 @@ obj/item/weapon/circuitboard/biogenerator
 
 
 /obj/item/weapon/circuitboard/clonepod
-	name = "Circuit board (Clone Pod)"
+	details = "circuit board (Clone Pod)"
 	build_path = /obj/machinery/clonepod
 	board_type = "machine"
 	origin_tech = "programming=3;biotech=3"
 	req_components = list(
-							/obj/item/weapon/cable_coil = 2,
+							/obj/item/stack/cable_coil = 2,
 							/obj/item/weapon/stock_parts/scanning_module = 2,
 							/obj/item/weapon/stock_parts/manipulator = 2,
 							/obj/item/weapon/stock_parts/console_screen = 1)
 
 /obj/item/weapon/circuitboard/clonescanner
-	name = "Circuit board (Cloning Scanner)"
+	details = "circuit board (Cloning Scanner)"
 	build_path = /obj/machinery/dna_scannernew
 	board_type = "machine"
 	origin_tech = "programming=2;biotech=2"
@@ -654,10 +765,10 @@ obj/item/weapon/circuitboard/biogenerator
 							/obj/item/weapon/stock_parts/manipulator = 1,
 							/obj/item/weapon/stock_parts/micro_laser = 1,
 							/obj/item/weapon/stock_parts/console_screen = 1,
-							/obj/item/weapon/cable_coil = 2)
+							/obj/item/stack/cable_coil = 2)
 
 /obj/item/weapon/circuitboard/cyborgrecharger
-	name = "Circuit board (Cyborg Recharger)"
+	details = "circuit board (Cyborg Recharger)"
 	build_path = /obj/machinery/recharge_station
 	board_type = "machine"
 	origin_tech = "powerstorage=3;engineering=3"
@@ -667,16 +778,23 @@ obj/item/weapon/circuitboard/biogenerator
 							/obj/item/weapon/stock_parts/manipulator = 1)
 
 /obj/item/weapon/circuitboard/recharger
-	name = "circuit board (Weapon Recharger)"
+	details = "circuit board (Weapon Recharger)"
 	build_path = /obj/machinery/recharger
 	board_type = "machine"
 	origin_tech = "powerstorage=3;engineering=3;materials=4"
 	req_components = list(
 							/obj/item/weapon/stock_parts/capacitor = 1,)
+/obj/item/weapon/circuitboard/cell_recharger
+	details = "circuit board (Cell Recharger)"
+	build_path = /obj/machinery/cell_charger
+	board_type = "machine"
+	origin_tech = "powerstorage=1;engineering=2;materials=1"
+	req_components = list(
+							/obj/item/weapon/stock_parts/capacitor = 1,)
 
 // Telecomms circuit boards:
 /obj/item/weapon/circuitboard/telecomms/receiver
-	name = "Circuit Board (Subspace Receiver)"
+	details = "circuit board (Subspace Receiver)"
 	build_path = /obj/machinery/telecomms/receiver
 	board_type = "machine"
 	origin_tech = "programming=4;engineering=3;bluespace=2"
@@ -687,37 +805,37 @@ obj/item/weapon/circuitboard/biogenerator
 							/obj/item/weapon/stock_parts/micro_laser = 1)
 
 /obj/item/weapon/circuitboard/telecomms/hub
-	name = "Circuit Board (Hub Mainframe)"
+	details = "circuit board (Hub Mainframe)"
 	build_path = /obj/machinery/telecomms/hub
 	board_type = "machine"
 	origin_tech = "programming=4;engineering=4"
 	req_components = list(
 							/obj/item/weapon/stock_parts/manipulator = 2,
-							/obj/item/weapon/cable_coil = 2,
+							/obj/item/stack/cable_coil = 2,
 							/obj/item/weapon/stock_parts/subspace/filter = 2)
 
 /obj/item/weapon/circuitboard/telecomms/relay
-	name = "Circuit Board (Relay Mainframe)"
+	details = "circuit board (Relay Mainframe)"
 	build_path = /obj/machinery/telecomms/relay
 	board_type = "machine"
 	origin_tech = "programming=3;engineering=4;bluespace=3"
 	req_components = list(
 							/obj/item/weapon/stock_parts/manipulator = 2,
-							/obj/item/weapon/cable_coil = 2,
+							/obj/item/stack/cable_coil = 2,
 							/obj/item/weapon/stock_parts/subspace/filter = 2)
 
 /obj/item/weapon/circuitboard/telecomms/bus
-	name = "Circuit Board (Bus Mainframe)"
+	details = "circuit board (Bus Mainframe)"
 	build_path = /obj/machinery/telecomms/bus
 	board_type = "machine"
 	origin_tech = "programming=4;engineering=4"
 	req_components = list(
 							/obj/item/weapon/stock_parts/manipulator = 2,
-							/obj/item/weapon/cable_coil = 1,
+							/obj/item/stack/cable_coil = 1,
 							/obj/item/weapon/stock_parts/subspace/filter = 1)
 
 /obj/item/weapon/circuitboard/tesla_coil
-	name = "circuit board (Tesla Coil)"
+	details = "circuit board (Tesla Coil)"
 	build_path = /obj/machinery/power/tesla_coil
 	board_type = "machine"
 	origin_tech = "programming=1"
@@ -725,7 +843,7 @@ obj/item/weapon/circuitboard/biogenerator
 							/obj/item/weapon/stock_parts/capacitor = 1)
 
 /obj/item/weapon/circuitboard/grounding_rod
-	name = "circuit board (Grounding Rod)"
+	details = "circuit board (Grounding Rod)"
 	build_path = /obj/machinery/power/grounding_rod
 	board_type = "machine"
 	origin_tech = "programming=1"
@@ -733,7 +851,7 @@ obj/item/weapon/circuitboard/biogenerator
 							/obj/item/weapon/stock_parts/capacitor = 1)
 
 /obj/item/weapon/circuitboard/telecomms/processor
-	name = "Circuit Board (Processor Unit)"
+	details = "circuit board (Processor Unit)"
 	build_path = /obj/machinery/telecomms/processor
 	board_type = "machine"
 	origin_tech = "programming=4;engineering=4"
@@ -742,33 +860,33 @@ obj/item/weapon/circuitboard/biogenerator
 							/obj/item/weapon/stock_parts/subspace/filter = 1,
 							/obj/item/weapon/stock_parts/subspace/treatment = 2,
 							/obj/item/weapon/stock_parts/subspace/analyzer = 1,
-							/obj/item/weapon/cable_coil = 2,
+							/obj/item/stack/cable_coil = 2,
 							/obj/item/weapon/stock_parts/subspace/amplifier = 1)
 
 /obj/item/weapon/circuitboard/telecomms/server
-	name = "Circuit Board (Telecommunication Server)"
+	details = "circuit board (Telecommunication Server)"
 	build_path = /obj/machinery/telecomms/server
 	board_type = "machine"
 	origin_tech = "programming=4;engineering=4"
 	req_components = list(
 							/obj/item/weapon/stock_parts/manipulator = 2,
-							/obj/item/weapon/cable_coil = 1,
+							/obj/item/stack/cable_coil = 1,
 							/obj/item/weapon/stock_parts/subspace/filter = 1)
 
 /obj/item/weapon/circuitboard/telecomms/broadcaster
-	name = "Circuit Board (Subspace Broadcaster)"
+	details = "circuit board (Subspace Broadcaster)"
 	build_path = /obj/machinery/telecomms/broadcaster
 	board_type = "machine"
 	origin_tech = "programming=4;engineering=4;bluespace=2"
 	req_components = list(
 							/obj/item/weapon/stock_parts/manipulator = 2,
-							/obj/item/weapon/cable_coil = 1,
+							/obj/item/stack/cable_coil = 1,
 							/obj/item/weapon/stock_parts/subspace/filter = 1,
 							/obj/item/weapon/stock_parts/subspace/crystal = 1,
 							/obj/item/weapon/stock_parts/micro_laser/high = 2)
 
 /obj/item/weapon/circuitboard/ore_redemption
-	name = "circuit board (Ore Redemption)"
+	details = "circuit board (Ore Redemption)"
 	build_path = /obj/machinery/mineral/ore_redemption
 	board_type = "machine"
 	origin_tech = "programming=1;engineering=2"
@@ -780,10 +898,123 @@ obj/item/weapon/circuitboard/biogenerator
 							/obj/item/device/assembly/igniter = 1)
 
 /obj/item/weapon/circuitboard/mining_equipment_vendor
-	name = "circuit board (Mining Equipment Vendor)"
+	details = "circuit board (Mining Equipment Vendor)"
 	build_path = /obj/machinery/mineral/equipment_vendor
 	board_type = "machine"
 	origin_tech = "programming=1;engineering=2"
 	req_components = list(
 							/obj/item/weapon/stock_parts/console_screen = 1,
 							/obj/item/weapon/stock_parts/matter_bin = 3)
+
+/obj/item/weapon/circuitboard/circulator
+	details = "circuit board (TEG circulator)"
+	build_path = /obj/machinery/atmospherics/components/binary/circulator
+	board_type = "machine"
+	origin_tech = "engineering=3"
+	req_components = list(
+							/obj/item/weapon/stock_parts/manipulator = 3,
+							/obj/item/weapon/stock_parts/matter_bin = 1,
+							/obj/item/stack/cable_coil = 5)
+
+/obj/item/weapon/circuitboard/teg
+	details = "circuit board (TEG generator)"
+	build_path = /obj/machinery/power/generator
+	board_type = "machine"
+	origin_tech = "engineering=3"
+	req_components = list(
+							/obj/item/weapon/stock_parts/console_screen = 1,
+							/obj/item/weapon/stock_parts/capacitor = 3,
+							/obj/item/stack/cable_coil = 5)
+
+/obj/item/weapon/circuitboard/operating_table
+	details = "circuit board (Operating Table)"
+	build_path = /obj/machinery/optable
+	board_type = "machine"
+	origin_tech = "engineering=3"
+	req_components = list(
+							/obj/item/weapon/stock_parts/scanning_module = 2,
+							/obj/item/weapon/stock_parts/capacitor = 1,
+							/obj/item/stack/cable_coil = 2)
+
+/obj/item/weapon/circuitboard/operating_table/abductor
+	details = "circuit board (Abductor Operating Table)"
+	build_path = /obj/machinery/optable/abductor
+	board_type = "machine"
+	origin_tech = "engineering=3"
+	req_components = list(
+							/obj/item/weapon/stock_parts/scanning_module/adv/phasic/triphasic = 2,
+							/obj/item/weapon/stock_parts/capacitor/adv/super/quadratic = 1,
+							/obj/item/stack/cable_coil = 2)
+
+/obj/item/weapon/circuitboard/microscope
+	name = "circuit board (Microscope)"
+	build_path = /obj/machinery/microscope
+	board_type = "machine"
+	origin_tech = "programming=2;biotech=2"
+	req_components = list(
+		/obj/item/weapon/stock_parts/micro_laser = 1,
+		/obj/item/weapon/stock_parts/manipulator = 1)
+
+/obj/item/weapon/circuitboard/suit_storage
+	name = "circut board (Suit Storage Unit)"
+	build_path = /obj/machinery/suit_storage_unit
+	board_type = "machine"
+	var/emagged = FALSE
+	origin_tech = "programming = 3; engineering = 3"
+	req_components = list(
+		/obj/item/weapon/stock_parts/manipulator = 4,
+		/obj/item/weapon/stock_parts/matter_bin = 2,
+		/obj/item/stack/cable_coil = 3,
+		/obj/item/weapon/stock_parts/console_screen = 1
+	)
+	var/list/names_of_suit_storage = list()
+	var/list/radial_icons = list()
+
+/obj/item/weapon/circuitboard/suit_storage/atom_init()
+	update_build_types()
+	return ..()
+
+/obj/item/weapon/circuitboard/suit_storage/proc/update_build_types()
+	names_of_suit_storage = list()
+	radial_icons = list()					// Force clear list befor add some
+	for(var/obj/machinery/suit_storage_unit/typepath as anything in typesof(/obj/machinery/suit_storage_unit))
+		switch(typepath::build_type)
+			if(SUIT_STORAGE_BUILD_NONE)
+				continue
+			if(SUIT_STORAGE_BUILD_DEFAULT)
+				if(emagged)
+					continue
+			if(SUIT_STORAGE_BUILD_SYNDIE)
+				if(!emagged)
+					continue
+
+		ASSERT(!names_of_suit_storage[typepath::name])
+		names_of_suit_storage[typepath::name] = typepath
+		radial_icons[typepath::name] = icon(typepath::icon, typepath::icon_state)
+
+/obj/item/weapon/circuitboard/suit_storage/proc/update_circut(obj/machinery/suit_storage_unit/typepath)
+	name = "circuit board ([typepath::name])"
+	build_path = typepath::type
+
+/obj/item/weapon/circuitboard/suit_storage/emag_act(mob/user)
+	if(emagged)
+		to_chat(user, "Circuit lock is already removed.")
+		return FALSE
+	to_chat(user, "<span class='notice'>You override the circuit lock and open controls.</span>")
+	emagged = TRUE
+	update_build_types()
+	return TRUE
+
+/obj/item/weapon/circuitboard/suit_storage/attackby(obj/item/I, mob/user, params)
+	if(isscrewing(I))
+		var/suit_storage_name = show_radial_menu(user, src, radial_icons, require_near = TRUE, tooltips = TRUE)
+		if(isnull(suit_storage_name))
+			return
+
+		var/obj/machinery/suit_storage_unit/suit_storage_type = names_of_suit_storage[suit_storage_name]
+
+		to_chat(user, "<span class='notice'>You set the board to [suit_storage_name].</span>")
+
+		update_circut(suit_storage_type)
+		return
+	return ..()

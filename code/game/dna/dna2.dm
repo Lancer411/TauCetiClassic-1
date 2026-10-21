@@ -4,42 +4,6 @@
 * @author N3X15 <nexisentertainment@gmail.com>
 */
 
-// What each index means:
-#define DNA_OFF_LOWERBOUND 0
-#define DNA_OFF_UPPERBOUND 1
-#define DNA_ON_LOWERBOUND  2
-#define DNA_ON_UPPERBOUND  3
-
-// Define block bounds (off-low,off-high,on-low,on-high)
-// Used in setupgame.dm
-#define DNA_DEFAULT_BOUNDS list(1,2049,2050,4095) //2050 = 8 0 2 #Z2(Added some comments)
-#define DNA_HARDER_BOUNDS  list(1,3049,3050,4095) //3050 = B E A
-#define DNA_HARD_BOUNDS    list(1,3490,3500,4095) //3500 = D A C ##Z2
-
-// UI Indices (can change to mutblock style, if desired)
-#define DNA_UI_HAIR_R      1
-#define DNA_UI_HAIR_G      2
-#define DNA_UI_HAIR_B      3
-#define DNA_UI_BEARD_R     4
-#define DNA_UI_BEARD_G     5
-#define DNA_UI_BEARD_B     6
-#define DNA_UI_SKIN_TONE   7
-#define DNA_UI_SKIN_R      8
-#define DNA_UI_SKIN_G      9
-#define DNA_UI_SKIN_B      10
-#define DNA_UI_EYES_R      11
-#define DNA_UI_EYES_G      12
-#define DNA_UI_EYES_B      13
-#define DNA_UI_GENDER      14
-#define DNA_UI_BEARD_STYLE 15
-#define DNA_UI_HAIR_STYLE  16
-#define DNA_UI_LENGTH      16 // Update this when you add something, or you WILL break shit.
-
-#define DNA_SE_LENGTH 27
-// For later:
-//#define DNA_SE_LENGTH 50 // Was STRUCDNASIZE, size 27. 15 new blocks added = 42, plus room to grow.
-
-
 // Defines which values mean "on" or "off".
 //  This is to make some of the more OP superpowers a larger PITA to activate,
 //  and to tell our new DNA datum which values to set in order to turn something
@@ -81,28 +45,34 @@ var/global/list/datum/dna/gene/dna_genes[0]
 	var/list/UI[DNA_UI_LENGTH]
 
 	// From old dna.
-	var/b_type = "A+"  // Should probably change to an integer => string map but I'm lazy.
-	var/mutantrace = null  // The type of mutant race the player is, if applicable (i.e. potato-man)
+	var/b_type = BLOOD_A_PLUS  // Should probably change to an integer => string map but I'm lazy.
 	var/real_name          // Stores the real name of the person who originally got this dna datum. Used primarily for changelings,
+	var/original_character_name //Stores THE REAL NAME for changeling transform sting
 
 	// New stuff
-	var/species = "Human"
+	var/species = HUMAN
 
 // Make a copy of this strand.
 // USE THIS WHEN COPYING STUFF OR YOU'LL GET CORRUPTION!
-/datum/dna/proc/Clone()
+/datum/dna/proc/Clone(transfer_SE = TRUE)
 	var/datum/dna/new_dna = new()
 	new_dna.unique_enzymes=unique_enzymes
 	new_dna.b_type=b_type
-	new_dna.mutantrace=mutantrace
 	new_dna.real_name=real_name
 	new_dna.species=species
-	for(var/b=1;b<=DNA_SE_LENGTH;b++)
-		new_dna.SE[b]=SE[b]
-		if(b<=DNA_UI_LENGTH)
-			new_dna.UI[b]=UI[b]
-	new_dna.UpdateUI()
-	new_dna.UpdateSE()
+
+	if(transfer_SE)
+		for (var/i in 1 to DNA_SE_LENGTH)
+			new_dna.SE[i]=SE[i]
+			if(i <= DNA_UI_LENGTH)
+				new_dna.UI[i]=UI[i]
+		new_dna.UpdateUI()
+		new_dna.UpdateSE()
+	else
+		for (var/i in 1 to DNA_UI_LENGTH)
+			new_dna.UI[i]=UI[i]
+		new_dna.ResetSE() // just to set some values (has UpdateSE())
+
 	return new_dna
 ///////////////////////////////////////
 // UNIQUE IDENTITY
@@ -113,7 +83,8 @@ var/global/list/datum/dna/gene/dna_genes[0]
 	for(var/i=1,i<=DNA_UI_LENGTH,i++)
 		switch(i)
 			if(DNA_UI_SKIN_TONE)
-				SetUIValueRange(DNA_UI_SKIN_TONE,rand(1,220),220,1) // Otherwise, it gets fucked
+				var/max = length(global.skin_tones_by_name)
+				SetUIValueRange(DNA_UI_SKIN_TONE,rand(1,max),max,1) // Otherwise, it gets fucked
 			else
 				UI[i]=rand(0,4095)
 	if(!defer)
@@ -133,6 +104,8 @@ var/global/list/datum/dna/gene/dna_genes[0]
 		character.f_style = "Shaved"
 	var/beard	= facial_hair_styles_list.Find(character.f_style)
 
+	var/height = heights_list.Find(character.height)
+
 	SetUIValueRange(DNA_UI_HAIR_R,    character.r_hair,    255,    1)
 	SetUIValueRange(DNA_UI_HAIR_G,    character.g_hair,    255,    1)
 	SetUIValueRange(DNA_UI_HAIR_B,    character.b_hair,    255,    1)
@@ -149,12 +122,18 @@ var/global/list/datum/dna/gene/dna_genes[0]
 	SetUIValueRange(DNA_UI_SKIN_G,    character.g_skin,    255,    1)
 	SetUIValueRange(DNA_UI_SKIN_B,    character.b_skin,    255,    1)
 
-	SetUIValueRange(DNA_UI_SKIN_TONE, 35-character.s_tone, 220,    1) // Value can be negative.
+	SetUIValueRange(DNA_UI_BELLY_R,   character.r_belly,   255,    1)
+	SetUIValueRange(DNA_UI_BELLY_G,   character.g_belly,   255,    1)
+	SetUIValueRange(DNA_UI_BELLY_B,   character.b_belly,   255,    1)
 
-	SetUIState(DNA_UI_GENDER,         character.gender!=MALE,        1)
+	var/s_tone_index = global.skin_tones_by_name.Find(character.s_tone)
+	SetUIValueRange(DNA_UI_SKIN_TONE, s_tone_index, length(global.skin_tones_by_name),    1)
 
-	SetUIValueRange(DNA_UI_HAIR_STYLE,  hair,  hair_styles_list.len,       1)
-	SetUIValueRange(DNA_UI_BEARD_STYLE, beard, facial_hair_styles_list.len,1)
+	SetUIState(DNA_UI_GENDER,         character.gender!=MALE,      1)
+
+	SetUIValueRange(DNA_UI_HAIR_STYLE,  hair,  hair_styles_list.len,       	1)
+	SetUIValueRange(DNA_UI_BEARD_STYLE, beard, facial_hair_styles_list.len,	1)
+	SetUIValueRange(DNA_UI_HEIGHT,    	height,heights_list.len,    		1)
 
 	UpdateUI()
 
@@ -170,7 +149,8 @@ var/global/list/datum/dna/gene/dna_genes[0]
 
 // Get a DNA UI block's raw value.
 /datum/dna/proc/GetUIValue(block)
-	if (block<=0) return 0
+	if (block <= 0)
+		return 0
 	return UI[block]
 
 // Set a DNA UI block's value, given a value and a max possible value.
@@ -185,7 +165,8 @@ var/global/list/datum/dna/gene/dna_genes[0]
 
 // Getter version of above.
 /datum/dna/proc/GetUIValueRange(block,maxvalue)
-	if (block<=0) return 0
+	if (block <= 0)
+		return 0
 	var/value = GetUIValue(block)
 	return round(1 +(value / 4096)*maxvalue)
 
@@ -257,7 +238,8 @@ var/global/list/datum/dna/gene/dna_genes[0]
 
 // Get a DNA SE block's raw value.
 /datum/dna/proc/GetSEValue(block)
-	if (block<=0) return 0
+	if (block <= 0)
+		return 0
 	return SE[block]
 
 // Set a DNA SE block's value, given a value and a max possible value.
@@ -271,15 +253,17 @@ var/global/list/datum/dna/gene/dna_genes[0]
 
 // Getter version of above.
 /datum/dna/proc/GetSEValueRange(block,maxvalue)
-	if (block<=0) return 0
+	if (block <= 0)
+		return 0
 	var/value = GetSEValue(block)
-	return round(1 +(value / 4096)*maxvalue)
+	return round(1 + (value / 4096) * maxvalue)
 
-// Is the block "on" (1) or "off" (0)? (Un-assigned genes are always off.)
+// Is the block "on" (TRUE) or "off" (FALSE)? (Un-assigned genes are always off.)
 /datum/dna/proc/GetSEState(block)
-	if (block<=0) return 0
-	var/list/BOUNDS=GetDNABounds(block)
-	var/value=GetSEValue(block)
+	if (block <= 0)
+		return FALSE
+	var/list/BOUNDS = GetDNABounds(block)
+	var/value = GetSEValue(block)
 	return (value > BOUNDS[DNA_ON_LOWERBOUND])
 
 // Set a block "on" or "off".
@@ -290,7 +274,7 @@ var/global/list/datum/dna/gene/dna_genes[0]
 	if(on)
 		val=rand(BOUNDS[DNA_ON_LOWERBOUND],BOUNDS[DNA_ON_UPPERBOUND])
 	else
-		val=rand(1,BOUNDS[DNA_OFF_UPPERBOUND])
+		val=rand(BOUNDS[DNA_OFF_LOWERBOUND],BOUNDS[DNA_OFF_UPPERBOUND])
 	SetSEValue(block,val,defer)
 
 // Get hex-encoded SE block.
@@ -326,7 +310,7 @@ var/global/list/datum/dna/gene/dna_genes[0]
 
 
 /proc/EncodeDNABlock(value)
-	return add_zero2(num2hex(value,1), 3)
+	return add_zero(num2hex(value,1), 3)
 
 /datum/dna/proc/UpdateUI()
 	src.uni_identity=""
@@ -354,7 +338,7 @@ var/global/list/datum/dna/gene/dna_genes[0]
 		if(length(struc_enzymes)!= 3*DNA_SE_LENGTH)
 			ResetSE()
 
-		if(length(unique_enzymes) != 32)
+		if(length(unique_enzymes) != DNA_UNIQUE_ENZYMES_LEN && !character.species.flags[NO_DNA])
 			unique_enzymes = md5(character.real_name)
 	else
 		if(length(uni_identity) != 3*DNA_UI_LENGTH)
@@ -369,5 +353,16 @@ var/global/list/datum/dna/gene/dna_genes[0]
 
 	ResetSE()
 
-	unique_enzymes = md5(character.real_name)
-	reg_dna[unique_enzymes] = character.real_name
+	unique_enzymes = ""
+	if(!character.species.flags[NO_DNA])
+		unique_enzymes = md5(character.real_name)
+		reg_dna[unique_enzymes] = character.real_name
+
+/datum/dna/proc/generate_unique_enzymes(mob/living/holder)
+	. = ""
+	if(istype(holder))
+		real_name = holder.real_name
+		. += md5(holder.real_name)
+	else
+		. += random_string(DNA_UNIQUE_ENZYMES_LEN, global.hex_characters)
+	return .

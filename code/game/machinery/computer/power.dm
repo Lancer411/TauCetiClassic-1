@@ -6,18 +6,19 @@
 	icon = 'icons/obj/computer.dmi'
 	icon_state = "power"
 	light_color = "#ffcc33"
-	density = 1
-	anchored = 1
-	use_power = 2
+	density = TRUE
+	anchored = TRUE
+	use_power = ACTIVE_POWER_USE
 	idle_power_usage = 20
 	active_power_usage = 80
 	circuit = /obj/item/weapon/circuitboard/powermonitor
 	var/datum/powernet/powernet = null
+	required_skills = list(/datum/skill/engineering = SKILL_LEVEL_TRAINED)
 
 //fix for issue 521, by QualityVan.
 //someone should really look into why circuits have a powernet var, it's several kinds of retarded.
-/obj/machinery/computer/monitor/New()
-	..()
+/obj/machinery/computer/monitor/atom_init()
+	. = ..()
 	var/obj/structure/cable/attached = null
 	var/turf/T = loc
 	if(isturf(T))
@@ -35,28 +36,20 @@
 			powernet = attached.get_powernet()
 	return
 
-/obj/machinery/computer/monitor/attack_hand(mob/user)
-	if(..())
-		return
-	interact(user)
-
-/obj/machinery/computer/monitor/interact(mob/user)
+/obj/machinery/computer/monitor/ui_interact(mob/user)
 
 	if ( (get_dist(src, user) > 1 ) || (stat & (BROKEN|NOPOWER)) )
-		if (!istype(user, /mob/living/silicon))
+		if (!issilicon(user) && !isobserver(user))
 			user.unset_machine()
 			user << browse(null, "window=powcomp")
 			return
 
+	var/t = "<TT>"
 
-	user.set_machine(src)
-	var/t = "<TT><B>Power Monitoring</B><HR>"
-
-	t += "<BR><HR><A href='?src=\ref[src];update=1'>Refresh</A>"
-	t += "<BR><HR><A href='?src=\ref[src];close=1'>Close</A>"
+	t += "<BR><HR><A href='byond://?src=\ref[src];update=1'>Refresh</A>"
 
 	if(!powernet)
-		t += "\red No connection"
+		t += "<span class='warning'>No connection</span>"
 	else
 
 		var/list/L = list()
@@ -65,38 +58,49 @@
 				var/obj/machinery/power/apc/A = term.master
 				L += A
 
-		t += "<PRE>Total power: [powernet.avail] W<BR>Total load:  [num2text(powernet.viewload,10)] W<BR>"
-
-		t += "<FONT SIZE=-1>"
-
+		var/apcs = ""
+		var/equipment_cons = 0
+		var/lighting_cons = 0
+		var/environment_cons = 0
 		if(L.len > 0)
+			apcs += "<tr> <th>Area</th> <th>Eqp.</th> <th>Lgt.</th> <th>Env.</th>"
+			apcs += "<th style='text-align: center'>Load</th> <th style='text-align: right'>Cell </th> <th> - </th> </tr>"
 
-			t += "Area                           Eqp./Lgt./Env.  Load   Cell<HR>"
-
-			var/list/S = list(" Off","AOff","  On", " AOn")
-			var/list/chg = list("N","C","F")
+			var/list/S = list("Off", "A-Off", "On", "A-On")
+			var/list/chg = list("<span style='color: red'>N</span>", "<span style='color: orange'>C</span>", "<span style='color: green'>F</span>")
 
 			for(var/obj/machinery/power/apc/A in L)
+				apcs += "<tr> <td>"
+				apcs += copytext("\The [A.area]", 1, 30)
+				apcs += "</td> <td>[S[A.equipment + 1]]</td> <td>[S[A.lighting + 1]]</td> <td>[S[A.environ + 1]]</td>"
+				apcs += "<td style='text-align: right'>[round(A.lastused_total)]</td> <td style='text-align: right'>"
 
-				t += copytext(add_tspace("\The [A.area]", 30), 1, 30)
-				t += " [S[A.equipment+1]] [S[A.lighting+1]] [S[A.environ+1]] [add_lspace(A.lastused_total, 6)]  [A.cell ? "[add_lspace(round(A.cell.percent()), 3)]% [chg[A.charging+1]]" : "  N/C"]<BR>"
+				if(A.cell)
+					apcs += "[round(A.cell.percent())]%</td> <td> [chg[A.charging + 1]] </td> </tr>"
+				else
+					apcs += "N/C</td> <td>   </td> </tr>"
 
-		t += "</FONT></PRE></TT>"
+				equipment_cons += A.lastused_equip
+				lighting_cons += A.lastused_light
+				environment_cons += A.lastused_environ
 
-	user << browse(t, "window=powcomp;size=450")
-	onclose(user, "powcomp")
+		t += "<PRE>Total power: [DisplayPower(powernet.viewavail)]<BR>Total load:  [DisplayPower(powernet.viewload)]<BR></PRE>"
+		t += "<PRE>Equipment: [DisplayPower(equipment_cons)]; Lighting: [DisplayPower(lighting_cons)]; Environment: [DisplayPower(environment_cons)]<BR></PRE>"
+		t += "<FONT SIZE=-1><TABLE style='border-collapse: separate; border: 0px solid transparent; border-spacing: 0 0px; width: 100%'>"
+		t += apcs
+
+		t += "</TABLE></FONT></TT>"
+
+	var/datum/browser/popup = new(user, "powcomp", "Power Monitoring", 470, 900)
+	popup.set_content(t)
+	popup.open()
 
 
 /obj/machinery/computer/monitor/Topic(href, href_list)
-	if(href_list["close"])
-		usr << browse(null, "window=powcomp")
-		usr.unset_machine(src)
-		return FALSE
-
 	. = ..()
 	if(!.)
 		return
 
 	if( href_list["update"] )
-		src.updateDialog()
+		updateDialog()
 		return

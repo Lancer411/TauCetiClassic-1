@@ -6,33 +6,37 @@
  * Rewritten (except for player HTML) by N3X15
  ***********************/
 
-// Open up VLC and play musique.
-// Converted to VLC for cross-platform and ogg support. - N3X
-var/const/PLAYER_HTML={"
-	<OBJECT id='player' CLASSID='CLSID:6BF52A52-394A-11d3-B153-00C04F79FAA6' type='application/x-oleobject'></OBJECT>
+#define MEDIA_VOLUME SANITIZE_VOL(50)
+
+// Open up the HTML5 audio player.
+var/global/const/PLAYER_HTML={"
+	<audio id='player' preload='auto'></audio>
 	<script>
 function noErrorMessages () { return true; }
 window.onerror = noErrorMessages;
 function SetMusic(url, time, volume) {
 	var player = document.getElementById('player');
-	player.URL = url;
-	player.Controls.currentPosition = time;
-	player.controls.currentPosition = time;
-	player.Settings.volume = volume;
+	if (!url || url === '') {
+		player.pause();
+		player.removeAttribute('src');
+		return;
+	}
+	var vol = Math.max(0, Math.min(1, (+volume) / 100));
+	player.volume = vol;
+	if (player.src !== url) {
+		player.src = url;
+	}
+	player.currentTime = +time;
+	player.play().catch(function(){});
 }
 function SetVolume(volume) {
 	var player = document.getElementById('player');
-	player.Settings.volume = volume;
+	player.volume = Math.max(0, Math.min(1, (+volume) / 100));
 }
 	</script>"}
 
 /mob/living/proc/update_music()
-	//world << "Update start"
-	if (client && client.media)
-		//world << "Media Exists"
-		client.media.update_music()
-	//else
-	//	testing("[src] - client: [client?"Y":"N"]; client.media: [client && client.media ? "Y":"N"]")
+	client?.media?.update_music()
 
 /area
 	// One media source per area.
@@ -40,7 +44,7 @@ function SetVolume(volume) {
 
 #ifdef DEBUG_MEDIAPLAYER
 #define MP_DEBUG(x) owner << x
-#warning Please comment out #define DEBUG_MEDIAPLAYER before committing.
+#warn Please comment out #define DEBUG_MEDIAPLAYER before committing.
 #else
 #define MP_DEBUG(x)
 #endif
@@ -49,28 +53,27 @@ function SetVolume(volume) {
 /datum/media_manager
 	var/url = ""
 	var/start_time = 0
-	var/volume = 25
+	var/volume = MEDIA_VOLUME
 
 	var/client/owner
-	var/mob/living/mob
 
 	var/const/window = "rpane.hosttracker"
 	//var/const/window = "mediaplayer" // For debugging.
 
-/datum/media_manager/New(mob/living/holder)
-	if(!istype(holder))
-		return
-	mob = holder
-	owner = mob.client
+/datum/media_manager/New(client/owner_)
+	owner = owner_
+	volume = MEDIA_VOLUME * owner.get_sound_volume(VOL_JUKEBOX)
+	if(isliving(owner.mob))
+		open()
 
 // Actually pop open the player in the background.
 /datum/media_manager/proc/open()
 	owner << browse(PLAYER_HTML, "window=[window]")
-	send_update()
+	update_music()
 
 // Tell the player to play something via JS.
 /datum/media_manager/proc/send_update()
-	if(!(owner.prefs.toggles & SOUND_STREAMING) && url != "")
+	if(!volume && !length(url))
 		return // Nope.
 	var/playtime = round((world.time - start_time) / 10)
 	owner << output(list2params(list(url, playtime, volume)), "[window]:SetMusic")
@@ -84,21 +87,20 @@ function SetVolume(volume) {
 /datum/media_manager/proc/update_music()
 	var/targetURL = ""
 	var/targetStartTime = 0
-	//var/targetVolume = volume
 
 	if (!owner)
 		//testing("owner is null")
 		return
-	if(!isliving(mob))
+	if(!isliving(owner.mob))
 		return
-	var/area/A = get_area_master(mob)
+	var/area/A = get_area(owner.mob)
 	if(!A)
 		//testing("[owner] in [mob.loc].  Aborting.")
 		stop_music()
 		return
 	var/obj/machinery/media/M = A.media_source
 	if(M && M.playing)
-		targetURL = M.media_url
+		targetURL = owner.prefs.snd_jukebox_mediaserver + M.media_url
 		targetStartTime = M.media_start_time
 		//owner << "Found audio source: [M.media_url] @ [(world.time - start_time) / 10]s."
 	//else
@@ -106,24 +108,11 @@ function SetVolume(volume) {
 	if (url != targetURL || abs(targetStartTime - start_time) > 1)
 		url = targetURL
 		start_time = targetStartTime
-		//volume = targetVolume
 		send_update()
 
-/datum/media_manager/proc/update_volume(value)
-	volume = value
+/datum/media_manager/proc/update_volume()
+	volume = MEDIA_VOLUME * owner.get_sound_volume(VOL_JUKEBOX)
 	owner << output(list2params(list(volume)), "[window]:SetVolume")
-	//send_update()
+	send_update()
 
-/client/verb/change_volume()
-	set name = "Set Volume"
-	set category = "Preferences"
-	set desc = "Set jukebox volume"
-	if(!media || !istype(media))
-		to_chat(usr, "You have no media datum to change, if you're not in the lobby tell an admin.")
-		return
-	var/value = input("Choose your Jukebox volume.", "Jukebox volume", media.volume)
-	value = round(max(0, min(100, value)))
-	media.update_volume(value)
-	if(prefs)
-		prefs.volume = value
-		prefs.save_preferences(src)
+#undef MEDIA_VOLUME

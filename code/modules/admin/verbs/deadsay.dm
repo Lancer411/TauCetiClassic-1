@@ -7,15 +7,15 @@
 		return
 	if(!src.mob)
 		return
-	if(prefs.muted & MUTE_DEADCHAT)
-		to_chat(src, "\red You cannot send DSAY messages (muted).")
+	if(prefs.muted & MUTE_OOC || IS_ON_ADMIN_CD(src, ADMIN_CD_OOC))
+		to_chat(src, "<span class='warning'>You cannot send DSAY messages (muted).</span>")
 		return
 
 	if(!(prefs.chat_toggles & CHAT_DEAD))
-		to_chat(src, "\red You have deadchat muted.")
+		to_chat(src, "<span class='warning'>You have deadchat muted.</span>")
 		return
 
-	if (src.handle_spam_prevention(msg,MUTE_DEADCHAT))
+	if (handle_spam_prevention(msg,ADMIN_CD_OOC))
 		return
 
 	var/stafftype = null
@@ -23,7 +23,7 @@
 	if (src.holder.rights & R_ADMIN)
 		stafftype = "ADMIN"
 
-	msg = sanitize(copytext(msg, 1, MAX_MESSAGE_LEN))
+	msg = sanitize(msg)
 	log_admin("[key_name(src)] : [msg]")
 
 	if (!msg)
@@ -36,9 +36,15 @@
 			continue
 
 		if(M.client && M.client.holder && (M.client.prefs.chat_toggles & CHAT_DEAD)) // show the message to admins who have deadchat toggled on
-			M.show_message(rendered, 2)
+			to_chat(M, rendered)
 
 		else if(M.stat == DEAD && (M.client.prefs.chat_toggles & CHAT_DEAD)) // show the message to regular ghosts who have deadchat toggled on
-			M.show_message(rendered, 2)
+			to_chat(M, rendered)
 
 	feedback_add_details("admin_verb","D") //If you are copy-pasting this, ensure the 2nd parameter is unique to the new proc!
+
+/client/proc/get_dead_say()
+	var/msg = input(src, null, "dsay \"text\"") as text|null
+	if(isnull(msg))
+		return
+	dsay(msg)

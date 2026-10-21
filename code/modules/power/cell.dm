@@ -1,42 +1,48 @@
 // the power cell
 // charge from 0 to 100%
 // fits in APC to provide backup power
-/obj/item/weapon/stock_parts/cell/New()
-	..()
-	charge = maxcharge
+/obj/item/weapon/stock_parts/cell/atom_init()
+	. = ..()
+	if(init_full)
+		charge = maxcharge
+		if(isturf(loc))
+			update_icon()
 
-	spawn(5)
-		updateicon()
-
-/obj/item/weapon/stock_parts/cell/proc/updateicon()
-	overlays.Cut()
+/obj/item/weapon/stock_parts/cell/update_icon()
+	cut_overlays()
 
 	if(charge < 0.01)
 		return
 	else if(charge/maxcharge >=0.995)
-		overlays += image('icons/obj/power.dmi', "cell-o2")
+		add_overlay(image('icons/obj/power.dmi', "cell-o2"))
 	else
-		overlays += image('icons/obj/power.dmi', "cell-o1")
+		add_overlay(image('icons/obj/power.dmi', "cell-o1"))
 
 /obj/item/weapon/stock_parts/cell/proc/percent()		// return % charge of cell
 	return 100.0*charge/maxcharge
 
-// use power from a cell
-/obj/item/weapon/stock_parts/cell/proc/use(amount)
+// use power from a cell, returns the amount actually used
+/obj/item/weapon/stock_parts/cell/use(amount)
+	if(amount < 0)
+		stack_trace("[src.type]/use() called with a negative parameter")
+		return 0
 	if(rigged && amount > 0)
 		explode()
 		return 0
 
-	if(charge < amount)	return 0
-	charge = (charge - amount)
-	return 1
+	var/used = min(charge, amount)
+	charge -= used
+	SEND_SIGNAL(src, COMSIG_CELL_CHARGE_CHANGED, charge, maxcharge)
+	return used
 
 // recharge the cell
 /obj/item/weapon/stock_parts/cell/proc/give(amount)
+	if(amount < 0)
+		stack_trace("[src.type]/give() called with a negative parameter")
+		return 0
 	if(rigged && amount > 0)
 		explode()
 		return 0
-
 	if(maxcharge < amount)	return 0
 	var/power_used = min(maxcharge-charge,amount)
 	if(crit_fail)	return 0
@@ -46,45 +52,70 @@
 			crit_fail = 1
 			return 0
 	charge += power_used
+	SEND_SIGNAL(src, COMSIG_CELL_CHARGE_CHANGED, charge, maxcharge)
 	return power_used
-
 
 /obj/item/weapon/stock_parts/cell/examine(mob/user)
 	..()
 	if(src in view(1, user))
 		if(maxcharge <= 2500)
-			to_chat(user, "[desc]\nThe manufacturer's label states this cell has a power rating of [maxcharge], and that you should not swallow it.\nThe charge meter reads [round(src.percent() )]%.")
+			to_chat(user, "[desc]\nThe manufacturer's label states this cell has a power rating of [maxcharge], and that you should not swallow it.\nThe charge meter reads [round(percent() )]%.")
 		else
-			to_chat(user, "This power cell has an exciting chrome finish, as it is an uber-capacity cell type! It has a power rating of [maxcharge]!\nThe charge meter reads [round(src.percent() )]%.")
+			to_chat(user, "This power cell has an exciting chrome finish, as it is an uber-capacity cell type! It has a power rating of [maxcharge]!\nThe charge meter reads [round(percent() )]%.")
 		if(crit_fail)
 			to_chat(user, "<span class='red'>This power cell seems to be faulty.</span>")
 
 /obj/item/weapon/stock_parts/cell/attack_self(mob/user)
-	src.add_fingerprint(user)
+	add_fingerprint(user)
+
 	if(ishuman(user))
 		var/mob/living/carbon/human/H = user
+
 		var/obj/item/clothing/gloves/space_ninja/SNG = H.gloves
-		if(!istype(SNG) || !SNG.candrain || !SNG.draining) return
+		if(istype(SNG) && SNG.candrain && !SNG.draining)
+			SNG.drain(src, H.wear_suit)
 
-		SNG.drain("CELL",src,H.wear_suit)
-	return
+		if(H.species.flags[IS_SYNTHETIC] && H.a_intent == INTENT_GRAB)
+			if(user.is_busy())
+				return
+			var/obj/item/organ/internal/liver/IO = H.organs_by_name[O_LIVER]
+			var/obj/item/weapon/stock_parts/cell/C = locate(/obj/item/weapon/stock_parts/cell) in IO
+			user.SetNextMove(CLICK_CD_MELEE)
+			if(C)
+				if(charge <= 0)
+					to_chat(user, "<span class='warning'>This cell is empty and of no use.</span>")
+					return
+				if(!(H.nutrition <= C.maxcharge*0.9))
+					to_chat(user, "<span class='warning'>Procedure interrupted. Charge at maximum capacity.</span>")
+					return
 
-/obj/item/weapon/stock_parts/cell/attackby(obj/item/W, mob/user)
-	..()
-	if(istype(W, /obj/item/weapon/reagent_containers/syringe))
-		var/obj/item/weapon/reagent_containers/syringe/S = W
+				if (do_after(user,30,target = src))
+					var/drain = C.maxcharge-H.nutrition
+					if(drain > src.charge)
+						drain = src.charge
+					H.nutrition += use(drain)
+					update_icon()
+					to_chat(user, "<span class='notice'>[round(100.0*drain/maxcharge, 1)]% of energy gained from the cell.</span>")
+				else
+					to_chat(user, "<span class='warning'>Procedure interrupted. Protocol terminated.</span>")
+					return
+
+/obj/item/weapon/stock_parts/cell/attackby(obj/item/I, mob/user, params)
+	if(istype(I, /obj/item/weapon/reagent_containers/syringe))
+		var/obj/item/weapon/reagent_containers/syringe/S = I
+		user.SetNextMove(CLICK_CD_RAPID)
 
 		to_chat(user, "You inject the solution into the power cell.")
 
 		if(S.reagents.has_reagent("phoron", 5))
-
 			rigged = 1
 
 			log_admin("LOG: [user.name] ([user.ckey]) injected a power cell with phoron, rigging it to explode.")
-			message_admins("LOG: [user.name] ([user.ckey]) injected a power cell with phoron, rigging it to explode. (<A HREF='?_src_=holder;adminplayerobservecoodjump=1;X=[user.x];Y=[user.y];Z=[user.z]'>JMP</a>)")
+			message_admins("LOG: [user.name] ([user.ckey]) injected a power cell with phoron, rigging it to explode. [ADMIN_JMP(user)]")
 
 		S.reagents.clear_reagents()
-
+		return
+	return ..()
 
 /obj/item/weapon/stock_parts/cell/proc/explode()
 	var/turf/T = get_turf(src.loc)
@@ -107,7 +138,7 @@
 	//explosion(T, 0, 1, 2, 2)
 
 	log_admin("LOG: Rigged power cell explosion, last touched by [fingerprintslast]")
-	message_admins("LOG: Rigged power cell explosion, last touched by [fingerprintslast]")
+	message_admins("LOG: Rigged power cell explosion, last touched by [fingerprintslast] [ADMIN_JMP(T)]")
 
 	explosion(T, devastation_range, heavy_impact_range, light_impact_range, flash_range)
 
@@ -115,7 +146,7 @@
 	charge = 0
 	maxcharge = 1
 	icon_state = "cell_explode"
-	updateicon()
+	update_icon()
 
 
 /obj/item/weapon/stock_parts/cell/proc/corrupt()
@@ -135,22 +166,17 @@
 /obj/item/weapon/stock_parts/cell/ex_act(severity)
 
 	switch(severity)
-		if(1.0)
-			qdel(src)
-			return
-		if(2.0)
-			if (prob(50))
-				qdel(src)
+		if(EXPLODE_HEAVY)
+			if(prob(50))
+				if(prob(50))
+					corrupt()
 				return
-			if (prob(50))
-				corrupt()
-		if(3.0)
-			if (prob(25))
-				qdel(src)
+		if(EXPLODE_LIGHT)
+			if(prob(75))
+				if(prob(25))
+					corrupt()
 				return
-			if (prob(25))
-				corrupt()
-	return
+	qdel(src)
 
 /obj/item/weapon/stock_parts/cell/blob_act()
 	if(prob(75))

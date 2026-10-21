@@ -8,20 +8,19 @@
 	desc = "A solar directional tracker."
 	icon = 'icons/obj/power.dmi'
 	icon_state = "tracker"
-	anchored = 1
-	density = 1
-	directwired = 1
-	use_power = 0
+	anchored = TRUE
+	density = TRUE
+	use_power = NO_POWER_USE
 
 	var/sun_angle = 0		// sun angle as set by sun datum
 
-/obj/machinery/power/tracker/New(var/turf/loc, var/obj/item/solar_assembly/S)
-	..(loc)
+/obj/machinery/power/tracker/atom_init(mapload, obj/item/solar_assembly/S)
+	. = ..()
 	if(!S)
 		S = new /obj/item/solar_assembly(src)
 		S.glass_type = /obj/item/stack/sheet/glass
 		S.tracker = 1
-		S.anchored = 1
+		S.anchored = TRUE
 	S.loc = src
 	connect_to_network()
 
@@ -39,7 +38,7 @@
 	sun_angle = angle
 
 	//set icon dir to show sun illumination
-	dir = turn(NORTH, -angle - 22.5)	// 22.5 deg bias ensures, e.g. 67.5-112.5 is EAST
+	set_dir(turn(NORTH, -angle - 22.5))	// 22.5 deg bias ensures, e.g. 67.5-112.5 is EAST
 
 	// check we can draw power
 	if(stat & NOPOWER)
@@ -57,17 +56,32 @@
 
 /obj/machinery/power/tracker/attackby(obj/item/weapon/W, mob/user)
 
-	if(iscrowbar(W))
-		playsound(src.loc, 'sound/machines/click.ogg', 50, 1)
-		if(do_after(user, 50, target = src))
-			var/obj/item/solar_assembly/S = locate() in src
-			if(S)
-				S.loc = src.loc
-				S.give_glass()
-			playsound(src.loc, 'sound/items/Deconstruct.ogg', 50, 1)
+	if(isprying(W))
+		if(user.is_busy()) return
+		if(W.use_tool(src, user, 50, volume = 50, quality = QUALITY_PRYING))
+			playsound(src, 'sound/items/Deconstruct.ogg', VOL_EFFECTS_MASTER)
 			user.visible_message("<span class='notice'>[user] takes the glass off the tracker.</span>")
-			qdel(src)
+			deconstruct(TRUE)
 		return
+	..()
+
+/obj/machinery/power/tracker/atom_break(damage_flag)
+	. = ..()
+	if(.)
+		playsound(loc, 'sound/effects/Glassbr3.ogg', VOL_EFFECTS_MASTER, 100, TRUE)
+
+/obj/machinery/power/tracker/deconstruct(disassembled = TRUE)
+	if(flags & NODECONSTRUCT)
+		return ..()
+	if(disassembled)
+		var/obj/item/solar_assembly/S = locate() in src
+		if(S)
+			S.forceMove(loc)
+			S.give_glass(stat & BROKEN)
+	else
+		playsound(loc, pick(SOUNDIN_SHATTER), VOL_EFFECTS_MASTER, 70, TRUE)
+		new /obj/item/weapon/shard(loc)
+		new /obj/item/weapon/shard(loc)
 	..()
 
 // timed process
@@ -89,5 +103,6 @@
 
 	name = "tracker electronics"
 	icon = 'icons/obj/doors/door_electronics.dmi'
-	icon_state = "door_electronics"
-	w_class = 2.0
+	icon_state = "tracker_electronics"
+	item_state_world = "tracker_electronics_w"
+	w_class = SIZE_TINY

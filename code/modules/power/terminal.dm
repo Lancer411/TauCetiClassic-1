@@ -7,33 +7,20 @@
 	name = "terminal"
 	icon_state = "term"
 	desc = "It's an underfloor wiring terminal for power equipment."
-	level = 1
 	layer = TURF_LAYER
 	var/obj/machinery/power/master = null
-	anchored = 1
-	directwired = 0		// must have a cable on same turf connecting to terminal
-	layer = 2.6 // a bit above wires
+	anchored = TRUE
+	layer = POWER_TERMINAL
 
+/obj/machinery/power/terminal/atom_init()
+	. = ..()
 
-/obj/machinery/power/terminal/New()
-	..()
-	var/turf/T = src.loc
-	if(level==1) hide(T.intact)
-	return
+	AddElement(/datum/element/undertile, TRAIT_T_RAY_VISIBLE, use_alpha = TRUE)
 
 /obj/machinery/power/terminal/Destroy()
 	if(master)
 		master.disconnect_terminal()
 	return ..()
-
-/obj/machinery/power/terminal/hide(i)
-	if(i)
-		invisibility = 101
-		icon_state = "term-f"
-	else
-		invisibility = 0
-		icon_state = "term"
-
 
 /obj/machinery/power/proc/can_terminal_dismantle()
 	. = 0
@@ -52,15 +39,16 @@
 /obj/machinery/power/terminal/proc/dismantle(mob/living/user)
 	if(istype(loc, /turf/simulated))
 		var/turf/simulated/T = loc
-		if(T.intact)
+		if(T.underfloor_accessibility < UNDERFLOOR_INTERACTABLE)
 			to_chat(user, "<span class='alert'>You must first expose the power terminal!</span>")
 			return
 
 		if((master && master.can_terminal_dismantle()) || !master)
+			if(user.is_busy()) return
 			user.visible_message("<span class='warning'>[user.name] dismantles the power terminal[master ? " from [master]" : ""].</span>", \
 								"You begin to cut the cables...")
 
-			playsound(src.loc, 'sound/items/Deconstruct.ogg', 50, 1)
+			playsound(src, 'sound/items/Deconstruct.ogg', VOL_EFFECTS_MASTER)
 			if(do_after(user, 50 , target = src))
 				if((master && master.can_terminal_dismantle()) || !master)
 					if(prob(50) && electrocute_mob(user, powernet, src))
@@ -68,13 +56,13 @@
 						s.set_up(5, 1, master)
 						s.start()
 						return
-					new /obj/item/weapon/cable_coil(loc, 10)
+					new /obj/item/stack/cable_coil/red(loc, 10)
 					to_chat(user, "<span class='notice'>You cut the cables and dismantle the power terminal.</span>")
 					qdel(src)
 
 
 /obj/machinery/power/terminal/attackby(obj/item/W, mob/living/user)
-	if(istype(W, /obj/item/weapon/wirecutters))
+	if(iscutter(W))
 		dismantle(user)
 		return
 

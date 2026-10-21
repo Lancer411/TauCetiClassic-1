@@ -25,7 +25,7 @@
 /obj/item/clothing/head/collectable/chef
 	name = "collectable chef's hat"
 	desc = "A rare Chef's Hat meant for hat collectors!"
-	icon_state = "chef"
+	icon_state = "chefhat"
 	item_state = "chefhat"
 
 /obj/item/clothing/head/collectable/paper
@@ -51,13 +51,13 @@
 /obj/item/clothing/head/collectable/police
 	name = "collectable police officer's hat"
 	desc = "A Collectable Police Officer's Hat. This hat emphasizes that you are THE LAW."
-	icon_state = "policehelm"
+	icon_state = "policehelm_red"
 	body_parts_covered = 0
 
 /obj/item/clothing/head/collectable/beret
 	name = "collectable beret"
 	desc = "A Collectable red Beret. It smells faintly of Garlic."
-	icon_state = "beret"
+	icon_state = "beret_red"
 	body_parts_covered = 0
 
 /obj/item/clothing/head/collectable/welding
@@ -108,14 +108,15 @@
 /obj/item/clothing/head/collectable/hardhat
 	name = "collectable hard hat"
 	desc = "WARNING! Offers no real protection, or luminosity, but it is damn fancy!"
-	icon_state = "hardhat0_yellow"
-	item_state = "hardhat0_yellow"
+	icon_state = "hardhat_yellow0"
+	item_state = "hardhat_yellow0"
 	body_parts_covered = 0
 
 /obj/item/clothing/head/collectable/HoS
 	name = "collectable HoS hat"
 	desc = "Now you can beat prisoners, set silly sentences and arrest for no reason too!"
-	icon_state = "hoscap"
+	icon_state = "hoshat"
+	item_state = "hoshat"
 	body_parts_covered = 0
 
 /obj/item/clothing/head/collectable/thunderdome

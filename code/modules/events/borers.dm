@@ -1,13 +1,11 @@
 //Cortical borer spawn event - care of RobRichards1997 with minor editing by Zuhayr.
 
 /datum/event/borer_infestation
-	oneShot = 1
-
-/datum/event/borer_infestation
 	announceWhen = 400
+	announcement = new /datum/announcement/centcomm/aliens
 
 	var/spawncount = 1
-	var/successSpawn = 0        //So we don't make a command report if nothing gets spawned.
+	var/successSpawn = FALSE //So we don't make a command report if nothing gets spawned.
 
 /datum/event/borer_infestation/setup()
 	announceWhen = rand(announceWhen, announceWhen + 50)
@@ -15,24 +13,16 @@
 
 /datum/event/borer_infestation/announce()
 	if(successSpawn)
-		command_alert("Unidentified lifesigns detected coming aboard [station_name()]. Secure any exterior access, including ducting and ventilation.", "Lifesign Alert")
-		world << sound('sound/AI/aliens.ogg')
+		announcement.play()
 
 /datum/event/borer_infestation/start()
-	var/list/vents = list()
-	for(var/obj/machinery/atmospherics/unary/vent_pump/temp_vent in machines)
-		if(temp_vent.loc.z == ZLEVEL_STATION && !temp_vent.welded && temp_vent.network)
-			//Stops cortical borers getting stuck in small networks. See: Security, Virology
-			if(temp_vent.network.normal_members.len > 50)
-				vents += temp_vent
+	var/list/vents = get_vents()
 
-	var/list/candidates = get_alien_candidates()
-	while(spawncount > 0 && vents.len && candidates.len)
-		var/obj/vent = pick_n_take(vents)
-		var/client/C = pick_n_take(candidates)
+	if(!vents.len)
+		message_admins("An event attempted to spawn a borers, but no suitable vents were found. Shutting down.")
+		kill()
+		return
 
-		var/mob/living/simple_animal/borer/new_borer = new(vent.loc)
-		new_borer.key = C.key
+	create_uniq_faction(/datum/faction/borers)
 
-		spawncount--
-		successSpawn = 1
+	create_spawners(/datum/spawner/borer_event, spawncount)

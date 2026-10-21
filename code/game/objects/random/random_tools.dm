@@ -14,6 +14,19 @@
 						/obj/item/device/flashlight\
 					)
 
+/obj/random/tools/bettertool
+	name = "Random Better Tool"
+	desc = "This is a random good tool."
+	icon = 'icons/obj/items.dmi'
+	icon_state = "welder"
+/obj/random/tools/bettertool/item_to_spawn()
+		return pick(\
+						/obj/item/weapon/weldingtool/hugetank,\
+						/obj/item/weapon/multi/hand_drill,\
+						/obj/item/weapon/multi/jaws_of_life,\
+						/obj/item/clothing/glasses/night,\
+					)
+
 
 /obj/random/tools/technology_scanner
 	name = "Random Scanner"
@@ -75,19 +88,19 @@
 	desc = "This is a random piece of technology supplies."
 	icon = 'icons/obj/power.dmi'
 	icon_state = "cell"
-	spawn_nothing_percentage = 50
+	spawn_nothing_chance = 50
 /obj/random/tools/tech_supply/item_to_spawn()
 		return pick(\
 						prob(3);/obj/random/tools/powercell,\
 						prob(2);/obj/random/tools/technology_scanner,\
 						prob(1);/obj/item/weapon/packageWrap,\
 						prob(2);/obj/random/tools/bomb_supply,\
-						prob(1);/obj/item/weapon/extinguisher,\
-						prob(1);/obj/item/clothing/gloves/fyellow,\
-						prob(3);/obj/item/weapon/cable_coil,\
+						prob(1);/obj/item/weapon/reagent_containers/spray/extinguisher,\
+						prob(1);/obj/item/clothing/gloves/budget_insulated,\
+						prob(3);/obj/item/stack/cable_coil/random,\
 						prob(2);/obj/random/tools/toolbox,\
 						prob(2);/obj/item/weapon/storage/belt/utility,\
 						prob(5);/obj/random/tools/tool\
 					)
 /obj/random/tools/tech_supply/guaranteed
-	spawn_nothing_percentage = 0
+	spawn_nothing_chance = 0

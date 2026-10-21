@@ -6,12 +6,11 @@
 /obj/item/device/depth_scanner
 	name = "depth analysis scanner"
 	desc = "Used to check spatial depth and density of rock outcroppings."
-	icon = 'icons/obj/pda.dmi'
-	icon_state = "crap"
-	item_state = "analyzer"
-	w_class = 2.0
-	flags = FPRINT | TABLEPASS
-	slot_flags = SLOT_BELT
+	icon = 'icons/obj/xenoarchaeology/tools.dmi'
+	icon_state = "depth_analysis_scanner"
+	item_state = "depth_scanner"
+	w_class = SIZE_TINY
+	slot_flags = SLOT_FLAGS_BELT
 	var/list/positive_locations = list()
 	var/datum/depth_scan/current
 
@@ -25,7 +24,7 @@
 	var/material = "unknown"
 
 /obj/item/device/depth_scanner/proc/scan_atom(mob/user, atom/A)
-	user.visible_message("\blue [user] scans [A], the air around them humming gently.")
+	user.visible_message("<span class='notice'>[user] scans [A], the air around them humming gently.</span>")
 	if(istype(A,/turf/simulated/mineral))
 		var/turf/simulated/mineral/M = A
 		if((M.finds && M.finds.len) || M.artifact_find)
@@ -47,7 +46,7 @@
 			positive_locations.Add(D)
 
 			for(var/mob/L in range(src, 1))
-				to_chat(L, "\blue [bicon(src)] [src] pings.")
+				to_chat(L, "<span class='notice'>[bicon(src)] [src] pings.</span>")
 
 	else if(istype(A,/obj/structure/boulder))
 		var/obj/structure/boulder/B = A
@@ -66,14 +65,14 @@
 			positive_locations.Add(D)
 
 			for(var/mob/L in range(src, 1))
-				to_chat(L, "\blue [bicon(src)] [src] pings [pick("madly","wildly","excitedly","crazily")]!.")
+				to_chat(L, "<span class='notice'>[bicon(src)] [src] pings [pick("madly", "wildly", "excitedly", "crazily")]!.</span>")
 
 /obj/item/device/depth_scanner/attack_self(mob/user)
-	return src.interact(user)
+	return interact(user)
 
 /obj/item/device/depth_scanner/interact(mob/user)
 	var/dat = "<b>Co-ordinates with positive matches</b><br>"
-	dat += "<A href='?src=\ref[src];clear=0'>== Clear all ==</a><br>"
+	dat += "<A href='byond://?src=\ref[src];clear=0'>== Clear all ==</a><br>"
 	if(current)
 		dat += "Time: [current.time]<br>"
 		dat += "Coords: [current.coords]<br>"
@@ -85,7 +84,7 @@
 			dat += "Anomaly material: [finds_as_strings[index]]<br>"
 		else
 			dat += "Anomaly material: Unknown<br>"
-		dat += "<A href='?src=\ref[src];clear=[current.record_index]'>clear entry</a><br>"
+		dat += "<A href='byond://?src=\ref[src];clear=[current.record_index]'>clear entry</a><br>"
 	else
 		dat += "Select an entry from the list<br>"
 		dat += "<br>"
@@ -96,14 +95,16 @@
 	if(positive_locations.len)
 		for(var/index=1, index<=positive_locations.len, index++)
 			var/datum/depth_scan/D = positive_locations[index]
-			dat += "<A href='?src=\ref[src];select=[index]'>[D.time], coords: [D.coords]</a><br>"
+			dat += "<A href='byond://?src=\ref[src];select=[index]'>[D.time], coords: [D.coords]</a><br>"
 	else
 		dat += "No entries recorded."
 	dat += "<hr>"
-	dat += "<A href='?src=\ref[src];refresh=1'>Refresh</a><br>"
-	dat += "<A href='?src=\ref[src];close=1'>Close</a><br>"
-	user << browse(dat,"window=depth_scanner;size=300x500")
-	onclose(user, "depth_scanner")
+	dat += "<A href='byond://?src=\ref[src];refresh=1'>Refresh</a><br>"
+
+	var/datum/browser/popup = new(user, "depth_scanner", null, 300, 500)
+	popup.set_content(dat)
+	popup.open()
+
 
 /obj/item/device/depth_scanner/Topic(href, href_list)
 	..()
@@ -124,8 +125,5 @@
 			//GC will hopefully pick them up before too long
 			positive_locations = list()
 			qdel(current)
-	else if(href_list["close"])
-		usr.unset_machine()
-		usr << browse(null, "window=depth_scanner")
 
 	updateSelfDialog()

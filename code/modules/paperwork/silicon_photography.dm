@@ -6,9 +6,11 @@
 	var/list/fields = list()
 
 /obj/item/device/camera/siliconcam
+	flash_enabled = FALSE
 	var/in_camera_mode = 0
 	var/photos_taken = 0
 	var/list/aipictures = list()
+	can_put_lens = FALSE
 
 /obj/item/device/camera/siliconcam/ai_camera //camera AI can take pictures with
 	name = "AI photo camera"
@@ -26,6 +28,7 @@
 
 /obj/item/device/camera/siliconcam/proc/injectmasteralbum(datum/picture/P) //stores image information to a list similar to that of the datacore
 	var/mob/living/silicon/robot/C = src.loc
+	playsound(src, 'sound/items/polaroid3.ogg', VOL_EFFECTS_MASTER, 75, FALSE)
 	if(C.connected_ai)
 		var/mob/A = P.fields["author"]
 		C.connected_ai.aiCamera.injectaialbum(P, " (taken by [A.name])")
@@ -61,7 +64,8 @@
 	var/obj/item/weapon/photo/P = new/obj/item/weapon/photo()
 	P.construct(selection)
 	P.show(usr)
-	to_chat(usr, P.desc)
+	if(P.desc)
+		to_chat(usr, P.desc)
 
 	// TG uses a special garbage collector.. qdel(P)
 	qdel(P) //so 10 thousand pictures items are not left in memory should an AI take them and then view them all.
@@ -89,6 +93,12 @@
 	src.in_camera_mode = 1
 	to_chat(usr, "<B>Camera Mode activated</B>")
 
+/obj/item/device/camera/siliconcam/proc/take_image()
+	toggle_camera_mode()
+
+/obj/item/device/camera/siliconcam/proc/view_images()
+	viewpictures()
+
 /obj/item/device/camera/siliconcam/ai_camera/printpicture(mob/user, datum/picture/P)
 	injectaialbum(P)
 	to_chat(usr, "<span class='unconscious'>Image recorded</span>")
@@ -96,47 +106,15 @@
 /obj/item/device/camera/siliconcam/robot_camera/printpicture(mob/user, datum/picture/P)
 	injectmasteralbum(P)
 
-/obj/item/device/camera/siliconcam/ai_camera/proc/take_image()
-	toggle_camera_mode()
-
-/obj/item/device/camera/siliconcam/ai_camera/proc/view_images()
-	viewpictures()
-
 /obj/item/device/camera/siliconcam/ai_camera/verb/delete_images()
 	set category = "AI Commands"
 	set name = "Delete Image"
 	set desc = "Delete image."
 	set src in usr
-
 	deletepicture(src)
 
-/obj/item/device/camera/siliconcam/robot_camera/verb/take_image()
-	set category ="Robot Commands"
-	set name = "Take Image"
-	set desc = "Takes an image."
-	set src in usr
-
-	toggle_camera_mode()
-
-/obj/item/device/camera/siliconcam/robot_camera/verb/view_images()
-	set category ="Robot Commands"
-	set name = "View Images"
-	set desc = "View images."
-	set src in usr
-
-	viewpictures()
-
-/obj/item/device/camera/siliconcam/robot_camera/verb/delete_images()
-	set category = "Robot Commands"
-	set name = "Delete Image"
-	set desc = "Delete a local image."
-	set src in usr
-
-	// Explicitly only allow deletion from the local camera
-	deletepicture(src)
-
-obj/item/device/camera/siliconcam/proc/getsource()
-	if(istype(src.loc, /mob/living/silicon/ai))
+/obj/item/device/camera/siliconcam/proc/getsource()
+	if(isAI(src.loc))
 		return src
 
 	var/mob/living/silicon/robot/C = src.loc

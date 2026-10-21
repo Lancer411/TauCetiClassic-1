@@ -1,235 +1,268 @@
 /obj/item/projectile/magic
 	name = "bolt of nothing"
 	icon_state = "energy"
-	damage = 0
-	damage_type = OXY
+	light_color = "#ffffff"
+	light_power = 2
+	light_range = 2
 	nodamage = 1
 	flag = "magic"
+
+	var/power_of_spell = 1
+
+/obj/item/projectile/magic/atom_init(mapload, power_of_spell = 1)
+	src.power_of_spell = power_of_spell
+	. = ..()
 
 /obj/item/projectile/magic/change
 	name = "bolt of change"
 	icon_state = "ice_1"
 	light_color = "#00bfff"
-	light_power = 2
-	light_range = 2
-	damage = 0
-	damage_type = BURN
-	nodamage = 1
-	flag = "magic"
 
-/obj/item/projectile/magic/change/on_hit(atom/change)
-	wabbajack(change)
+/obj/item/projectile/magic/change/on_hit(atom/target, def_zone = BP_CHEST, blocked = 0)
+	wabbajack(target)
 
-/obj/item/projectile/magic/change/proc/wabbajack (mob/M in living_mob_list)
-	if(istype(M, /mob/living) && M.stat != DEAD)
-		if(M.monkeyizing)	return
-		M.monkeyizing = 1
-		M.canmove = 0
-		M.icon = null
-		M.overlays.Cut()
-		M.invisibility = 101
+/obj/item/projectile/magic/proc/wabbajack(mob/living/M)
+	if(!istype(M) || isAI(M) || isdrone(M) || isconstruct(M) || M.stat == DEAD || M.notransform || isxenoqueen(M) || HAS_TRAIT(M, TRAIT_MORPH_IMMUNE))
+		return
 
-		if(istype(M, /mob/living/silicon/robot))
-			var/mob/living/silicon/robot/Robot = M
-			if(Robot.mmi)	qdel(Robot.mmi)
-		else
-			for(var/obj/item/W in M)
-				if(istype(W, /obj/item/weapon/implant))	//TODO: Carn. give implants a dropped() or something
-					qdel(W)
-					continue
-				W.layer = initial(W.layer)
-				W.plane = initial(W.plane)
-				W.loc = M.loc
-				W.dropped(M)
+	if(!issilicon(M))
+		for(var/obj/item/W in M)
+			M.drop_from_inventory(W)
 
-		var/mob/living/new_mob
+	var/mob/living/new_mob
 
-		//var/randomize = pick("monkey","robot","slime","xeno","human") No xeno for now.
-		var/randomize = pick("monkey","robot","slime","human")
-		switch(randomize)
-			if("monkey")
-				new_mob = new /mob/living/carbon/monkey(M.loc)
-				new_mob.universal_speak = 1
-			if("robot")
-				new_mob = new /mob/living/silicon/robot(M.loc)
-				new_mob.gender = M.gender
-				new_mob.invisibility = 0
-				new_mob.job = "Cyborg"
-				var/mob/living/silicon/robot/Robot = new_mob
-				Robot.mmi = new /obj/item/device/mmi(new_mob)
-				Robot.mmi.transfer_identity(M)	//Does not transfer key/client.
-			if("slime")
-				if(prob(50))		new_mob = new /mob/living/carbon/slime/adult(M.loc)
-				else				new_mob = new /mob/living/carbon/slime(M.loc)
-				new_mob.universal_speak = 1
-			//if("xeno")
-			//	var/alien_caste = pick("Hunter","Sentinel","Drone","Larva")
-			//	switch(alien_caste)
-			//		if("Hunter")	new_mob = new /mob/living/carbon/alien/humanoid/hunter(M.loc)
-			//		if("Sentinel")	new_mob = new /mob/living/carbon/alien/humanoid/sentinel(M.loc)
-			//		if("Drone")		new_mob = new /mob/living/carbon/alien/humanoid/drone(M.loc)
-			//		else			new_mob = new /mob/living/carbon/alien/larva(M.loc)
-			//	new_mob.universal_speak = 1
-			if("human")
-				new_mob = new /mob/living/carbon/human(M.loc, pick(all_species))
-				if(M.gender == MALE)
-					new_mob.gender = MALE
-					new_mob.name = pick(first_names_male)
-				else
-					new_mob.gender = FEMALE
-					new_mob.name = pick(first_names_female)
-				new_mob.name += " [pick(last_names)]"
-				new_mob.real_name = new_mob.name
+	var/randomizer = pick("animal", "cyborg", "carbon")
+	switch(randomizer)
+		if("animal")
+			var/beast = pick(
+				/mob/living/simple_animal/mouse,
+				/mob/living/simple_animal/cow,
+				/mob/living/simple_animal/chicken,
+				/mob/living/simple_animal/chick,
+				/mob/living/simple_animal/cat,
+				/mob/living/simple_animal/corgi,
+				/mob/living/simple_animal/corgi/Lisa,
+				/mob/living/simple_animal/corgi/borgi,
+				/mob/living/simple_animal/corgi/puppy,
+				/mob/living/simple_animal/parrot,
+				/mob/living/simple_animal/crab,
+				/mob/living/simple_animal/hostile/retaliate/goat,
+				/mob/living/simple_animal/pig/shadowpig,
+				/mob/living/simple_animal/pig,
+				/mob/living/simple_animal/turkey,
+				/mob/living/simple_animal/goose,
+				/mob/living/simple_animal/seal,
+				/mob/living/simple_animal/walrus,
+				/mob/living/simple_animal/fox,
+				/mob/living/simple_animal/lizard,
+				/mob/living/simple_animal/pug,
+				/mob/living/simple_animal/shiba,
+				/mob/living/simple_animal/mushroom,
+				/mob/living/simple_animal/yithian,
+				/mob/living/simple_animal/spiderbot)
+			new_mob = new beast(M.loc)
+			new_mob.universal_speak = TRUE
+		if("cyborg")
+			new_mob = new /mob/living/silicon/robot(M.loc, "Default", /datum/ai_laws/asimov_xenophile, FALSE, global.chaplain_religion)
+			new_mob.gender = M.gender
+			new_mob.invisibility = 0
+			new_mob.job = "Cyborg"
+		if("carbon")
+			var/carbon = pick(
+				/mob/living/carbon/human,
+				/mob/living/carbon/monkey,
+				/mob/living/carbon/monkey/tajara,
+				/mob/living/carbon/monkey/skrell,
+				/mob/living/carbon/monkey/unathi,
+				/mob/living/carbon/monkey/diona/podman,
+				/mob/living/carbon/human/tajaran,
+				/mob/living/carbon/human/skrell,
+				/mob/living/carbon/human/unathi,
+				/mob/living/carbon/human/podman,
+				/mob/living/carbon/human/abductor,
+				/mob/living/carbon/human/golem,
+				/mob/living/carbon/human/vox)
+			new_mob = new carbon(M.loc)
+			new_mob.gender = M.gender
+			new_mob.languages = M.languages
+	if(!new_mob)
+		return
 
-				var/datum/preferences/A = new()	//Randomize appearance for the human
-				A.randomize_appearance_for(new_mob)
-	/*		if("animal")
-				if(prob(50))
-					var/beast = pick("carp","bear","tomato","goat")
-					switch(beast)
-						if("carp")		new_mob = new /mob/living/simple_animal/hostile/carp(M.loc)
-						if("bear")		new_mob = new /mob/living/simple_animal/hostile/bear(M.loc)
-						if("tomato")	new_mob = new /mob/living/simple_animal/hostile/tomato(M.loc)
-						if("goat")		new_mob = new /mob/living/simple_animal/hostile/retaliate/goat(M.loc)
-				else
-					var/animal = pick("parrot","corgi","crab","cat","mouse","chicken","cow","lizard","chick")
-					switch(animal)
-						if("parrot")	new_mob = new /mob/living/simple_animal/parrot(M.loc)
-						if("corgi")		new_mob = new /mob/living/simple_animal/corgi(M.loc)
-						if("crab")		new_mob = new /mob/living/simple_animal/crab(M.loc)
-						if("cat")		new_mob = new /mob/living/simple_animal/cat(M.loc)
-						if("mouse")		new_mob = new /mob/living/simple_animal/mouse(M.loc)
-						if("chicken")	new_mob = new /mob/living/simple_animal/chicken(M.loc)
-						if("cow")		new_mob = new /mob/living/simple_animal/cow(M.loc)
-						if("lizard")	new_mob = new /mob/living/simple_animal/lizard(M.loc)
-						else			new_mob = new /mob/living/simple_animal/chick(M.loc)
-				new_mob.universal_speak = 1	*/
-			else
-				return
+	new_mob.attack_log = M.attack_log
+	M.attack_log += text("\[[time_stamp()]\] <font color='orange'>[M.real_name] ([M.ckey]) became [new_mob.real_name].</font>")
 
-		for (var/obj/effect/proc_holder/spell/S in M.spell_list)
-			new_mob.spell_list += new S.type
+	if(M.mind)
+		M.mind.transfer_to(new_mob)
+	else
+		new_mob.key = M.key
 
-		new_mob.attack_log = M.attack_log
-		M.attack_log += text("\[[time_stamp()]\] <font color='orange'>[M.real_name] ([M.ckey]) became [new_mob.real_name].</font>")
+	if(!M.original_body)
+		new_mob.original_body = M
+		M.original_body = M
 
-		new_mob.a_intent = "hurt"
-		if(M.mind)
-			M.mind.transfer_to(new_mob)
-		else
-			new_mob.key = M.key
+	M.forceMove(new_mob)
+	new_mob.original_body = M.original_body
 
-		to_chat(new_mob, "<B>Your form morphs into that of a [randomize].</B>")
-
+	for(var/mob/living/H in M.contents)
+		H.forceMove(new_mob)
 		qdel(M)
-		return new_mob
+
+	new_mob.wabbajacked = 1
+
+	to_chat(new_mob, "<B>Your body forms to something else!</B>")
+
+/mob/living/proc/unwabbajack(mob/living/M)
+	if(!issilicon(M))
+		for(var/obj/item/W in M)
+			M.drop_from_inventory(W)
+
+	var/datum/effect/effect/system/smoke_spread/bad/smoke = new /datum/effect/effect/system/smoke_spread/bad()
+	smoke.set_up(10, 0, src.loc)
+	smoke.start()
+	playsound(src, 'sound/effects/bamf.ogg', VOL_EFFECTS_MASTER)
+
+	var/obj/effect/decal/remains/human/RH = new /obj/effect/decal/remains/human(src.loc)
+	var/matrix/Mx = matrix()
+	RH.transform = Mx
+
+	for(M in contents)
+		M.loc = src.loc
+		if(isliving(M))
+			var/mob/living/L = M
+			L.Paralyse(15)
+			L.update_canmove()
+			if(mind && original_body)
+				mind.transfer_to(original_body)
+
+	qdel(src)
 
 /obj/item/projectile/magic/animate
 	name = "bolt of animation"
 	icon_state = "red_1"
 	light_color = "#ff0000"
-	light_power = 2
-	light_range = 2
-	damage = 0
-	damage_type = BURN
-	nodamage = 1
-	flag = "magic"
 
-/obj/item/projectile/magic/animate/Bump(var/atom/change)
+/obj/item/projectile/magic/animate/on_hit(atom/change)
 	. = ..()
-	if(istype(change, /obj/item) || istype(change, /obj/structure) && !is_type_in_list(change, protected_objects))
+	if(isitem(change) || istype(change, /obj/structure) && !is_type_in_list(change, protected_objects))
 		var/obj/O = change
 		new /mob/living/simple_animal/hostile/mimic/copy(O.loc, O, firer)
 	else if(istype(change, /mob/living/simple_animal/hostile/mimic/copy))
 		// Change our allegiance!
 		var/mob/living/simple_animal/hostile/mimic/copy/C = change
 		C.ChangeOwner(firer)
+		create_spawner(/datum/spawner/living/mimic, C)
+	else if(isshade(change) || isxeno(change))
+		var/mob/living/M = animate_atom_living(change)
+		if(!M)
+			return
+		if(firer && iswizard(firer))
+			var/datum/role/wizard/mage = firer.mind.GetRole(WIZARD)
+			var/datum/faction/wizards/federation = mage.GetFaction()
+			if(federation && M.mind)
+				var/datum/role/wizard_apprentice/recruit = add_faction_member(federation, M)
+				var/datum/objective/target/protect/new_objective = recruit.AppendObjective(/datum/objective/target/protect)
+				new_objective.explanation_text = "Help [firer.real_name], the Demiurgos of your new life."
+				new_objective.target = firer.mind
+				var/datum/role/R = M.mind.GetRole(EVIL_SHADE)
+				if(R)
+					R.Deconvert()
 
+/obj/item/projectile/magic/animate/proc/animate_atom_living(mob/living/M)
+	if(!istype(M) || M.stat == DEAD || M.notransform || HAS_TRAIT(M, TRAIT_MORPH_IMMUNE) || !M.client || isxenoqueen(M))
+		return
 
-/*
-/obj/item/projectile/magic/death
-	name = "bolt of death"
-	icon_state = "pulse1_bl"
-	damage = 9001
-	damage_type = OXY
-	nodamage = 0
-	flag = "magic"
+	M.notransform = TRUE
+	M.canmove = 0
+	M.icon = null
+	M.cut_overlays()
+	M.invisibility = 101
 
-/obj/item/projectile/magic/fireball
-	name = "bolt of fireball"
-	icon_state = "fireball"
-	damage = 25 //The spell fireball additionally does 20 burn, so the wand fireball is marginally less painful
-	damage_type = BRUTE
-	nodamage = 0
-	flag = "magic"
+	var/mob/living/new_mob
 
-/obj/item/projectile/magic/fireball/on_hit(target)
-	var/turf/T = get_turf(target)
-	explosion(T, -1, 0, 2, 3, 0, flame_range = 2)
+	var/randomizer = pick("animal", "cyborg", "xeno")
+	if(isxeno(M))
+		randomizer = "xeno"
+	switch(randomizer)
+		if("animal")
+			var/beast = pick(/mob/living/simple_animal/hostile/carp, /mob/living/simple_animal/hostile/tomato/angry_tomato, /mob/living/simple_animal/hostile/retaliate/goat, /mob/living/simple_animal/pig/shadowpig)
+			new_mob = new beast(M.loc)
+			new_mob.universal_speak = TRUE
+		if("cyborg")
+			new_mob = new /mob/living/silicon/robot(M.loc, "Default", /datum/ai_laws/asimov_xenophile, FALSE, global.chaplain_religion)
+			new_mob.gender = M.gender
+			new_mob.invisibility = 0
+			new_mob.job = "Cyborg"
+		if("xeno")
+			new_mob = new /mob/living/carbon/xenomorph/humanoid/maid(M.loc)
+			new_mob.universal_speak = TRUE
+	if(!new_mob)
+		return
+
+	new_mob.attack_log = M.attack_log
+	M.attack_log += text("\[[time_stamp()]\] <font color='orange'>[M.real_name] ([M.ckey]) became [new_mob.real_name].</font>")
+
+	new_mob.set_a_intent(INTENT_HARM)
+	if(M.mind)
+		M.mind.transfer_to(new_mob)
+	else
+		new_mob.key = M.key
+
+	to_chat(new_mob, "<B>Your body forms to something else!</B>")
+
+	qdel(M)
+	return new_mob
 
 /obj/item/projectile/magic/resurrection
 	name = "bolt of resurrection"
 	icon_state = "ion"
-	damage = 0
-	damage_type = OXY
-	nodamage = 1
-	flag = "magic"
+	light_color = "#a9e2f3"
 
-/obj/item/projectile/magic/resurrection/on_hit(mob/living/carbon/target)
-
-	if(istype(target,/mob))
-		var/old_stat = target.stat
-		target.revive()
-		target.suiciding = 0
-		if(!target.ckey)
-			for(var/mob/dead/observer/ghost in player_list)
-				if(target.real_name == ghost.real_name)
-					ghost.reenter_corpse()
-					break
-		if(old_stat != DEAD)
-			to_chat(target, "<span class='notice'>You feel great!</span>")
-		else
-			to_chat(target, "<span class='notice'>You rise with a start, you're alive!!!</span>")
-
-/obj/item/projectile/magic/teleport
-	name = "bolt of teleportation"
-	icon_state = "bluespace"
-	damage = 0
-	damage_type = OXY
-	nodamage = 1
-	flag = "magic"
-	var/inner_tele_radius = 0
-	var/outer_tele_radius = 6
-
-/obj/item/projectile/magic/teleport/on_hit(mob/target)
-	var/teleammount = 0
-	var/teleloc = target
-	if(!isturf(target))
-		teleloc = target.loc
-	for(var/atom/movable/stuff in teleloc)
-		if(!stuff.anchored && stuff.loc)
-			teleammount++
-			do_teleport(stuff, stuff, 10)
-			var/datum/effect/effect/system/harmless_smoke_spread/smoke = new /datum/effect/effect/system/harmless_smoke_spread()
-			smoke.set_up(max(round(10 - teleammount),1), 0, stuff.loc) //Smoke drops off if a lot of stuff is moved for the sake of sanity
-			smoke.start()
+/obj/item/projectile/magic/resurrection/on_hit(atom/target, def_zone = BP_CHEST, blocked = 0)
+	if(!iscarbon(target))
+		return
+	var/mob/living/carbon/C = target
+	var/old_stat = C.stat
+	C.revive()
+	if(!C.ckey || !C.mind)
+		for(var/mob/dead/observer/ghost as anything in observer_list)
+			if(C.mind == ghost.mind)
+				ghost.reenter_corpse()
+				break
+	if(old_stat != DEAD)
+		to_chat(target, "<span class='notice'>You feel great!</span>")
+	else
+		to_chat(target, "<span class='notice'>You rise with a start, you're alive!!!</span>")
 
 /obj/item/projectile/magic/door
 	name = "bolt of door creation"
-	icon_state = "energy"
-	damage = 0
-	damage_type = OXY
-	nodamage = 1
-	flag = "magic"
+	var/list/doors = list(/obj/structure/mineral_door/metal, /obj/structure/mineral_door/silver,/obj/structure/mineral_door/gold, /obj/structure/mineral_door/uranium,
+					/obj/structure/mineral_door/sandstone, /obj/structure/mineral_door/transparent/diamond, /obj/structure/mineral_door/wood)
 
-/obj/item/projectile/magic/door/on_hit(atom/target)
-	var/atom/T = target.loc
-	if(isturf(target))
-		if(target.density)
-			new /obj/structure/mineral_door/wood(target)
-			target:ChangeTurf(/turf/simulated/floor/plating)
-	else if (isturf(T))
-		if(T.density)
-			new /obj/structure/mineral_door/wood(T)
-			T:ChangeTurf(/turf/simulated/floor/plating)
-*/
+/obj/item/projectile/magic/door/on_hit(atom/target, def_zone = BP_CHEST, blocked = 0)
+	if(!(getOPressureDifferential(target) >= FIREDOOR_MAX_PRESSURE_DIFF))
+		if(iswallturf(target))
+			var/turf/place = target
+			place.ChangeTurf(/turf/simulated/floor/plating)
+			var/pickedtype = pick(doors)
+			new pickedtype(place)
+		else if(istype(target, /obj/machinery/door))
+			var/obj/machinery/door/D = target
+			D.open()
+		else if(istype(target, /obj/structure/mineral_door))
+			var/obj/structure/mineral_door/D = target
+			D.Open()
+	qdel(src)
+
+/obj/item/projectile/magic/forcebolt
+	name = "force bolt"
+	icon_state = "ice_1"
+	light_color = "#00bfff"
+	damage = 20
+	nodamage = 0
+
+/obj/item/projectile/magic/forcebolt/on_hit(atom/target, def_zone = BP_CHEST, blocked = 0)
+
+	var/obj/T = target
+	var/throwdir = get_dir(firer,target)
+	T.throw_at(get_edge_target_turf(target, throwdir),10,10)
+	return 1

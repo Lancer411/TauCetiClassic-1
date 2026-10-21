@@ -6,20 +6,20 @@
 /obj/nano_module/alarm_monitor/ai
 	list_cameras = 1
 
-/obj/nano_module/alarm_monitor/ai/New()
-	..()
+/obj/nano_module/alarm_monitor/ai/atom_init()
+	. = ..()
 	alarm_handlers = alarm_manager.all_handlers
 
-/obj/nano_module/alarm_monitor/borg/New()
-	..()
+/obj/nano_module/alarm_monitor/borg/atom_init()
+	. = ..()
 	alarm_handlers = alarm_manager.all_handlers
 
-/obj/nano_module/alarm_monitor/engineering/New()
-	..()
+/obj/nano_module/alarm_monitor/engineering/atom_init()
+	. = ..()
 	alarm_handlers = list(atmosphere_alarm, fire_alarm, power_alarm)
 
-/obj/nano_module/alarm_monitor/security/New()
-	..()
+/obj/nano_module/alarm_monitor/security/atom_init()
+	. = ..()
 	alarm_handlers = list(camera_alarm, motion_alarm)
 
 /obj/nano_module/alarm_monitor/proc/register(object, procName)
@@ -85,7 +85,7 @@
 					"origin_lost" = A.origin == null,
 					"has_cameras" = cameras.len,
 					"cameras" = cameras,
-					"lost_sources" = lost_sources.len ? sanitize(english_list(lost_sources, nothing_text = "", and_text = ", ")) : ""))
+					"lost_sources" = lost_sources.len ? sanitize(get_english_list(lost_sources, nothing_text = "", and_text = ", ")) : ""))
 	data["categories"] = categories
 
 	ui = nanomanager.try_update_ui(user, src, ui_key, ui, data, force_open)

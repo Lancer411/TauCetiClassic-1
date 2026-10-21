@@ -3,35 +3,48 @@
 	name = "magboots"
 	icon_state = "magboots0"
 	item_state = "magboots"
-	species_restricted = null
+	item_state_world = "magboots0_w"
 	var/magpulse = 0
 	var/magboot_state = "magboots"
 	var/slowdown_off = 2
-	action_button_name = "Toggle Magboots"
-//	flags = NOSLIP //disabled by default
+	origin_tech = "materials=3;magnets=4;engineering=4"
+	item_action_types = list(/datum/action/item_action/hands_free/toggle_magboots)
+
+/datum/action/item_action/hands_free/toggle_magboots
+	name = "Toggle Magboots"
 
 /obj/item/clothing/shoes/magboots/attack_self(mob/user)
+	if(user.is_busy() || !do_after(user, 0.8 SECONDS, target = src))
+		return
 	if(magpulse)
-		flags &= ~NOSLIP
+		detach_clothing_traits(TRAIT_NOSLIP)
+		flags &= ~AIR_FLOW_PROTECT
 		slowdown = SHOES_SLOWDOWN
 		magpulse = 0
+		playsound(src, 'sound/effects/magb4.ogg', VOL_EFFECTS_MASTER, 100)
 		icon_state = "[magboot_state]0"
+		item_state_world = "[magboot_state]0_w"
+		item_state_inventory = "[magboot_state]0"
 		to_chat(user, "You disable the mag-pulse traction system.")
 	else
-		flags |= NOSLIP
+		attach_clothing_traits(TRAIT_NOSLIP)
+		flags |= AIR_FLOW_PROTECT
 		slowdown = slowdown_off
 		magpulse = 1
+		playsound(src, pick(SOUNDIN_MAGBOOTS_TOGGLE), VOL_EFFECTS_MASTER, 100)
 		icon_state = "[magboot_state]1"
+		item_state_world = "[magboot_state]1_w"
+		item_state_inventory = "[magboot_state]1"
 		to_chat(user, "You enable the mag-pulse traction system.")
-	user.update_inv_shoes()	//so our mob-overlays update
+
+	update_inv_mob()
+	update_item_actions()
 	user.update_gravity(user.mob_has_gravity())
 
 /obj/item/clothing/shoes/magboots/examine(mob/user)
 	..()
-	var/state = "disabled"
-	if(src.flags & NOSLIP)
-		state = "enabled"
+	var/state = magpulse ? "enabled" : "disabled"
 	to_chat(user, "Its mag-pulse traction system appears to be [state].")
 
 /obj/item/clothing/shoes/magboots/negates_gravity()
-	return flags & NOSLIP
+	return magpulse

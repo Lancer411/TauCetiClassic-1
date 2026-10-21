@@ -1,12 +1,13 @@
-/mob/living/silicon/ai/var/max_locations = 5
-/mob/living/silicon/ai/var/stored_locations[0]
+/mob/living/silicon/ai
+	var/max_locations = 5
+	var/list/stored_locations = list()
 
 /mob/living/silicon/ai/proc/InvalidTurf(turf/T)
 	if(!T)
 		return 1
-	if(T.z == ZLEVEL_CENTCOMM)
+	if(is_centcom_level(T.z))
 		return 1
-	if(T.z > ZLEVEL_EMPTY)
+	if(!SSmapping.has_level(T.z))
 		return 1
 	return 0
 
@@ -35,6 +36,10 @@
 
 /mob/living/silicon/ai/proc/ai_camera_list(camera in get_camera_list())
 
+	if(uses_legs)
+		to_chat(src, "Not in mobility mode.")
+		return
+
 	if(src.stat == DEAD)
 		to_chat(src, "You can't list the cameras because you are dead!")
 		return
@@ -44,7 +49,7 @@
 
 	var/obj/machinery/camera/C = track.cameras[camera]
 	track = null
-	src.eyeobj.setLoc(C)
+	eyeobj.setLoc(C)
 
 	return
 
@@ -54,21 +59,21 @@
 	set desc = "Stores your current camera location by the given name."
 
 	if(stored_locations.len >= max_locations)
-		to_chat(src, "\red Cannot store additional locations. Remove one first")
+		to_chat(src, "<span class='warning'>Cannot store additional locations. Remove one first</span>")
 		return
 
 	loc = trim(loc)
 	if(!loc)
-		to_chat(src, "\red Must supply a location name")
+		to_chat(src, "<span class='warning'>Must supply a location name</span>")
 		return
 
 	if(loc in stored_locations)
-		to_chat(src, "\red There is already a stored location by this name")
+		to_chat(src, "<span class='warning'>There is already a stored location by this name</span>")
 		return
 
-	var/L = src.eyeobj.getLoc()
+	var/L = eyeobj.getLoc()
 	if (InvalidTurf(get_turf(L)))
-		to_chat(src, "\red Unable to store this location")
+		to_chat(src, "<span class='warning'>Unable to store this location</span>")
 		return
 
 	stored_locations[loc] = L
@@ -83,11 +88,11 @@
 	set desc = "Returns to the selected camera location."
 
 	if (!(loc in stored_locations))
-		to_chat(src, "\red Location [loc] not found")
+		to_chat(src, "<span class='warning'>Location [loc] not found</span>")
 		return
 
 	var/L = stored_locations[loc]
-	src.eyeobj.setLoc(L)
+	eyeobj.setLoc(L)
 
 /mob/living/silicon/ai/proc/ai_remove_location(loc in sorted_stored_locations())
 	set category = "AI Commands"
@@ -95,7 +100,7 @@
 	set desc = "Deletes the selected camera location."
 
 	if (!(loc in stored_locations))
-		to_chat(src, "\red Location [loc] not found")
+		to_chat(src, "<span class='warning'>Location [loc] not found</span>")
 		return
 
 	stored_locations.Remove(loc)
@@ -115,7 +120,7 @@
 		return list()
 
 	var/datum/trackable/TB = new()
-	for(var/mob/living/M in mob_list)
+	for(var/mob/living/M as anything in living_list)
 		// Easy checks first.
 		// Don't detect mobs on Centcom. Since the wizard den is on Centcomm, we only need this.
 		if(InvalidTurf(get_turf(M)))
@@ -124,25 +129,15 @@
 			continue
 		if(M.invisibility)//cloaked
 			continue
-		if(M.digitalcamo)
+		if(SEND_SIGNAL(M, COMSIG_LIVING_CAN_TRACK) & COMPONENT_CANT_TRACK)
 			continue
-
-		// Human check
-		var/human = 0
-		if(istype(M, /mob/living/carbon/human))
-			human = 1
-			var/mob/living/carbon/human/H = M
-			//Cameras can't track people wearing an agent card or hat with blockTracking.
-			if(H.wear_id && istype(H.wear_id.GetID(), /obj/item/weapon/card/id/syndicate))
-				continue
-			if(istype(H.head, /obj/item/clothing/head))
-				var/obj/item/clothing/head/hat = H.head
-				if(hat.blockTracking)
-					continue
 
 		 // Now, are they viewable by a camera? (This is last because it's the most intensive check)
 		if(!near_camera(M))
 			continue
+
+		// Human check
+		var/human = ishuman(M) ? TRUE : FALSE
 
 		var/name = M.name
 		if (name in TB.names)
@@ -186,7 +181,7 @@
 	cameraFollow = null
 
 /mob/living/silicon/ai/proc/ai_actual_track(mob/living/target)
-	if(!istype(target))	return
+	if(!istype(target) || uses_legs)	return
 	var/mob/living/silicon/ai/U = usr
 
 	U.cameraFollow = target
@@ -197,22 +192,9 @@
 		while (U.cameraFollow == target)
 			if (U.cameraFollow == null)
 				return
-			if (istype(target, /mob/living/carbon/human))
-				var/mob/living/carbon/human/H = target
-				if(H.wear_id && istype(H.wear_id.GetID(), /obj/item/weapon/card/id/syndicate))
-					to_chat(U, "Follow camera mode terminated.")
-					U.cameraFollow = null
-					return
-				if(istype(H.head, /obj/item/clothing/head))
-					var/obj/item/clothing/head/hat = H.head
-					if(hat.blockTracking)
-						to_chat(U, "Follow camera mode terminated.")
-						U.cameraFollow = null
-						return
-				if(H.digitalcamo)
-					to_chat(U, "Follow camera mode terminated.")
-					U.cameraFollow = null
-					return
+			if(SEND_SIGNAL(target, COMSIG_LIVING_CAN_TRACK) & COMPONENT_CANT_TRACK)
+				to_chat(U, "Follow camera mode terminated.")
+				return
 
 			if(istype(target.loc,/obj/effect/dummy))
 				to_chat(U, "Follow camera mode ended.")
@@ -245,7 +227,7 @@
 /obj/machinery/camera/attack_ai(mob/living/silicon/ai/user)
 	if (!istype(user))
 		return
-	if (!src.can_use())
+	if (!can_use() || user.uses_legs)
 		return
 	user.eyeobj.setLoc(get_turf(src))
 
@@ -269,16 +251,16 @@
 					L.Swap(j, j + 1)
 	return L
 
-mob/living/proc/tracking_initiated()
+/mob/living/proc/tracking_initiated()
 
-mob/living/silicon/robot/tracking_initiated()
+/mob/living/silicon/robot/tracking_initiated()
 	tracking_entities++
 	if(tracking_entities == 1 && has_zeroth_law())
 		to_chat(src, "<span class='warning'>Internal camera is currently being accessed.</span>")
 
-mob/living/proc/tracking_cancelled()
+/mob/living/proc/tracking_cancelled()
 
-mob/living/silicon/robot/tracking_initiated()
+/mob/living/silicon/robot/tracking_initiated()
 	tracking_entities--
 	if(!tracking_entities && has_zeroth_law())
 		to_chat(src, "<span class='notice'>Internal camera is no longer being accessed.</span>")

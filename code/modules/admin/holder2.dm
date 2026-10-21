@@ -1,4 +1,4 @@
-var/list/admin_datums = list()
+var/global/list/admin_datums = list()
 
 /datum/admins
 	var/rank			= "Temporary Admin"
@@ -7,12 +7,18 @@ var/list/admin_datums = list()
 	var/fakekey			= null
 	var/deadminned = FALSE
 
+	var/MC_ss_show_all = FALSE
+
 	var/datum/marked_datum
 
 	var/admincaster_screen = 0	//See newscaster.dm under machinery for a full description
 	var/datum/feed_message/admincaster_feed_message = new /datum/feed_message   //These two will act as holders.
 	var/datum/feed_channel/admincaster_feed_channel = new /datum/feed_channel
 	var/admincaster_signature	//What you'll sign the newsfeeds as
+
+	var/datum/filter_editor/filteriffic
+	var/datum/particle_editor/particool
+	var/datum/bloom_edit/debug_bloom
 
 /datum/admins/New(initial_rank = "Temporary Admin", initial_rights = 0, ckey)
 	if(!ckey)
@@ -25,7 +31,7 @@ var/list/admin_datums = list()
 	admin_datums[ckey] = src
 
 /datum/admins/proc/associate(client/C)
-	if(istype(C))
+	if(istype(C) && C.hub_authenticated)
 		owner = C
 		owner.holder = src
 		owner.add_admin_verbs()	//TODO
@@ -40,7 +46,7 @@ var/list/admin_datums = list()
 		deadminned = TRUE
 
 /datum/admins/proc/reassociate()
-	if(owner)
+	if(owner && owner.hub_authenticated)
 		admins += owner
 		owner.holder = src
 		owner.deadmin_holder = null
@@ -53,7 +59,7 @@ if rights_required == 0, then it simply checks if they are an admin.
 if it doesn't return 1 and show_msg=1 it will prints a message explaining why the check has failed
 generally it would be used like so:
 
-proc/admin_proc()
+/proc/admin_proc()
 	if(!check_rights(R_ADMIN)) return
 	to_chat(world, "you have enough rights!")
 
@@ -88,6 +94,14 @@ you will have to do something like if(client.holder.rights & R_ADMIN) yourself.
 					return 1	//we have all the rights they have and more
 		to_chat(usr, "<font color='red'>Error: Cannot proceed. They have more or equal rights to us.</font>")
 	return 0
+
+//This proc checks whether subject has at least ONE of the rights specified in rights_required.
+/proc/check_rights_for(client/subject, rights_required)
+	if(subject && subject.holder)
+		if(rights_required && !(rights_required & subject.holder.rights))
+			return FALSE
+		return TRUE
+	return FALSE
 
 /client/proc/deadmin()
 	if(holder)

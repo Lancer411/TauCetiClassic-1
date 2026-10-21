@@ -4,47 +4,108 @@
 	damage = 60
 	damage_type = BRUTE
 	nodamage = 0
-	flag = "bullet"
+	flag = BULLET
 	embed = 1
 	sharp = 1
 	var/stoping_power = 0
 
 	muzzle_type = /obj/effect/projectile/bullet/muzzle
 
-	on_hit(atom/target, blocked = 0)
-		if (..(target, blocked))
-			var/mob/living/L = target
-			shake_camera(L, 3, 2)
+/obj/item/projectile/bullet/atom_init()
+	. = ..()
+	proj_act_sound = SOUNDIN_BULLETACT
+
+/obj/item/projectile/bullet/on_hit(atom/target, def_zone = BP_CHEST, blocked = 0)
+	if (..())
+		var/mob/living/L = target
+		shake_camera(L, 3, 2)
 
 /obj/item/projectile/bullet/weakbullet // "rubber" bullets
-	damage = 10
+	damage = 3
 	stun = 0
 	weaken = 0
-	agony = 80
+	agony = 40
 	embed = 0
 	sharp = 0
 
+/obj/item/projectile/bullet/weakbullet/atom_init()
+	. = ..()
+	proj_act_sound = SOUNDIN_WEAKBULLETACT
+
+
+/obj/item/projectile/bullet/slug
+	name = "shotgun slug"
+	damage = 30
+	armor_multiplier = 0.4
+	close_range_impact_force = 1
+
 /obj/item/projectile/bullet/pellet
 	name = "pellet"
-	damage = 20
+	damage = 14
+	dispersion = 2.5
+	armor_multiplier = 1.25
+	close_range_impact_force = 1
 
 /obj/item/projectile/bullet/weakbullet/beanbag		//because beanbags are not bullets
 	name = "beanbag"
 	agony = 95
+	close_range_impact_force = 1
 
 /obj/item/projectile/bullet/weakbullet/rubber
 	name = "rubber bullet"
 
-/obj/item/projectile/bullet/midbullet //.45 ACP
+/obj/item/projectile/bullet/weakbullet/nl_rifle
+	stutter = 10
+	agony = 55
+
+/obj/item/projectile/bullet/smg //.45 ACP
 	damage = 20
-	stoping_power = 5
+
+/obj/item/projectile/bullet/smg_hp
+	name = "high power bullet"
+	damage = 35
+
+/obj/item/projectile/bullet/smg_imp
+	name = "impact bullet"
+	damage = 20
+	impact_force = 1
+	stoping_power = 4
+
+/obj/item/projectile/bullet/smg_hv
+	name = "high velocity bullet"
+	damage = 20
+	hitscan = 1
+	armor_multiplier = 0.7
+
+/obj/item/projectile/bullet/peabullet
+	name = "pea bullet"
+	damage = 3
+	agony = 10
+
+/obj/item/projectile/bullet/peabullet/in_fire
+	damage = 8
+	agony = 15
+	weaken = 1
+	incendiary = 2
+
+/obj/item/projectile/bullet/peabullet/virus
+	name = "virus pea bullet"
+	damage = 15
+	agony = 15
+	weaken = 1
+
+/obj/item/projectile/bullet/peabullet/virus/in_fire
+	damage = 18
+	agony = 20
+	stun = 3
+	incendiary = 5
 
 /obj/item/projectile/bullet/midbullet2 // 9x19
 	damage = 25
 
 /obj/item/projectile/bullet/revbullet //.357
 	damage = 35
-	stoping_power = 8
+	armor_multiplier = 0.6
 
 /obj/item/projectile/bullet/rifle1
 	damage = 40
@@ -52,6 +113,15 @@
 
 /obj/item/projectile/bullet/rifle2
 	damage = 45
+	embed = 0
+
+/obj/item/projectile/bullet/rifle3
+	damage = 35
+	embed = 0
+
+/obj/item/projectile/bullet/pulserifle
+	name = "pulse bullet"
+	damage = 15
 	embed = 0
 
 /obj/item/projectile/bullet/heavy/a145
@@ -62,6 +132,7 @@
 	hitscan = 1
 
 /obj/item/projectile/bullet/grenade/r4046
+	name = "rubber grenade"
 	damage = 10
 	stun = 10
 	weaken = 10
@@ -69,12 +140,35 @@
 	embed = 0
 	sharp = 0
 
+/obj/item/projectile/bullet/grenade/r4046/atom_init()
+	. = ..()
+	proj_act_sound = SOUNDIN_WEAKBULLETACT
+
+
+/obj/item/projectile/bullet/grenade/explosive
+	name = "grenade"
+	damage = 10
+	embed = 0
+	sharp = 0
+
+/obj/item/projectile/bullet/grenade/explosive/on_hit(atom/target, def_zone = BP_CHEST, blocked = 0)
+	explosion(target, 0, 1, 2)
+	return 1
+
+/obj/item/projectile/bullet/grenade/explosive/light/on_hit(atom/target, def_zone = BP_CHEST, blocked = 0)
+	explosion(target, 0, 0, 5)
+	return 1
+
 /obj/item/projectile/bullet/chem
 	damage = 5
 	stun = 2
 	var/list/beakers					// for grenade
 
-/obj/item/projectile/bullet/chem/on_hit(atom/target, blocked = 0)
+/obj/item/projectile/bullet/chem/atom_init()
+	. = ..()
+	proj_act_sound = null
+
+/obj/item/projectile/bullet/chem/on_hit(atom/target, def_zone = BP_CHEST, blocked = 0)
 	if(beakers != null)
 		var/obj/item/weapon/reagent_containers/glass/beaker/bluespace/Big = new /obj/item/weapon/reagent_containers/glass/beaker/bluespace(src)
 		for(var/obj/item/weapon/reagent_containers/glass/G in beakers)
@@ -83,8 +177,8 @@
 
 /obj/item/projectile/bullet/chem/teargas
 
-/obj/item/projectile/bullet/chem/teargas/New()
-	..()
+/obj/item/projectile/bullet/chem/teargas/atom_init()
+	. = ..()
 	var/obj/item/weapon/reagent_containers/glass/beaker/B1 = new(src)
 	var/obj/item/weapon/reagent_containers/glass/beaker/B2 = new(src)
 	B1.reagents.add_reagent("condensedcapsaicin", 15)
@@ -99,8 +193,8 @@
 
 /obj/item/projectile/bullet/chem/EMP
 
-/obj/item/projectile/bullet/chem/EMP/New()
-	..()
+/obj/item/projectile/bullet/chem/EMP/atom_init()
+	. = ..()
 	var/obj/item/weapon/reagent_containers/glass/beaker/B1 = new(src)
 	var/obj/item/weapon/reagent_containers/glass/beaker/B2 = new(src)
 	B1.reagents.add_reagent("uranium", 15)
@@ -114,8 +208,8 @@
 	damage = 20
 	stun = 5
 
-/obj/item/projectile/bullet/chem/Exp/New()
-	..()
+/obj/item/projectile/bullet/chem/Exp/atom_init()
+	. = ..()
 	var/obj/item/weapon/reagent_containers/glass/beaker/B1 = new(src)
 	var/obj/item/weapon/reagent_containers/glass/beaker/B2 = new(src)
 	B1.reagents.add_reagent("glycerol", 15)
@@ -132,12 +226,18 @@
 	damage = 20
 	damage_type = OXY
 
+/obj/item/projectile/bullet/suffocationbullet/atom_init()
+	. = ..()
+	proj_act_sound = SOUNDIN_WEAKBULLETACT
 
 /obj/item/projectile/bullet/cyanideround
 	name = "poison bullet"
 	damage = 40
 	damage_type = TOX
 
+/obj/item/projectile/bullet/cyanideround/atom_init()
+	. = ..()
+	proj_act_sound = SOUNDIN_WEAKBULLETACT
 
 /obj/item/projectile/bullet/burstbullet//I think this one needs something for the on hit
 	name = "exploding bullet"
@@ -145,53 +245,47 @@
 	embed = 0
 	edge = 1
 
-/obj/item/projectile/bullet/stunslug
-	name = "stunslug"
+/obj/item/projectile/bullet/stunshot
+	name = "stunshot"
 	icon_state = "spark"
+	flag = ENERGY
 	damage = 5
 	stun = 0
 	weaken = 0
 	stutter = 10
-	agony = 60
+	agony = 20
 	embed = 0
 	sharp = 0
+	dispersion = 2.0
+
+/obj/item/projectile/bullet/stunshot/atom_init()
+	. = ..()
+	proj_act_sound = SOUNDIN_WEAKBULLETACT
 
 /obj/item/projectile/bullet/a762
-	damage = 50
+	damage = 30
 	embed = 0
 
 /obj/item/projectile/bullet/incendiary
 	name = "incendiary bullet"
 	damage = 20
+	incendiary = 10
 
-/obj/item/projectile/bullet/incendiary/on_hit(atom/target, blocked = 0)
-	if(istype(target, /mob/living/carbon))
-		var/mob/living/carbon/M = target
-		M.adjust_fire_stacks(10)
-		M.IgniteMob()
+/obj/item/projectile/bullet/incendiary/buckshot
+	name = "incendiary shell"
+	damage = 7
+	incendiary = 2
+	dispersion = 2.0
+	close_range_impact_force = 1
 
 /obj/item/projectile/bullet/chameleon
 	damage = 1 // stop trying to murderbone with a fake gun dumbass!!!
 	embed = 0 // nope
 	fake = 1
 
-/obj/item/projectile/l10
-	name ="projectile"
-	icon = 'icons/obj/projectiles.dmi'
-	icon_state = "l10"
-	layer = ABOVE_HUD_LAYER
-	plane = ABOVE_HUD_PLANE
-	light_color = "#2be4b8"
-	light_power = 2
-	light_range = 2
-	damage = 15
-	damage_type = BURN
-	flag = "energy"
-	eyeblur = 4
-	sharp = 0
-	edge = 0
-
-	muzzle_type = /obj/effect/projectile/energy/muzzle
+/obj/item/projectile/bullet/chameleon/atom_init()
+	. = ..()
+	proj_act_sound = SOUNDIN_WEAKBULLETACT
 
 /obj/item/projectile/bullet/midbullet3
 	damage = 35
@@ -200,10 +294,14 @@
 	name = "flare"
 	icon_state= "bolter"
 	damage = 5
-	luminosity = 8
+	light_range = 8
 
-/obj/item/projectile/bullet/flare/on_hit(atom/target, blocked = 0)
-	if(istype(target, /mob/living/carbon))
+/obj/item/projectile/bullet/flare/atom_init()
+	. = ..()
+	proj_act_sound = SOUNDIN_WEAKBULLETACT
+
+/obj/item/projectile/bullet/flare/on_hit(atom/target, def_zone = BP_CHEST, blocked = 0)
+	if(iscarbon(target))
 		var/mob/living/carbon/M = target
 		M.adjust_fire_stacks(1)
 		M.IgniteMob()

@@ -1,10 +1,12 @@
+ADD_TO_GLOBAL_LIST(/obj/structure/dispenser, tank_dispenser_list)
 /obj/structure/dispenser
 	name = "tank storage unit"
-	desc = "A simple yet bulky storage device for gas tanks. Has room for up to ten oxygen tanks, and ten phoron tanks."
+	cases = list("раздатчик баллонов", "раздатчика баллонов", "раздатчику баллонов", "раздатчик баллонов", "раздатчиком баллонов", "раздатчике баллонов")
+	desc = "Простое и массивное хранилище для газовых баллонов. Вмещает до десяти баллонов с кислородом и до десяти баллонов с фороном."
 	icon = 'icons/obj/objects.dmi'
 	icon_state = "dispenser"
-	density = 1
-	anchored = 1.0
+	density = TRUE
+	anchored = TRUE
 	var/oxygentanks = 10
 	var/phorontanks = 10
 	var/list/oxytanks = list()	//sorry for the similar var names
@@ -18,26 +20,27 @@
 	oxygentanks = 0
 
 
-/obj/structure/dispenser/New()
+/obj/structure/dispenser/atom_init()
+	. = ..()
 	update_icon()
 
 
 /obj/structure/dispenser/update_icon()
-	overlays.Cut()
+	cut_overlays()
 	switch(oxygentanks)
-		if(1 to 3)	overlays += "oxygen-[oxygentanks]"
-		if(4 to INFINITY) overlays += "oxygen-4"
+		if(1 to 4)	add_overlay("oxygen-[oxygentanks]")
+		if(5 to INFINITY) add_overlay("oxygen-5")
 	switch(phorontanks)
-		if(1 to 4)	overlays += "phoron-[phorontanks]"
-		if(5 to INFINITY) overlays += "phoron-5"
+		if(1 to 4)	add_overlay("phoron-[phorontanks]")
+		if(5 to INFINITY) add_overlay("phoron-5")
 
 
 /obj/structure/dispenser/attack_hand(mob/user)
 	user.set_machine(src)
 	var/dat
-	dat += "Oxygen tanks: [oxygentanks] - [oxygentanks ? "<A href='?src=\ref[src];oxygen=1'>Dispense</A>" : "empty"]<br>"
-	dat += "Phoron tanks: [phorontanks] - [phorontanks ? "<A href='?src=\ref[src];phoron=1'>Dispense</A>" : "empty"]"
-	var/datum/browser/popup = new(user, "window=dispenser", "[src]")
+	dat += "Кислород: [oxygentanks] [pluralize_russian(oxygentanks, "баллон", "баллона", "баллонов")] - [oxygentanks ? "<A href='byond://?src=\ref[src];oxygen=1'>Получить</A>" : "пусто"]<br>"
+	dat += "Форон: [phorontanks] [pluralize_russian(phorontanks, "баллон", "баллона", "баллонов")] - [phorontanks ? "<A href='byond://?src=\ref[src];phoron=1'>Получить</A>" : "пусто"]"
+	var/datum/browser/popup = new(user, "window=dispenser", "[CASE(src, NOMINATIVE_CASE)]")
 	popup.set_content(dat)
 	popup.open()
 	return
@@ -46,37 +49,51 @@
 /obj/structure/dispenser/attackby(obj/item/I, mob/user)
 	if(istype(I, /obj/item/weapon/tank/oxygen) || istype(I, /obj/item/weapon/tank/air) || istype(I, /obj/item/weapon/tank/anesthetic))
 		if(oxygentanks < 10)
-			user.drop_item()
-			I.loc = src
+			user.drop_from_inventory(I, src)
 			oxytanks.Add(I)
 			oxygentanks++
-			to_chat(user, "<span class='notice'>You put [I] in [src].</span>")
+			to_chat(user, "<span class='notice'>Вы положили [CASE(I, NOMINATIVE_CASE)] в [CASE(src, NOMINATIVE_CASE)].</span>")
 		else
-			to_chat(user, "<span class='notice'>[src] is full.</span>")
+			to_chat(user, "<span class='notice'>[CASE(src, NOMINATIVE_CASE)] полон.</span>")
 		updateUsrDialog()
 		return
 	if(istype(I, /obj/item/weapon/tank/phoron))
 		if(phorontanks < 10)
-			user.drop_item()
-			I.loc = src
+			user.drop_from_inventory(I, src)
 			platanks.Add(I)
 			phorontanks++
-			to_chat(user, "<span class='notice'>You put [I] in [src].</span>")
+			to_chat(user, "<span class='notice'>Вы положили [CASE(I, NOMINATIVE_CASE)] в [CASE(src, NOMINATIVE_CASE)].</span>")
 		else
-			to_chat(user, "<span class='notice'>[src] is full.</span>")
+			to_chat(user, "<span class='notice'>CASE(src, NOMINATIVE_CASE)] полон.</span>")
 		updateUsrDialog()
 		return
-	if(istype(I, /obj/item/weapon/wrench))
+	if(iswrenching(I))
 		if(anchored)
-			to_chat(user, "<span class='notice'>You lean down and unwrench [src].</span>")
-			anchored = 0
+			to_chat(user, "<span class='notice'>Вы открутили [CASE(src, ACCUSATIVE_CASE)].</span>")
+			anchored = FALSE
 		else
-			to_chat(user, "<span class='notice'>You wrench [src] into place.</span>")
-			anchored = 1
+			to_chat(user, "<span class='notice'>Вы прикрутили [CASE(src, ACCUSATIVE_CASE)] на место.</span>")
+			anchored = TRUE
 		return
 
+/obj/structure/dispenser/deconstruct(disassembled)
+	for(var/obj/item/I as anything in contents)
+		I.forceMove(loc)
+	oxytanks -= oxytanks.len
+	phorontanks -= platanks.len
+	oxytanks.Cut()
+	platanks.Cut()
+	if(flags & NODECONSTRUCT)
+		return ..()
+	for(var/i in 1 to oxygentanks)
+		new /obj/item/weapon/tank/oxygen(loc)
+	for(var/i in 1 to phorontanks)
+		new /obj/item/weapon/tank/phoron(loc)
+	new /obj/item/stack/sheet/metal(loc, 2)
+	..()
+
 /obj/structure/dispenser/Topic(href, href_list)
-	if(usr.stat || usr.restrained())
+	if(usr.incapacitated())
 		return
 	if(Adjacent(usr))
 		usr.set_machine(src)
@@ -89,7 +106,7 @@
 				else
 					O = new /obj/item/weapon/tank/oxygen(loc)
 				O.loc = loc
-				to_chat(usr, "<span class='notice'>You take [O] out of [src].</span>")
+				to_chat(usr, "<span class='notice'>Вы вытащили [CASE(O, ACCUSATIVE_CASE)] из [CASE(src, GENITIVE_CASE)].</span>")
 				oxygentanks--
 				update_icon()
 		if(href_list["phoron"])
@@ -101,7 +118,7 @@
 				else
 					P = new /obj/item/weapon/tank/phoron(loc)
 				P.loc = loc
-				to_chat(usr, "<span class='notice'>You take [P] out of [src].</span>")
+				to_chat(usr, "<span class='notice'>Вы вытащили [CASE(P, ACCUSATIVE_CASE)] из [CASE(src, GENITIVE_CASE)].</span>")
 				phorontanks--
 				update_icon()
 		add_fingerprint(usr)

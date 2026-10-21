@@ -4,21 +4,27 @@
 
 /obj/machinery/computer/officer_shuttle
 	name = "Shuttle Console"
+	cases = list("РєРѕРЅСЃРѕР»СЊ С€Р°С‚С‚Р»Р°", "РєРѕРЅСЃРѕР»Рё С€Р°С‚С‚Р»Р°", "РєРѕРЅСЃРѕР»Рё С€Р°С‚С‚Р»Р°", "РєРѕРЅСЃРѕР»СЊ С€Р°С‚С‚Р»Р°", "РєРѕРЅСЃРѕР»СЊСЋ С€Р°С‚С‚Р»Р°", "РєРѕРЅСЃРѕР»Рё С€Р°С‚С‚Р»Р°")
 	icon = 'icons/obj/computer.dmi'
 	icon_state = "shuttle"
-	var/arrival_note = "Velocity transport shuttle docked with - dock 1." //сообщение по прибытию на станцию
-	var/department_note = "Velocity transport shuttle departed from station." //сообщение по отлёту от станции
+	var/department_note = "РўСЂР°РЅСЃРїРѕСЂС‚РЅС‹Р№ С€Р°С‚С‚Р» Р’РµР»РѕСЃРёС‚Рё РѕС‚СЃС‚С‹РєРѕРІР°Р»СЃСЏ РѕС‚ СЃС‚Р°РЅС†РёРё."
+	var/arrival_note = "РўСЂР°РЅСЃРїРѕСЂС‚РЅС‹Р№ С€Р°С‚С‚Р» Р’РµР»РѕСЃРёС‚Рё РїСЂРёСЃС‚С‹РєРѕРІР°Р»СЃСЏ Рє СЃС‚Р°РЅС†РёРё."
 	var/obj/item/device/radio/intercom/radio
-//	var/location = 0 // 0 - Велосити (исходная позиция) 1 - транзитная зона 2 - Исход 3 - ЦК
-	var/moving = 0 //в движении или нет
-	var/area/curr_location //текущая локация
+	var/moving = 0
+	var/area/curr_location
 	var/area/from_area
 	var/lastMove = 0
 
 
-/obj/machinery/computer/officer_shuttle/New()
-	curr_location= locate(/area/shuttle/officer/velocity)
+/obj/machinery/computer/officer_shuttle/atom_init()
+	department_note = "РўСЂР°РЅСЃРїРѕСЂС‚РЅС‹Р№ С€Р°С‚С‚Р» Р’РµР»РѕСЃРёС‚Рё РѕС‚СЃС‚С‹РєРѕРІР°Р»СЃСЏ РѕС‚ [station_name_ru()]."
+	arrival_note = "РўСЂР°РЅСЃРїРѕСЂС‚РЅС‹Р№ С€Р°С‚С‚Р» Р’РµР»РѕСЃРёС‚Рё РїСЂРёСЃС‚С‹РєРѕРІР°Р»СЃСЏ Рє [station_name_ru()]."
 	radio = new (src)
+	..()
+	return INITIALIZE_HINT_LATELOAD
+
+/obj/machinery/computer/officer_shuttle/atom_init_late()
+	curr_location = locate(/area/shuttle/officer/velocity)
 
 /obj/machinery/computer/officer_shuttle/proc/officer_move_to(area/destination)
 	if(moving)	return
@@ -29,27 +35,37 @@
 	from_area = curr_location
 	moving = 1
 	lastMove = world.time
+
+	SSshuttle.undock_act(curr_location, "velocity_officer_shuttle")
 	if(curr_location == locate(/area/shuttle/officer/station))
-		radio.autosay(department_note, "Arrivals Alert System") //вывод сообщения об отбытии шаттла
+		radio.autosay(department_note, "РЎРёСЃС‚РµРјР° РѕРїРѕРІРµС‰РµРЅРёСЏ")
+
 	var/area/transit_location = locate(/area/shuttle/officer/transit)
-	curr_location.move_contents_to(transit_location, null, EAST)
+	transit_location.parallax_movedir = WEST
+	curr_location.move_contents_to(transit_location)
 	curr_location = transit_location
-	if(from_area == locate(/area/shuttle/officer/velocity) && dest_location == locate(/area/shuttle/officer/centcomm))
+	SSshuttle.shake_mobs_in_area(transit_location, WEST)
+
+	if(from_area == locate(/area/shuttle/officer/velocity) && dest_location == locate(/area/shuttle/officer/centcom))
 		sleep(OFFICER_SHUTTLE_MOVE_TIME)
 	else if(from_area == locate(/area/shuttle/officer/velocity) && dest_location == locate(/area/shuttle/officer/station))
 		sleep(OFFICER_SHUTTLE_MOVE_TIME/2)
-	else if(from_area == locate(/area/shuttle/officer/centcomm) && dest_location == locate(/area/shuttle/officer/velocity))
+	else if(from_area == locate(/area/shuttle/officer/centcom) && dest_location == locate(/area/shuttle/officer/velocity))
 		sleep(OFFICER_SHUTTLE_MOVE_TIME)
-	else if(from_area == locate(/area/shuttle/officer/centcomm) && dest_location == locate(/area/shuttle/officer/station))
+	else if(from_area == locate(/area/shuttle/officer/centcom) && dest_location == locate(/area/shuttle/officer/station))
 		sleep(OFFICER_SHUTTLE_MOVE_TIME)
 	else if(from_area == locate(/area/shuttle/officer/station) && dest_location == locate(/area/shuttle/officer/velocity))
 		sleep(OFFICER_SHUTTLE_MOVE_TIME/2)
-	else if(from_area == locate(/area/shuttle/officer/station) && dest_location == locate(/area/shuttle/officer/centcomm))
+	else if(from_area == locate(/area/shuttle/officer/station) && dest_location == locate(/area/shuttle/officer/centcom))
 		sleep(OFFICER_SHUTTLE_MOVE_TIME)
 
 	curr_location.move_contents_to(dest_location)
+	SSshuttle.shake_mobs_in_area(dest_location, WEST)
+
+	SSshuttle.dock_act(dest_location, "velocity_officer_shuttle")
 	if(dest_location == locate(/area/shuttle/officer/station))
-		radio.autosay(arrival_note, "Arrivals Alert System") //вывод сообщения об прибытии шаттла
+		radio.autosay(arrival_note, "РЎРёСЃС‚РµРјР° РѕРїРѕРІРµС‰РµРЅРёСЏ")
+
 	curr_location = dest_location
 
 	moving = 0
@@ -58,25 +74,19 @@
 /obj/machinery/computer/officer_shuttle/attackby(obj/item/I, mob/user)
 	return attack_hand(user)
 
-/obj/machinery/computer/officer_shuttle/attack_ai(mob/user)
-	return attack_hand(user)
+/obj/machinery/computer/officer_shuttle/ui_interact(mob/user)
+	var/seconds = max(round((lastMove + OFFICER_SHUTTLE_COOLDOWN - world.time) * 0.1), 0)
+	var/seconds_word = pluralize_russian(seconds, "СЃРµРєСѓРЅРґСѓ", "СЃРµРєСѓРЅРґС‹", "СЃРµРєСѓРЅРґ")
+	var/dat = {"РњРµСЃС‚РѕРїРѕР»РѕР¶РµРЅРёРµ: <b>[capitalize(CASE(curr_location, NOMINATIVE_CASE))]</b><br>
+			Р“РѕС‚РѕРІ Р»РµС‚РµС‚СЊ[max(lastMove + OFFICER_SHUTTLE_COOLDOWN - world.time, 0) ? " С‡РµСЂРµР· [seconds] [seconds_word]" : ": СЃРµР№С‡Р°СЃ"]<br>
+		<a href='byond://?src=\ref[src];velocity=1'>Р’РµР»РѕСЃРёС‚Рё Р”РѕРє 42</a> |
+		<a href='byond://?src=\ref[src];station=1'>[station_name_ru()]</a> |
+		<a href='byond://?src=\ref[src];centcomm=1'>Р¦РµРЅС‚РљРѕРј</a><br>"}
 
-/obj/machinery/computer/officer_shuttle/attack_paw(mob/user)
-	return attack_hand(user)
+	var/datum/browser/popup = new(user, "computer", "[capitalize(CASE(src, NOMINATIVE_CASE))]", 575, 450)
+	popup.set_content(dat)
+	popup.open()
 
-/obj/machinery/computer/officer_shuttle/attack_hand(mob/user)
-	user.set_machine(src)
-
-	var/dat = {"Location: [curr_location]<br>
-	Ready to move[max(lastMove + OFFICER_SHUTTLE_COOLDOWN - world.time, 0) ? " in [max(round((lastMove + OFFICER_SHUTTLE_COOLDOWN - world.time) * 0.1), 0)] seconds" : ": now"]<br>
-<a href='?src=\ref[src];velocity=1'>NTS Velocity</a><br>
-<a href='?src=\ref[src];station=1'>NSS Exodus</a> |
-<a href='?src=\ref[src];centcomm=1'>Centcomm</a><br>
-<a href='?src=\ref[user];mach_close=computer'>Close</a>"}
-
-	user << browse(dat, "window=computer;size=575x450")
-	onclose(user, "computer")
-	return
 
 /obj/machinery/computer/officer_shuttle/Topic(href, href_list)
 	. = ..()
@@ -88,25 +98,6 @@
 	else if(href_list["station"])
 		officer_move_to(/area/shuttle/officer/station)
 	else if(href_list["centcomm"])
-		officer_move_to(/area/shuttle/officer/centcomm)
+		officer_move_to(/area/shuttle/officer/centcom)
 
 	updateUsrDialog()
-
-
-/area/shuttle/officer
-	name = "Officer Shuttle"
-
-/area/shuttle/officer/velocity
-	name = "NTS Velocity"
-	icon_state = "shuttle2"
-
-/area/shuttle/officer/transit
-	icon_state = "shuttle"
-
-/area/shuttle/officer/station
-	name = "NSS Exodus"
-	icon_state = "shuttle"
-
-/area/shuttle/officer/centcomm
-	name = "Centcomm"
-	icon_state = "shuttle"

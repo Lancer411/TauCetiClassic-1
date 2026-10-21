@@ -2,22 +2,12 @@
 /obj/item/var/dry_inprocess = 0
 
 /obj/item/proc/make_wet(shower = 0)
-	if(!src) return
-	if(src.flags & THICKMATERIAL) return
-
-	if(shower)
-		if(blood_DNA)
-			if(blood_DNA.len)
-				var/turf/T = get_turf(src)
-				if(!istype(T, /turf/space))
-					var/obj/effect/decal/cleanable/water/W = locate(/obj/effect/decal/cleanable/water, T)
-					if(!W)
-						W = PoolOrNew(/obj/effect/decal/cleanable/water,T)
-					if(!W.blood_DNA)
-						W.blood_DNA = list()
-					W.blood_DNA |= blood_DNA.Copy()
-					W.blood_color = blood_color
-					animate(W, color = blood_color, time = 10)
+	if(!src)
+		return
+	if(src.pierce_protection)
+		return
+	if(!can_get_wet)
+		return
 
 	var/wet_weight = rand(18,28)
 	if(wet)
@@ -27,17 +17,22 @@
 		return
 	else
 		wet = wet_weight
-		SSobj.drying |= src
+		SSdrying.drying |= src
+
+		SEND_SIGNAL(src, COMSIG_ITEM_MAKE_WET)
+
 
 /obj/item/Destroy()
-	SSobj.drying -= src
+	SEND_SIGNAL(src, COMSIG_ITEM_MAKE_DRY)
+	SSdrying.drying -= src
 	return ..()
 
 /obj/item/proc/dry_process()
 	if(!src) return
 
 	if(wet < 1)
-		SSobj.drying -= src
+		SEND_SIGNAL(src, COMSIG_ITEM_MAKE_DRY)
+		SSdrying.drying -= src
 		return
 
 	if(dry_inprocess < 1)
@@ -45,19 +40,8 @@
 		wet--
 		if(prob(15))
 			var/turf/T = get_turf(src)
-			if(!istype(T, /turf/space))
-				var/obj/effect/decal/cleanable/water/W = locate(/obj/effect/decal/cleanable/water, T)
-				if(!W)
-					W = PoolOrNew(/obj/effect/decal/cleanable/water,T)
-				else
-					W.depth = min(2, W.depth + rand(2,5)/10)
-				if(blood_DNA)
-					if(blood_DNA.len)
-						if(!W.blood_DNA)
-							W.blood_DNA = list()
-						W.blood_DNA |= blood_DNA.Copy()
-						W.blood_color = blood_color
-						animate(W, color = blood_color, time = 10)
+			if(T)
+				T.add_fluid(null, 15)
 		if(prob(20))
 			dry_discharge()
 	else
@@ -90,10 +74,10 @@
 	if(item_to_discharge)
 		var/turf/T = get_turf(src)
 		T.visible_message("<span class='wet'>Some wet device has been discharged!</span>")
-		var/obj/effect/decal/cleanable/water/W = locate(/obj/effect/decal/cleanable/water, T)
-		if(W)
-			W.electrocute_act(120)
-		else if(istype(loc, /mob/living))
+		var/obj/effect/fluid/F = locate() in T
+		if(F)
+			F.electrocute_act(120)
+		else if(isliving(loc))
 			var/mob/living/L = loc
 			L.apply_effect(120,AGONY,0)
 			var/datum/effect/effect/system/spark_spread/s = new /datum/effect/effect/system/spark_spread

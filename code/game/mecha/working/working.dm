@@ -1,12 +1,12 @@
 /obj/mecha/working
 	internal_damage_threshold = 60
+	dna_lockable = FALSE
 
-/obj/mecha/working/New()
-	..()
+/obj/mecha/working/atom_init()
+	. = ..()
 	var/turf/T = get_turf(src)
-	if(T.z != ZLEVEL_CENTCOMM)
+	if(!is_centcom_level(T.z) && !is_junkyard_level(T.z))
 		new /obj/item/mecha_parts/mecha_tracking(src)
-	return
 
 /*
 /obj/mecha/working/melee_action(atom/target)
@@ -26,7 +26,7 @@
 	output += "<b>[src.name] Tools:</b><div style=\"margin-left: 15px;\">"
 	if(equipment.len)
 		for(var/obj/item/mecha_parts/mecha_equipment/MT in equipment)
-			output += "[selected==MT?"<b>":"<a href='?src=\ref[src];select_equip=\ref[MT]'>"][MT.get_equip_info()][selected==MT?"</b>":"</a>"]<br>"
+			output += "[selected==MT?"<b>":"<a href='byond://?src=\ref[src];select_equip=\ref[MT]'>"][MT.get_equip_info()][selected==MT?"</b>":"</a>"]<br>"
 	else
 		output += "None"
 	output += "</div>"

@@ -3,20 +3,61 @@
 
 //Returns the thing in our active hand (whatever is in our active module-slot, in this case)
 /mob/living/silicon/robot/get_active_hand()
+	if(module_active)
+		var/obj/item/W = SEND_SIGNAL(module_active, COMSIG_HAND_GET_ITEM)
+		if(W)
+			return W
 	return module_active
 
-/*-------TODOOOOOOOOOO--------*/
+// I'd rather do this then have something broken.
+/mob/living/silicon/robot/get_inactive_hand()
+	return module_active
 
-/mob/living/silicon/robot/u_equip(obj/W)
-	if(!W || (W != get_active_hand()))
+/mob/living/silicon/robot/put_in_active_hand(obj/item/W)
+	if(!istype(W))
+		return FALSE
+	if(W.anchored)
+		return FALSE
+	if(module_active)
+		return SEND_SIGNAL(module_active, COMSIG_HAND_PUT_IN, W, src)
+	return FALSE
+
+/mob/living/silicon/robot/put_in_inactive_hand(obj/item/W)
+	return put_in_active_hand(W)
+
+/mob/living/silicon/robot/put_in_hands(obj/item/W)
+	if(!W)
+		return FALSE
+	if(put_in_active_hand(W))
+		return TRUE
+	else
+		W.forceMove(get_turf(src))
+		return FALSE
+
+/mob/living/silicon/robot/drop_item(atom/T)
+	if(module_active)
+		return SEND_SIGNAL(module_active, COMSIG_HAND_DROP_ITEM, T, src)
+	return FALSE
+
+/mob/living/silicon/robot/remove_from_mob(obj/O, atom/T)
+	if(!O)
+		return FALSE
+	if(!module_active || SEND_SIGNAL(module_active, COMSIG_HAND_GET_ITEM) != O)
+		return FALSE
+
+	return SEND_SIGNAL(module_active, COMSIG_HAND_DROP_ITEM, T, src)
+
+/mob/living/silicon/robot/u_equip(obj/item/W)
+	if(!W || (W != module_active))
 		return 0
 	uneq_active()
 	return 1
 
-/mob/living/silicon/robot/proc/uneq_active()
-	if(isnull(module_active))
+/mob/living/silicon/robot/proc/unequip_module(obj/O)
+	. = FALSE
+	if(!O)
 		return
-	if(module_state_1 == module_active)
+	if(module_state_1 == O)
 		if(istype(module_state_1,/obj/item/borg/sight))
 			sight_mode &= ~module_state_1:sight_mode
 		if (client)
@@ -26,7 +67,8 @@
 		module_state_1:loc = module //So it can be used again later
 		module_state_1 = null
 		inv1.icon_state = "inv1"
-	else if(module_state_2 == module_active)
+		. = TRUE
+	else if(module_state_2 == O)
 		if(istype(module_state_2,/obj/item/borg/sight))
 			sight_mode &= ~module_state_2:sight_mode
 		if (client)
@@ -36,7 +78,8 @@
 		module_state_2:loc = module
 		module_state_2 = null
 		inv2.icon_state = "inv2"
-	else if(module_state_3 == module_active)
+		. = TRUE
+	else if(module_state_3 == O)
 		if(istype(module_state_3,/obj/item/borg/sight))
 			sight_mode &= ~module_state_3:sight_mode
 		if (client)
@@ -46,10 +89,20 @@
 		module_state_3:loc = module
 		module_state_3 = null
 		inv3.icon_state = "inv3"
-	updateicon()
+		. = TRUE
+	if(.)
+		SEND_SIGNAL(O, COMSIG_HAND_UNEQUIP_MODULE, src)
+		hud_used.update_robot_modules_display()
+		updateicon()
+
+/mob/living/silicon/robot/proc/uneq_active()
+	if(isnull(module_active))
+		return
+	unequip_module(module_active)
 
 /mob/living/silicon/robot/proc/uneq_all()
 	module_active = null
+	var/obj/item/O
 
 	if(module_state_1)
 		if(istype(module_state_1,/obj/item/borg/sight))
@@ -58,6 +111,7 @@
 			client.screen -= module_state_1
 		contents -= module_state_1
 		module_state_1:loc = module
+		O = module_state_1
 		module_state_1 = null
 		inv1.icon_state = "inv1"
 	if(module_state_2)
@@ -67,6 +121,7 @@
 			client.screen -= module_state_2
 		contents -= module_state_2
 		module_state_2:loc = module
+		O = module_state_2
 		module_state_2 = null
 		inv2.icon_state = "inv2"
 	if(module_state_3)
@@ -76,8 +131,11 @@
 			client.screen -= module_state_3
 		contents -= module_state_3
 		module_state_3:loc = module
+		O = module_state_3
 		module_state_3 = null
 		inv3.icon_state = "inv3"
+	if (O)
+		SEND_SIGNAL(O, COMSIG_HAND_UNEQUIP_MODULE, src)
 	updateicon()
 
 /mob/living/silicon/robot/proc/activated(obj/item/O)
@@ -89,7 +147,6 @@
 		return 1
 	else
 		return 0
-	updateicon()
 
 //Helper procs for cyborg modules on the UI.
 //These are hackish but they help clean up code elsewhere.
@@ -219,27 +276,27 @@
 		return
 	if(!module_state_1)
 		module_state_1 = O
-		O.layer = ABOVE_HUD_LAYER
 		O.plane = ABOVE_HUD_PLANE
 		O.screen_loc = inv1.screen_loc
 		contents += O
 		if(istype(module_state_1,/obj/item/borg/sight))
 			sight_mode |= module_state_1:sight_mode
+		SEND_SIGNAL(O, COMSIG_HAND_ACTIVATE_MODULE, src)
 	else if(!module_state_2)
 		module_state_2 = O
-		O.layer = ABOVE_HUD_LAYER
 		O.plane = ABOVE_HUD_PLANE
 		O.screen_loc = inv2.screen_loc
 		contents += O
 		if(istype(module_state_2,/obj/item/borg/sight))
 			sight_mode |= module_state_2:sight_mode
+		SEND_SIGNAL(O, COMSIG_HAND_ACTIVATE_MODULE, src)
 	else if(!module_state_3)
 		module_state_3 = O
-		O.layer = ABOVE_HUD_LAYER
 		O.plane = ABOVE_HUD_PLANE
 		O.screen_loc = inv3.screen_loc
 		contents += O
 		if(istype(module_state_3,/obj/item/borg/sight))
 			sight_mode |= module_state_3:sight_mode
+		SEND_SIGNAL(O, COMSIG_HAND_ACTIVATE_MODULE, src)
 	else
 		to_chat(src, "<span class='notice'>You need to disable a module first!</span>")

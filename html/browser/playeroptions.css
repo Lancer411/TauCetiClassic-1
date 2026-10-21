@@ -1,0 +1,25 @@
+.jobsTable {
+	column-count: 3;
+}
+
+.jobsColumn {
+	break-inside: avoid;
+}
+
+.jobPosition {
+	display: block !important;
+}
+
+.jobPosition--command {
+	font-weight: bold;
+}
+
+.jobPosition--wanted::before {
+	content: "🡅";
+	color: green;
+}
+
+.jobPosition--unwanted::before {
+	content: "🡇";
+	color: red;
+}

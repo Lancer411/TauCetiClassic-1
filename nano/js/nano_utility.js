@@ -1,10 +1,10 @@
 // NanoUtility is the place to store utility functions
-var NanoUtility = function () 
+var NanoUtility = function ()
 {
     var _urlParameters = {}; // This is populated with the base url parameters (used by all links), which is probaby just the "src" parameter
 
 	return {
-        init: function () 
+        init: function ()
 		{
 			var body = $('body'); // We store data in the body tag, it's as good a place as any
 
@@ -38,17 +38,17 @@ var NanoUtility = function ()
 					queryString += key + '=' + parameters[key];
 				}
 			}
-			return queryString;
+			return 'byond://' + queryString;
 		}
     }
-} (); 
+} ();
 
-if (typeof jQuery == 'undefined') {  
+if (typeof jQuery == 'undefined') {
 	alert('ERROR: Javascript library failed to load!');
 }
-if (typeof doT == 'undefined') {  
+if (typeof doT == 'undefined') {
 	alert('ERROR: Template engine failed to load!');
-}	
+}
 
 // All scripts are initialised here, this allows control of init order
 $(document).ready(function () {

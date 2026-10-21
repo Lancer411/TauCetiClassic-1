@@ -14,30 +14,62 @@
 				if( (M.computer_id == client.computer_id) )
 					if(matches)	matches += " and "
 					matches += "ID ([client.computer_id])"
-					spawn() alert("You have logged in already with another key this round, please log out of this one NOW or risk being banned!")
+					spawn() tgui_alert(usr, "You have logged in already with another key this round, please log out of this one NOW or risk being banned!")
 				if(matches)
 					if(M.client)
-						message_admins("<font color='red'><B>Notice: </B><font color='blue'><A href='?src=\ref[usr];priv_msg=\ref[src]'>[key_name_admin(src)]</A> has the same [matches] as <A href='?src=\ref[usr];priv_msg=\ref[M]'>[key_name_admin(M)]</A>.</font>")
+						message_admins("<font color='red'><B>Notice: </B></font><font color='blue'><A href='byond://?src=\ref[usr];priv_msg=\ref[src]'>[key_name_admin(src)]</A> has the same [matches] as <A href='byond://?src=\ref[usr];priv_msg=\ref[M]'>[key_name_admin(M)]</A>.</font>", R_LOG)
 						log_access("Notice: [key_name(src)] has the same [matches] as [key_name(M)].")
 					else
-						message_admins("<font color='red'><B>Notice: </B><font color='blue'><A href='?src=\ref[usr];priv_msg=\ref[src]'>[key_name_admin(src)]</A> has the same [matches] as [key_name_admin(M)] (no longer logged in). </font>")
+						message_admins("<font color='red'><B>Notice: </B></font><font color='blue'><A href='byond://?src=\ref[usr];priv_msg=\ref[src]'>[key_name_admin(src)]</A> has the same [matches] as [key_name_admin(M)] (no longer logged in). </font>", R_LOG)
 						log_access("Notice: [key_name(src)] has the same [matches] as [key_name(M)] (no longer logged in).")
 
+/mob/proc/create_mob_hud()
+	if(!client || hud_used)
+		return FALSE
+	hud_used = new hud_type(src)
+	SEND_SIGNAL(src, COMSIG_MOB_HUD_CREATED)
+	hud_used.show_hud(istype(loc, /obj/mecha) ? HUD_STYLE_REDUCED : HUD_STYLE_STANDARD)
+	update_sight()
+
+	return TRUE
+
+// native Byond login is tricky for new clients, so we don use it, use LateLogin instead
 /mob/Login()
+	SHOULD_NOT_OVERRIDE(TRUE)
+
+	..()
+
+	if (client.is_initialized)
+		LateLogin()
+
+/mob/proc/LateLogin()
+	SHOULD_CALL_PARENT(TRUE)
 
 	player_list |= src
+
+	if(client.holder)
+		global.keyloop_list |= src
+	else if(stat != DEAD || !SSlag_switch?.measures[DISABLE_DEAD_KEYLOOP])
+		global.keyloop_list |= src
+
 	update_Login_details()
 	world.update_status()
 
-	client.images = null				//remove the images such as AIs being unable to see runes
-	client.screen = list()				//remove hud items just in case
-	if(hud_used)	qdel(hud_used)		//remove the hud objects
-	hud_used = new /datum/hud(src)
+	client.images = null //remove the images such as AIs being unable to see runes
+	client.screen = list() //remove hud items just in case
+
+	closeToolTip(src) //dismiss any stuck tooltip on mob transition
+
+	create_mob_hud()
+
+	client.set_main_screen_plane_masters()
+
 	client.pixel_x = 0
 	client.pixel_y = 0
 	next_move = 1
-	sight |= SEE_SELF
-	..()
+
+	SEND_SIGNAL(src, COMSIG_LOGIN)
+	logout_reason = LOGOUT_UNKNOWN
 
 	if(loc && !isturf(loc))
 		client.eye = loc
@@ -46,36 +78,26 @@
 		client.eye = src
 		client.perspective = MOB_PERSPECTIVE
 
-	client.screen += client.void
+	client.update_plane_masters()
 
-	//Some weird magic to block users who cant see lighting normally
-	var/obj/screen/blocker = new /obj/screen()
-	blocker.screen_loc = "WEST,SOUTH to EAST,NORTH"
-	blocker.icon = 'icons/effects/chaos.dmi'
-	blocker.icon_state = "8"
-	blocker.blend_mode = BLEND_MULTIPLY
-	blocker.color = list(1,1,1,0,1,1,1,0,1,1,1,0,0,0,0,1,0,0,0,1)
-	blocker.alpha = 255
-	blocker.layer = ABOVE_HUD_LAYER
-	blocker.plane = ABOVE_HUD_PLANE
-	blocker.mouse_opacity = 0
+	// atom_huds
+	reload_huds()
 
-	client.screen += blocker
+	//Reload alternate appearances
+	update_all_alt_apperance()
 
-	//Clear ability list and update from mob.
-	client.verbs -= ability_verbs
+	add_click_catcher()
 
-	if(abilities)
-		client.verbs |= abilities
-
-	if(istype(src, /mob/living/silicon/ai))
+	if(isAI(src))
 		client.show_popup_menus = 0
 	else
 		client.show_popup_menus = 1
 
-	if(istype(src,/mob/living/carbon/human))
-		var/mob/living/carbon/human/H = src
-		if(H.species && H.species.abilities)
-			client.verbs |= H.species.abilities
+	if(client.click_intercept)
+		client.click_intercept.post_login()
 
-	nanomanager.send_resources(client)
+	client.change_view(world.view)
+
+	var/turf/T = get_turf(src)
+	if(T && last_z != T.z)
+		update_z(T.z)

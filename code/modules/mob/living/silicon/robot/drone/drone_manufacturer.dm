@@ -2,9 +2,9 @@
 	name = "drone fabricator"
 	desc = "A large automated factory for producing maintenance drones."
 
-	density = 1
-	anchored = 1
-	use_power = 1
+	density = TRUE
+	anchored = TRUE
+	use_power = IDLE_POWER_USE
 	idle_power_usage = 20
 	active_power_usage = 5000
 
@@ -15,19 +15,17 @@
 	icon = 'icons/obj/machines/drone_fab.dmi'
 	icon_state = "drone_fab_idle"
 
-/obj/machinery/drone_fabricator/New()
-	..()
-
 /obj/machinery/drone_fabricator/power_change()
 	if (powered())
 		stat &= ~NOPOWER
 	else
 		icon_state = "drone_fab_nopower"
 		stat |= NOPOWER
+	update_power_use()
 
 /obj/machinery/drone_fabricator/process()
 
-	if(ticker.current_state < GAME_STATE_PLAYING)
+	if(SSticker.current_state < GAME_STATE_PLAYING)
 		return
 
 	if(stat & NOPOWER || !produce_drones)
@@ -48,11 +46,23 @@
 /obj/machinery/drone_fabricator/examine(mob/user)
 	..()
 	if(produce_drones && drone_progress >= 100 && istype(user,/mob/dead) && config.allow_drone_spawn && count_drones() < config.max_maint_drones)
-		to_chat(user, "<BR><B>A drone is prepared. Select 'Join As Drone' from the Ghost tab to spawn as a maintenance drone.</B>")
+		to_chat(user, "<BR><B>A drone is prepared. Select 'Spawners Menu' from the Ghost tab, and choose the Drone role to spawn as a maintenance drone.</B>")
+
+/obj/machinery/drone_fabricator/attackby(obj/item/weapon/W, mob/user)
+	if(emagged && istype(W, /obj/item/device/multitool))
+		user.visible_message("<span class='notice'>[user] starts repairing [src].</span>",
+		"<span class='notice'>You are trying to fix [src].</span>")
+		if(do_after(user, 5 SECONDS, target = src))
+			for(var/datum/spawner/malf_drone/S in SSrole_spawners.spawners)
+				if(S.fabricator == src)
+					qdel(S)
+					emagged = FALSE
+					break
+	..()
 
 /obj/machinery/drone_fabricator/proc/count_drones()
 	var/drones = 0
-	for(var/mob/living/silicon/robot/drone/D in mob_list)
+	for(var/mob/living/silicon/robot/drone/D as anything in drone_list)
 		if(D.key && D.client)
 			drones++
 	return drones
@@ -72,68 +82,39 @@
 	flick("h_lathe_leave",src)
 
 	time_last_drone = world.time
-	var/mob/living/silicon/robot/drone/new_drone = new(get_turf(src))
+	var/mob/living/silicon/robot/drone/maintenance/new_drone = new(get_turf(src))
 	new_drone.transfer_personality(player)
-
+	new_drone.mind.skills.add_available_skillset(/datum/skillset/cyborg)
+	new_drone.mind.skills.maximize_active_skills()
 	drone_progress = 0
 
-
-/mob/dead/verb/join_as_drone()
-
-	set category = "Ghost"
-	set name = "Join As Drone"
-	set desc = "If there is a powered, enabled fabricator in the game world with a prepared chassis, join as a maintenance drone."
-
-	if(ticker.current_state < GAME_STATE_PLAYING)
-		to_chat(src, "\red The game hasn't started yet!")
+/obj/machinery/drone_fabricator/atom_break(damage_flag)
+	. = ..()
+	if(!.)
 		return
+	audible_message("<span class='warning'>[src] lets out a tinny alarm before falling dark.</span>")
+	playsound(loc, 'sound/machines/warning-buzzer.ogg', VOL_EFFECTS_MASTER, 50, TRUE)
 
-	if (usr != src)
-		return 0 //something is terribly wrong
+/obj/machinery/drone_fabricator/deconstruct(disassembled = TRUE)
+	if(flags & NODECONSTRUCT)
+		return ..()
+	new /obj/item/stack/sheet/metal(loc, 5)
+	..()
 
-	if (!src.stat)
-		return
+/obj/machinery/drone_fabricator/emag_act(mob/user)
+	if(emagged)
+		return FALSE
 
-	if(!(config.allow_drone_spawn))
-		to_chat(src, "\red That verb is not currently permitted.")
-		return
+	emagged = TRUE
 
-	if(jobban_isbanned(src, ROLE_DRONE))
-		to_chat(usr, "\red You are banned from playing synthetics and cannot spawn as a drone.")
-		return
+	var/datum/effect/effect/system/spark_spread/s = new /datum/effect/effect/system/spark_spread
+	s.set_up(5, 1, src)
+	s.start()
 
-	var/available_in_minutes = role_available_in_minutes(src, ROLE_DRONE)
-	if(available_in_minutes)
-		to_chat(usr, "<span class='notice'>This role will be unlocked in [available_in_minutes] minutes (e.g.: you gain minutes while playing).</span>")
-		return
+	create_uniq_faction(/datum/faction/malf_drones)
+	create_spawners(/datum/spawner/malf_drone, 3, src)
 
-	var/deathtime = world.time - src.timeofdeath
-	if(istype(src,/mob/dead/observer))
-		var/mob/dead/observer/G = src
-		if(G.has_enabled_antagHUD == 1 && config.antag_hud_restricted)
-			to_chat(usr, "\blue <B>Upon using the antagHUD you forfeighted the ability to join the round.</B>")
-			return
-
-	var/deathtimeminutes = round(deathtime / 600)
-	var/pluralcheck = "minute"
-	if(deathtimeminutes == 0)
-		pluralcheck = ""
-	else if(deathtimeminutes == 1)
-		pluralcheck = " [deathtimeminutes] minute and"
-	else if(deathtimeminutes > 1)
-		pluralcheck = " [deathtimeminutes] minutes and"
-	var/deathtimeseconds = round((deathtime - deathtimeminutes * 600) / 10,1)
-
-	if (deathtime < 6000)
-		to_chat(usr, "You have been dead for[pluralcheck] [deathtimeseconds] seconds.")
-		to_chat(usr, "You must wait 10 minutes to respawn as a drone!")
-		return
-
-	var/response = alert(src, "Are you -sure- you want to become a maintenance drone?","Are you sure you want to beep?","Beep!","Nope!")
-	if(response != "Beep!")
-		return  //Hit the wrong key...again.
-
-	dronize()
+	return TRUE
 
 /mob/proc/dronize()
 
@@ -142,11 +123,11 @@
 			continue
 
 		if(DF.count_drones() >= config.max_maint_drones)
-			to_chat(src, "\red There are too many active drones in the world for you to spawn.")
+			to_chat(src, "<span class='warning'>There are too many active drones in the world for you to spawn.</span>")
 			return
 
 		if(DF.drone_progress >= 100)
 			DF.create_drone(src.client)
 			return
 
-	to_chat(src, "\red There are no available drone spawn points, sorry.")
+	to_chat(src, "<span class='warning'>There are no available drone spawns, sorry. Drone fabricators is out of service, or no drones produced yet.</span>")

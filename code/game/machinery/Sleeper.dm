@@ -6,18 +6,21 @@
 	name = "Sleeper Console"
 	icon = 'icons/obj/Cryogenic3.dmi'
 	icon_state = "sleeperconsole"
-	anchored = 1 //About time someone fixed this.
-	density = 0
-	light_color = "#7BF9FF"
+	anchored = TRUE //About time someone fixed this.
+	density = FALSE
+	light_color = "#7bf9ff"
 
 /obj/machinery/sleeper
 	name = "Sleeper"
+	desc = "Used for the rapid introduction of chemicals from the internal storage."
 	icon = 'icons/obj/Cryogenic3.dmi'
 	icon_state = "sleeper-open"
-	density = 0
-	anchored = 1
+	layer = BELOW_CONTAINERS_LAYER
+	density = FALSE
+	anchored = TRUE
 	state_open = 1
-	light_color = "#7BF9FF"
+	light_color = "#7bf9ff"
+	allowed_checks = ALLOWED_CHECK_TOPIC
 	var/obj/item/weapon/reagent_containers/glass/beaker = null
 	var/filtering = 0
 	var/efficiency = 1
@@ -29,20 +32,32 @@
 		list("anti_toxin", "ryetalyn" ,"dermaline", "arithrazine"),
 		list("dexalinp", "alkysine")
 	)
+	var/upgraded = FALSE
+	required_skills = list(/datum/skill/medical = SKILL_LEVEL_TRAINED)
 
-/obj/machinery/sleeper/New()
-	..()
-	beaker = new /obj/item/weapon/reagent_containers/glass/beaker/large(src)
+/obj/machinery/sleeper/upgraded
+	upgraded = TRUE
+
+/obj/machinery/sleeper/atom_init(mapload)
+	. = ..()
 	component_parts = list()
 	component_parts += new /obj/item/weapon/circuitboard/sleeper(null)
-	component_parts += new /obj/item/weapon/stock_parts/matter_bin(null)
-	component_parts += new /obj/item/weapon/stock_parts/manipulator(null)
+	if(upgraded)
+		component_parts += new /obj/item/weapon/stock_parts/matter_bin/adv/super/bluespace(null)
+		component_parts += new /obj/item/weapon/stock_parts/manipulator/nano/pico/femto(null)
+	else
+		component_parts += new /obj/item/weapon/stock_parts/matter_bin(null)
+		component_parts += new /obj/item/weapon/stock_parts/manipulator(null)
 	component_parts += new /obj/item/weapon/stock_parts/console_screen(null)
 	component_parts += new /obj/item/weapon/stock_parts/console_screen(null)
-	component_parts += new /obj/item/weapon/cable_coil(null, 1)
+	component_parts += new /obj/item/stack/cable_coil/red(null, 1)
 	RefreshParts()
+	if(mapload)
+		beaker = new /obj/item/weapon/reagent_containers/glass/beaker/large(src)
 
 /obj/machinery/sleeper/RefreshParts()
+	..()
+
 	var/E
 	for(var/obj/item/weapon/stock_parts/matter_bin/B in component_parts)
 		E += B.rating
@@ -53,14 +68,31 @@
 	efficiency = initial(efficiency)* E
 	min_health = initial(min_health) * E
 	available_chems = list()
-	for(var/i in 1 to I)
+	for(var/i in 1 to min(I, possible_chems.len))
 		available_chems |= possible_chems[i]
 
 /obj/machinery/sleeper/allow_drop()
 	return 0
 
 /obj/machinery/sleeper/MouseDrop_T(mob/target, mob/user)
-	if(user.stat || user.lying || !Adjacent(user) || !target.Adjacent(user) || !iscarbon(target) || target.buckled)
+	if(user.incapacitated() || !iscarbon(target) || target.buckled)
+		return
+	if(!user.IsAdvancedToolUser())
+		to_chat(user, "<span class='warning'>You can not comprehend what to do with this.</span>")
+		return
+	close_machine(target)
+
+/obj/machinery/sleeper/AltClick(mob/user)
+	if(user.incapacitated() || !Adjacent(user))
+		return
+	if(!user.IsAdvancedToolUser())
+		to_chat(user, "<span class='warning'>You can not comprehend what to do with this.</span>")
+		return
+	if(occupant && is_operational())
+		open_machine()
+		return
+	var/mob/living/carbon/target = locate() in loc
+	if(!target)
 		return
 	close_machine(target)
 
@@ -70,20 +102,20 @@
 		if(filtering > 0)
 			if(beaker)
 				if(beaker.reagents.total_volume < beaker.reagents.maximum_volume)
-					H.vessel.trans_to(beaker, 1)
+					H.blood_trans_to(beaker, 1)
+					playsound(src, 'sound/machines/dialysis.ogg', VOL_EFFECTS_MASTER, vary = FALSE)
 					for(var/datum/reagent/x in src.occupant.reagents.reagent_list)
 						H.reagents.trans_to(beaker, 3)
-						H.vessel.trans_to(beaker, 1)
+						H.blood_trans_to(beaker, 1)
 	return
 
-/obj/machinery/sleeper/blob_act()
-	if(prob(75))
-		for(var/atom/movable/A as mob|obj in src)
-			A.loc = src.loc
-			A.blob_act()
-		qdel(src)
+/obj/machinery/sleeper/deconstruct(disassembled)
+	for(var/atom/movable/A as anything in contents)
+		A.forceMove(get_turf(src))
+	..()
 
 /obj/machinery/sleeper/attack_animal(mob/living/simple_animal/M)//Stop putting hostile mobs in things guise
+	..()
 	if(M.environment_smash)
 		visible_message("<span class='danger'>[M.name] smashes [src] apart!</span>")
 		qdel(src)
@@ -93,13 +125,12 @@
 	if(istype(I, /obj/item/weapon/reagent_containers/glass))
 		if(!beaker)
 			beaker = I
-			user.drop_item()
-			I.loc = src
+			user.drop_from_inventory(I, src)
 			user.visible_message("[user] adds \a [I] to \the [src]!", "You add \a [I] to \the [src]!")
-			src.updateUsrDialog()
+			updateUsrDialog()
 			return
 		else
-			to_chat(user, "\red The sleeper has a beaker already.")
+			to_chat(user, "<span class='warning'>The sleeper has a beaker already.</span>")
 			return
 
 	if(!state_open && !occupant)
@@ -118,27 +149,16 @@
 	if(filtering)
 		toggle_filter()
 	switch(severity)
-		if(1.0)
-			for(var/atom/movable/A as mob|obj in src)
-				A.loc = src.loc
-				ex_act(severity)
-			qdel(src)
-			return
-		if(2.0)
+		if(EXPLODE_HEAVY)
 			if(prob(50))
-				for(var/atom/movable/A as mob|obj in src)
-					A.loc = src.loc
-					ex_act(severity)
-				qdel(src)
 				return
-		if(3.0)
-			if(prob(25))
-				for(var/atom/movable/A as mob|obj in src)
-					A.loc = src.loc
-					ex_act(severity)
-				qdel(src)
+		if(EXPLODE_LIGHT)
+			if(prob(75))
 				return
-	return
+	for(var/atom/movable/A as anything in contents)
+		A.forceMove(get_turf(src))
+		A.ex_act(severity)
+	qdel(src)
 
 /obj/machinery/sleeper/emp_act(severity)
 	if(filtering)
@@ -179,15 +199,15 @@
 	open_machine()
 
 /obj/machinery/sleeper/Destroy()
-	var/turf/T = loc
-	T.contents += contents
+	for(var/atom/movable/A as anything in contents)
+		A.forceMove(get_turf(src))
 	return ..()
 
 /obj/machinery/sleeper/verb/remove_beaker()
 	set name = "Remove Beaker"
 	set category = "Object"
 	set src in oview(1)
-	if(usr.stat != 0)
+	if(usr.incapacitated())
 		return
 	if(beaker)
 		filtering = 0
@@ -196,12 +216,10 @@
 	add_fingerprint(usr)
 	return
 
-/obj/machinery/sleeper/attack_hand(mob/user)
-	if(..())
-		return
-	var/dat = "<h3>Sleeper Status</h3>"
+/obj/machinery/sleeper/ui_interact(mob/user)
+	var/dat = "<div class='Section__title'>Sleeper Status</div>"
 
-	dat += "<div class='statusDisplay'>"
+	dat += "<div class='Section'>"
 	if(!occupant)
 		dat += "Sleeper Unoccupied"
 	else
@@ -216,33 +234,33 @@
 
 		dat += "<br />"
 
-		dat +=  "<div class='line'><div class='statusLabel'>Health:</div><div class='progressBar'><div style='width: [occupant.health]%;' class='progressFill good'></div></div><div class='statusValue'>[occupant.health]%</div></div>"
-		dat +=  "<div class='line'><div class='statusLabel'>\> Brute Damage:</div><div class='progressBar'><div style='width: [occupant.getBruteLoss()]%;' class='progressFill bad'></div></div><div class='statusValue'>[occupant.getBruteLoss()]%</div></div>"
-		dat +=  "<div class='line'><div class='statusLabel'>\> Resp. Damage:</div><div class='progressBar'><div style='width: [occupant.getOxyLoss()]%;' class='progressFill bad'></div></div><div class='statusValue'>[occupant.getOxyLoss()]%</div></div>"
-		dat +=  "<div class='line'><div class='statusLabel'>\> Toxin Content:</div><div class='progressBar'><div style='width: [occupant.getToxLoss()]%;' class='progressFill bad'></div></div><div class='statusValue'>[occupant.getToxLoss()]%</div></div>"
-		dat +=  "<div class='line'><div class='statusLabel'>\> Burn Severity:</div><div class='progressBar'><div style='width: [occupant.getFireLoss()]%;' class='progressFill bad'></div></div><div class='statusValue'>[occupant.getFireLoss()]%</div></div>"
+		dat +=  "<div class='line'><div class='statusLabel'>Health:</div><div class='progressBar'><div style='width: [occupant.health]%;' class='progressFill bggood'></div></div><div class='statusValue'>[occupant.health]%</div></div>"
+		dat +=  "<div class='line'><div class='statusLabel'>\> Brute Damage:</div><div class='progressBar'><div style='width: [occupant.getBruteLoss()]%;' class='progressFill bgbad'></div></div><div class='statusValue'>[occupant.getBruteLoss()]%</div></div>"
+		dat +=  "<div class='line'><div class='statusLabel'>\> Resp. Damage:</div><div class='progressBar'><div style='width: [occupant.getOxyLoss()]%;' class='progressFill bgbad'></div></div><div class='statusValue'>[occupant.getOxyLoss()]%</div></div>"
+		dat +=  "<div class='line'><div class='statusLabel'>\> Toxin Content:</div><div class='progressBar'><div style='width: [occupant.getToxLoss()]%;' class='progressFill bgbad'></div></div><div class='statusValue'>[occupant.getToxLoss()]%</div></div>"
+		dat +=  "<div class='line'><div class='statusLabel'>\> Burn Severity:</div><div class='progressBar'><div style='width: [occupant.getFireLoss()]%;' class='progressFill bgbad'></div></div><div class='statusValue'>[occupant.getFireLoss()]%</div></div>"
 
-		dat += "<HR><div class='line'><div class='statusLabel'>Paralysis Summary:</div><div class='statusValue'>[round(occupant.paralysis)]% [occupant.paralysis ? "([round(occupant.paralysis / 4)] seconds left)" : ""]</div></div>"
-		dat += "<HR><div class='line'><div class='statusLabel'>Paralysis Summary:</div><div class='statusValue'>[round(occupant.paralysis)]% [occupant.paralysis ? "([round(occupant.paralysis / 4)] seconds left)" : ""]</div></div>"
+		var/occupant_paralysis = occupant.AmountParalyzed()
+		dat += "<HR><div class='line'><div class='statusLabel'>Paralysis Summary:</div><div class='statusValue'>[round(occupant_paralysis)]% [occupant_paralysis ? "([round(occupant_paralysis / 4)] seconds left)" : ""]</div></div>"
 		if(occupant.reagents.reagent_list.len)
 			for(var/datum/reagent/R in occupant.reagents.reagent_list)
 				dat += text("<div class='line'><div class='statusLabel'>[R.name]:</div><div class='statusValue'>[] units</div></div>", round(R.volume, 0.1))
 
 	dat += "</div>"
 
-	dat += "<A href='?src=\ref[src];refresh=1'>Scan</A>"
+	dat += "<A href='byond://?src=\ref[src];refresh=1'>Scan</A>"
 
-	dat += "<A href='?src=\ref[src];[state_open ? "close=1'>Close</A>" : "open=1'>Open</A>"]"
+	dat += "<A href='byond://?src=\ref[src];[state_open ? "close=1'>Close</A>" : "open=1'>Open</A>"]"
 
 	dat += "<h3>Beaker</h3>"
 
 	if(src.beaker)
-		dat += "<A href='?src=\ref[src];removebeaker=1'>Remove Beaker</A>"
+		dat += "<A href='byond://?src=\ref[src];removebeaker=1'>Remove Beaker</A>"
 		if(filtering)
-			dat += "<A href='?src=\ref[src];togglefilter=1'>Stop Dialysis</A>"
+			dat += "<A href='byond://?src=\ref[src];togglefilter=1'>Stop Dialysis</A>"
 			dat += text("<BR>Output Beaker has [] units of free space remaining<BR><HR>", src.beaker.reagents.maximum_volume - src.beaker.reagents.total_volume)
 		else
-			dat += "<A href='?src=\ref[src];togglefilter=1'>Start Dialysis</A>"
+			dat += "<A href='byond://?src=\ref[src];togglefilter=1'>Start Dialysis</A>"
 			dat += text("<BR>Output Beaker has [] units of free space remaining", src.beaker.reagents.maximum_volume - src.beaker.reagents.total_volume)
 	else
 		dat += "<BR>No Dialysis Output Beaker is present."
@@ -250,22 +268,21 @@
 	dat += "<h3>Injector</h3>"
 
 	if(src.occupant)
-		dat += "<A href='?src=\ref[src];inject=inaprovaline'>Inject Inaprovaline</A>"
+		dat += "<A href='byond://?src=\ref[src];inject=inaprovaline'>Inject Inaprovaline</A>"
 	else
-		dat += "<span class='linkOff'>Inject Inaprovaline</span>"
+		dat += "<span class='disabled'>Inject Inaprovaline</span>"
 	if(occupant && occupant.health > min_health)
 		for(var/re in available_chems)
 			var/datum/reagent/C = chemical_reagents_list[re]
 			if(C)
-				dat += "<BR><A href='?src=\ref[src];inject=[C.id]'>Inject [C.name]</A>"
+				dat += "<BR><A href='byond://?src=\ref[src];inject=[C.id]'>Inject [C.name]</A>"
 	else
 		for(var/re in available_chems)
 			var/datum/reagent/C = chemical_reagents_list[re]
 			if(C)
-				dat += "<BR><span class='linkOff'>Inject [C.name]</span>"
+				dat += "<BR><span class='disabled'>Inject [C.name]</span>"
 
-	var/datum/browser/popup = new(user, "sleeper", "Sleeper Console", 520, 540)	//Set up the popup browser window
-	popup.set_title_image(user.browse_rsc_icon(icon, icon_state))
+	var/datum/browser/popup = new(user, "sleeper", "Sleeper Console", 520, 605)	//Set up the popup browser window
 	popup.set_content(dat)
 	popup.open()
 
@@ -274,6 +291,8 @@
 	if(!. || usr == occupant)
 		return FALSE
 
+	if(href_list)
+		playsound(src, 'sound/machines/select.ogg', VOL_EFFECTS_MASTER, vary = FALSE)
 	if(href_list["refresh"])
 		updateUsrDialog()
 	else if(href_list["open"])
@@ -284,38 +303,37 @@
 		remove_beaker()
 	else if(href_list["togglefilter"])
 		toggle_filter()
-	else if(occupant && occupant.stat != DEAD && is_operational())
-		if(href_list["inject"] == "inaprovaline" || occupant.health > min_health)
+	else if(occupant && occupant.stat != DEAD)
+		if(href_list["inject"] == "inaprovaline" || (occupant.health > min_health && (href_list["inject"] in available_chems)))
 			inject_chem(usr, href_list["inject"])
 		else
 			to_chat(usr, "<span class='notice'>ERROR: Subject is not in stable condition for auto-injection.</span>")
+			playsound(src, 'sound/machines/synth_no.ogg', VOL_EFFECTS_MASTER, vary = FALSE)
 	else
 		to_chat(usr, "<span class='notice'>ERROR: Subject cannot metabolise chemicals.</span>")
+		playsound(src, 'sound/machines/synth_no.ogg', VOL_EFFECTS_MASTER, vary = FALSE)
 	updateUsrDialog()
-
-/obj/machinery/sleeper/attack_ai(mob/user)
-	return attack_hand(user)
-
-/obj/machinery/sleeper/attack_paw(mob/user)
-	return attack_hand(user)
 
 /obj/machinery/sleeper/open_machine()
 	if(!state_open && !panel_open)
 		..()
+		playsound(src, 'sound/machines/sleeper_open.ogg', VOL_EFFECTS_MASTER, vary = FALSE)
 		if(beaker)
 			beaker.loc = src
 
 /obj/machinery/sleeper/close_machine(mob/target)
 	if(state_open && !panel_open)
-		to_chat(target, "\blue <b>You feel cool air surround you. You go numb as your senses turn inward.</b>")
+		to_chat(target, "<span class='notice'><b>You feel cool air surround you. You go numb as your senses turn inward.</b></span>")
+		playsound(src, 'sound/machines/sleeper_close.ogg', VOL_EFFECTS_MASTER, vary = FALSE)
 		..(target)
 
 /obj/machinery/sleeper/proc/inject_chem(mob/user, chem)
 	if(occupant && occupant.reagents)
-		if(occupant.reagents.get_reagent_amount(chem) + 5 <= 20 * efficiency)
-			occupant.reagents.add_reagent(chem, 5)
+		if(occupant.reagents.get_reagent_amount(chem) + 10 <= 20 * efficiency)
+			occupant.reagents.add_reagent(chem, 10)
 		var/units = round(occupant.reagents.get_reagent_amount(chem))
 		to_chat(user, "<span class='notice'>Occupant now has [units] unit\s of [chem] in their bloodstream.</span>")
+		playsound(src, 'sound/machines/sleeper_inject.ogg', VOL_EFFECTS_MASTER, vary = FALSE)
 
 /obj/machinery/sleeper/update_icon()
 	if(state_open)

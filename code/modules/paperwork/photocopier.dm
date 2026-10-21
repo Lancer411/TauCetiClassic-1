@@ -2,170 +2,171 @@
 	name = "photocopier"
 	icon = 'icons/obj/library.dmi'
 	icon_state = "bigscanner"
-	anchored = 1
-	density = 1
-	use_power = 1
+	anchored = TRUE
+	density = TRUE
+	use_power = IDLE_POWER_USE
 	idle_power_usage = 30
 	active_power_usage = 200
-	power_channel = EQUIP
-	var/obj/item/weapon/paper/copy = null	//what's in the copier!
+	var/obj/item/weapon/paper/copyitem = null	//what's in the copier!
 	var/obj/item/weapon/photo/photocopy = null
 	var/obj/item/weapon/paper_bundle/bundle = null
 	var/copies = 1	//how many copies to print!
 	var/toner = 30 //how much toner is left! woooooo~
 	var/maxcopies = 10	//how many copies can be copied at once- idea shamelessly stolen from bs12's copier!
-
-/obj/machinery/photocopier/attack_ai(mob/user)
-	return attack_hand(user)
-
-/obj/machinery/photocopier/attack_paw(mob/user)
-	return attack_hand(user)
+	var/copying = FALSE
 
 /obj/machinery/photocopier/attack_hand(mob/user)
 	user.set_machine(src)
 
-	var/dat = "Photocopier<BR><BR>"
-	if(copy || photocopy || bundle)
-		dat += "<a href='byond://?src=\ref[src];remove=1'>Remove Paper</a><BR>"
-		if(toner)
-			dat += "<a href='byond://?src=\ref[src];copy=1'>Copy</a><BR>"
-			dat += "Printing: [copies] copies."
-			dat += "<a href='byond://?src=\ref[src];min=1'>-</a> "
-			dat += "<a href='byond://?src=\ref[src];add=1'>+</a><BR><BR>"
-	else if(toner)
-		dat += "Please insert paper to copy.<BR><BR>"
-	if(istype(user,/mob/living/silicon))
-		dat += "<a href='byond://?src=\ref[src];aipic=1'>Print photo from database</a><BR><BR>"
-	dat += "Current toner level: [toner]"
-	if(!toner)
-		dat +="<BR>Please insert a new toner cartridge!"
-	user << browse(dat, "window=copier")
-	onclose(user, "copier")
-	return
+	tgui_interact(user)
 
-/obj/machinery/photocopier/is_operational_topic()
-	return TRUE
+/obj/machinery/photocopier/tgui_interact(mob/user, datum/tgui/ui, datum/tgui/parent_ui)
+	ui = SStgui.try_update_ui(user, src, ui)
+	if(!ui)
+		ui = new(user, src, "Photocopier", name)
+		ui.open()
 
-/obj/machinery/photocopier/Topic(href, href_list)
-	. = ..()
-	if(!.)
-		return
+/obj/machinery/photocopier/tgui_data(mob/user, datum/tgui/ui, datum/tgui_state/state)
+	var/list/data = ..()
 
-	if(href_list["copy"])
-		if(copy)
-			for(var/i = 1 to copies)
-				if(toner > 0)
-					copy(copy)
-					sleep(15)
-				else
-					break
-			updateUsrDialog()
-		else if(photocopy)
-			for(var/i = 1 to copies)
-				if(toner > 0)
-					photocopy(photocopy)
-					sleep(15)
-				else
-					break
-		else if(bundle)
-			for(var/i = 1 to copies)
-				if(toner <= 0)
-					break
-				var/obj/item/weapon/paper_bundle/p = new /obj/item/weapon/paper_bundle (src)
-				var/j = 0
-				for(var/obj/item/weapon/W in bundle)
-					if(toner <= 0)
-						to_chat(usr, "<span class='notice'>The photocopier couldn't finish the printjob.</span>")
-						break
-					else if(istype(W, /obj/item/weapon/paper))
-						W = copy(W)
-					else if(istype(W, /obj/item/weapon/photo))
-						W = photocopy(W)
-					W.loc = p
-					p.amount++
-					j++
-				p.amount--
-				p.loc = src.loc
-				p.update_icon()
-				p.icon_state = "paper_words"
-				p.name = bundle.name
-				p.pixel_y = rand(-8, 8)
-				p.pixel_x = rand(-9, 9)
-				sleep(15 * j)
-	else if(href_list["remove"])
-		if(copy)
-			copy.loc = usr.loc
-			usr.put_in_hands(copy)
-			to_chat(usr, "<span class='notice'>You take the paper out of \the [src].</span>")
-			copy = null
-		else if(photocopy)
-			photocopy.loc = usr.loc
-			usr.put_in_hands(photocopy)
-			to_chat(usr, "<span class='notice'>You take the photo out of \the [src].</span>")
-			photocopy = null
-		else if(bundle)
-			bundle.loc = usr.loc
-			usr.put_in_hands(bundle)
-			to_chat(usr, "<span class='notice'>You take the paper bundle out of \the [src].</span>")
-			bundle = null
-	else if(href_list["min"])
-		if(copies > 1)
-			copies--
-	else if(href_list["add"])
-		if(copies < maxcopies)
-			copies++
-	else if(href_list["aipic"])
-		if(!istype(usr,/mob/living/silicon)) return
-		if(toner >= 5)
-			var/mob/living/silicon/tempAI = usr
-			var/obj/item/device/camera/siliconcam/camera = tempAI.aiCamera
+	data["has_item"] = copyitem
+	data["isAI"] = issilicon(user)
+	data["can_AI_print"] = (toner >= 5)
+	data["has_toner"] = !!toner
+	data["current_toner"] = toner
+	data["max_toner"] = 40
+	data["num_copies"] = copies
+	data["max_copies"] = maxcopies
 
-			if(!camera)
+	return data
+
+/obj/machinery/photocopier/tgui_act(action, list/params, datum/tgui/ui, datum/tgui_state/state)
+	if(..())
+		return TRUE
+
+	switch(action)
+		if("make_copy")
+			addtimer(CALLBACK(src, PROC_REF(copy_operation), usr), 0)
+			. = TRUE
+		if("remove")
+			if(copyitem)
+				copyitem.loc = usr.loc
+				usr.put_in_hands(copyitem)
+				to_chat(usr, "<span class='notice'>You take \the [copyitem] out of \the [src].</span>")
+				copyitem = null
+			. = TRUE
+		if("set_copies")
+			copies = clamp(text2num(params["num_copies"]), 1, maxcopies)
+			. = TRUE
+		if("ai_photo")
+			if(!issilicon(usr))
 				return
-			var/datum/picture/selection = camera.selectpicture()
-			if (!selection)
+			if(stat & (BROKEN|NOPOWER))
 				return
 
-			var/obj/item/weapon/photo/p = new /obj/item/weapon/photo (src.loc)
-			p.construct(selection)
-			if (p.desc == "")
-				p.desc += "Copied by [tempAI.name]"
-			else
-				p.desc += " - Copied by [tempAI.name]"
-			toner -= 5
-			sleep(15)
+			if(toner >= 5)
+				var/mob/living/silicon/tempAI = usr
+				var/obj/item/device/camera/siliconcam/camera = tempAI.aiCamera
+				if(!camera)
+					return
 
-	updateUsrDialog()
+				var/datum/picture/selection = camera.selectpicture()
+				if (!selection)
+					return
+
+				var/obj/item/weapon/photo/p = new /obj/item/weapon/photo(loc)
+				p.construct(selection)
+				if (p.desc == "")
+					p.desc += "Copied by [tempAI.name]"
+				else
+					p.desc += " - Copied by [tempAI.name]"
+				toner -= 5
+			. = TRUE
+
+/obj/machinery/photocopier/proc/get_copy_delay(obj/item/I)
+	if(istype(I, /obj/item/weapon/paper))
+		return 11
+
+	if(istype(I, /obj/item/weapon/photo))
+		return 11
+
+	if(istype(I, /obj/item/weapon/paper_bundle))
+		return 11
+
+	return 0
+
+// Return additional delay after copying
+/obj/machinery/photocopier/proc/copy_item(obj/item/I)
+	if(istype(I, /obj/item/weapon/paper))
+		copy(I)
+		return 0
+
+	if(istype(I, /obj/item/weapon/photo))
+		photocopy(I)
+		return 0
+
+	if(istype(I, /obj/item/weapon/paper_bundle))
+		var/obj/item/weapon/paper_bundle/B = bundlecopy(copyitem)
+		return 11 * B.pages.len
+
+	return 0
+
+/obj/machinery/photocopier/proc/copy_operation(mob/user)
+	if(copying)
+		return FALSE
+	copying = TRUE
+	for(var/i = 0, i < copies, i++)
+		if(toner <= 0)
+			break
+		if(!copyitem)
+			break
+		var/delay = get_copy_delay(copyitem)
+		if(delay == 0)
+			to_chat(user, "<span class='warning'>\The [copyitem] can't be copied by [src].</span>")
+			break
+
+		if(user.is_busy() || !do_after(user, delay, target = src))
+			break
+
+		if(!copyitem)
+			break
+
+		delay = copy_item(copyitem)
+		use_power(active_power_usage)
+		if(user.is_busy() || !do_after(user, delay, target = src, progress = FALSE))
+			break
+
+	copying = FALSE
+
+/obj/machinery/photocopier/proc/bundlecopy(obj/item/weapon/paper_bundle/bundle, need_toner = TRUE)
+	var/obj/item/weapon/paper_bundle/p = new /obj/item/weapon/paper_bundle (src)
+	for(var/obj/item/weapon/W in bundle.pages)
+		if(toner <= 0 && need_toner)
+			toner = 0
+			break
+		if(istype(W, /obj/item/weapon/paper))
+			W = copy(W)
+		else if(istype(W, /obj/item/weapon/photo))
+			W = photocopy(W)
+		W.loc = p
+		p.pages += W
+
+	p.loc = src.loc
+	p.update_icon()
+	p.icon_state = "paper_words"
+	p.name = bundle.name
+	p.pixel_y = rand(-8, 8)
+	p.pixel_x = rand(-9, 9)
+	return p
 
 /obj/machinery/photocopier/attackby(obj/item/O, mob/user)
-	if(istype(O, /obj/item/weapon/paper))
-		if(!copy && !photocopy && !bundle)
-			user.drop_item()
-			copy = O
-			O.loc = src
-			to_chat(user, "<span class='notice'>You insert the paper into \the [src].</span>")
-			flick("bigscanner1", src)
-			updateUsrDialog()
+	if(istype(O, /obj/item/weapon/paper) || istype(O, /obj/item/weapon/photo) || istype(O, /obj/item/weapon/paper_bundle))
+		if(!copyitem)
+			user.drop_from_inventory(O, src)
+			copyitem = O
+			to_chat(user, "<span class='notice'>You insert \the [O] into \the [src].</span>")
 		else
 			to_chat(user, "<span class='notice'>There is already something in \the [src].</span>")
-	else if(istype(O, /obj/item/weapon/photo))
-		if(!copy && !photocopy && !bundle)
-			user.drop_item()
-			photocopy = O
-			O.loc = src
-			to_chat(user, "<span class='notice'>You insert the photo into \the [src].</span>")
-			flick("bigscanner1", src)
-			updateUsrDialog()
-		else
-			to_chat(user, "<span class='notice'>There is already something in \the [src].</span>")
-	else if(istype(O, /obj/item/weapon/paper_bundle))
-		if(!copy && !photocopy && !bundle)
-			user.drop_item()
-			bundle = O
-			O.loc = src
-			to_chat(user, "<span class='notice'>You insert the bundle into \the [src].</span>")
-			flick("bigscanner1", src)
-			updateUsrDialog()
 	else if(istype(O, /obj/item/device/toner))
 		if(toner == 0)
 			user.drop_item()
@@ -175,73 +176,48 @@
 			updateUsrDialog()
 		else
 			to_chat(user, "<span class='notice'>This cartridge is not yet ready for replacement! Use up the rest of the toner.</span>")
-	else if(istype(O, /obj/item/weapon/wrench))
-		playsound(loc, 'sound/items/Ratchet.ogg', 50, 1)
-		anchored = !anchored
-		to_chat(user, "<span class='notice'>You [anchored ? "wrench" : "unwrench"] \the [src].</span>")
-	return
+	else if(iswrenching(O))
+		default_unfasten_wrench(user, O)
 
-/obj/machinery/photocopier/ex_act(severity)
-	switch(severity)
-		if(1.0)
-			qdel(src)
-		if(2.0)
-			if(prob(50))
-				qdel(src)
-			else
-				if(toner > 0)
-					new /obj/effect/decal/cleanable/blood/oil(get_turf(src))
-					toner = 0
-		else
-			if(prob(50))
-				if(toner > 0)
-					new /obj/effect/decal/cleanable/blood/oil(get_turf(src))
-					toner = 0
-	return
-
-/obj/machinery/photocopier/blob_act()
-	if(prob(50))
-		qdel(src)
-	else
-		if(toner > 0)
-			new /obj/effect/decal/cleanable/blood/oil(get_turf(src))
-			toner = 0
-	return
-
+/obj/machinery/photocopier/atom_break(damage_flag)
+	. = ..()
+	if(. && toner > 0)
+		new /obj/effect/decal/cleanable/blood/oil(get_turf(src))
+		toner = 0
 
 /obj/machinery/photocopier/proc/copy(obj/item/weapon/paper/copy)
-	var/obj/item/weapon/paper/c = new /obj/item/weapon/paper (loc)
+	var/obj/item/weapon/paper/P = new(loc)
 	if(toner > 10)	//lots of toner, make it dark
-		c.info = "<font color = #101010>"
+		P.info = "<font color = #101010>"
 	else			//no toner? shitty copies for you!
-		c.info = "<font color = #808080>"
-	var/copied = html_decode(copy.info)
-	copied = replacetext(copied, "<font face=\"[c.deffont]\" color=", "<font face=\"[c.deffont]\" nocolor=")	//state of the art techniques in action
-	copied = replacetext(copied, "<font face=\"[c.crayonfont]\" color=", "<font face=\"[c.crayonfont]\" nocolor=")	//This basically just breaks the existing color tag, which we need to do because the innermost tag takes priority.
-	c.info += copied
-	c.info += "</font>"
-	c.name = copy.name // -- Doohl
-	c.fields = copy.fields
-	c.stamps = copy.stamps
-	c.stamped = copy.stamped
-	c.ico = copy.ico
-	c.offset_x = copy.offset_x
-	c.offset_y = copy.offset_y
-	var/list/temp_overlays = copy.overlays       //Iterates through stamps
-	var/image/img                                //and puts a matching
-	for (var/j = 1, j <= temp_overlays.len, j++) //gray overlay onto the copy
-		if (findtext(copy.ico[j], "cap") || findtext(copy.ico[j], "cent"))
-			img = image('icons/obj/bureaucracy.dmi', "paper_stamp-circle")
-		else if (findtext(copy.ico[j], "deny"))
-			img = image('icons/obj/bureaucracy.dmi', "paper_stamp-x")
-		else
-			img = image('icons/obj/bureaucracy.dmi', "paper_stamp-dots")
-		img.pixel_x = copy.offset_x[j]
-		img.pixel_y = copy.offset_y[j]
-		c.overlays += img
-	c.updateinfolinks()
+		P.info = "<font color = #808080>"
+	var/copied = copy.info
+	copied = replacetext(copied, "<font face=\"[P.deffont]\" color=", "<font face=\"[P.deffont]\" nocolor=")	//state of the art techniques in action
+	copied = replacetext(copied, "<font face=\"[P.crayonfont]\" color=", "<font face=\"[P.crayonfont]\" nocolor=")	//This basically just breaks the existing color tag, which we need to do because the innermost tag takes priority.
+	copied = replacetext(copied, "<img ", "<img style=\"filter: gray;\"")	//IE is still IE
+	copied = replacetext(copied, "<font color=", "<font nocolor=")
+	copied = replacetext(copied, "<table border=3px cellpadding=5px bordercolor=", "<table border=3px cellpadding=5px bordernocolor=")
+	P.info += copied
+	P.info += "</font>"//</font>
+	P.name = copy.name // -- Doohl
+	P.fields = copy.fields
+	P.sfields = copy.sfields
+	P.stamp_text = replacetext(copy.stamp_text, "color:", "nocolor:") // Russian server? I hope nobody will write this on paper
+	P.stamped = LAZYCOPY(copy.stamped)
+	P.ico = LAZYCOPY(copy.ico)
+	P.offset_x = LAZYCOPY(copy.offset_x)
+	P.offset_y = LAZYCOPY(copy.offset_y)
+	var/image/img
+	for (var/i in 1 to copy.overlays.len)        //Iterates through stamps gray and puts a matching overlay onto the copy
+		img = copy.ico[i]
+		img.color = "#7f7f7f" // 50% grey
+		img.pixel_x = copy.offset_x[i]
+		img.pixel_y = copy.offset_y[i]
+		P.add_overlay(img)
+	P.updateinfolinks()
+	P.update_icon()
 	toner--
-	return c
+	return P
 
 
 /obj/machinery/photocopier/proc/photocopy(obj/item/weapon/photo/photocopy)
@@ -272,5 +248,6 @@
 /obj/item/device/toner
 	name = "toner cartridge"
 	icon_state = "tonercartridge"
+	w_class = SIZE_TINY
 	var/charges = 50
 	var/max_charges = 50

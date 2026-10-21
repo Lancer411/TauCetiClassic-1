@@ -19,29 +19,27 @@
 //- Identify how hard it is to break into the area and where the weak points are
 //- Check if the area has too much empty space. If so, make it smaller and replace the rest with maintenance tunnels.
 
-var/camera_range_display_status = 0
-var/intercom_range_display_status = 0
+var/global/camera_range_display_status = 0
+var/global/intercom_range_display_status = 0
 
 /obj/effect/debugging/camera_range
 	icon = 'icons/480x480.dmi'
 	icon_state = "25percent"
 
-	New()
-		src.pixel_x = -224
-		src.pixel_y = -224
+/obj/effect/debugging/camera_range/New()
+	src.pixel_x = -224
+	src.pixel_y = -224
 
 /obj/effect/debugging/marker
 	icon = 'icons/turf/areas.dmi'
 	icon_state = "yellow"
 
-/obj/effect/debugging/marker/Move()
-	return 0
+/obj/effect/debugging/marker/Move(NewLoc, Dir = 0, step_x = 0, step_y = 0)
+	return FALSE
 
 /client/proc/do_not_use_these()
 	set category = "Mapping"
 	set name = "-None of these are for ingame use!!"
-
-	..()
 
 /client/proc/camera_view()
 	set category = "Mapping"
@@ -73,31 +71,34 @@ var/intercom_range_display_status = 0
 	for(var/obj/machinery/camera/C in cameranet.cameras)
 		CL += C
 
-	var/output = {"<B>CAMERA ANNOMALITIES REPORT</B><HR>
-<B>The following annomalities have been detected. The ones in red need immediate attention: Some of those in black may be intentional.</B><BR><ul>"}
+	var/output = {"<B>The following annomalities have been detected. The ones in red need immediate attention: Some of those in black may be intentional.</B><BR><ul>"}
 
 	for(var/obj/machinery/camera/C1 in CL)
 		for(var/obj/machinery/camera/C2 in CL)
 			if(C1 != C2)
 				if(C1.c_tag == C2.c_tag)
-					output += "<li><font color='red'>c_tag match for sec. cameras at \[[C1.x], [C1.y], [C1.z]\] ([C1.loc.loc]) and \[[C2.x], [C2.y], [C2.z]\] ([C2.loc.loc]) - c_tag is [C1.c_tag]</font></li>"
+					output += "<li><font color='red'>c_tag match for sec. cameras at \[[COORD(C1)]\] ([C1.loc.loc]) and \[[COORD(C2)]\] ([C2.loc.loc]) - c_tag is [C1.c_tag]</font></li>"
 				if(C1.loc == C2.loc && C1.dir == C2.dir && C1.pixel_x == C2.pixel_x && C1.pixel_y == C2.pixel_y)
-					output += "<li><font color='red'>FULLY overlapping sec. cameras at \[[C1.x], [C1.y], [C1.z]\] ([C1.loc.loc]) Networks: [C1.network] and [C2.network]</font></li>"
+					output += "<li><font color='red'>FULLY overlapping sec. cameras at \[[COORD(C1)]\] ([C1.loc.loc]) Networks: [C1.network] and [C2.network]</font></li>"
 				if(C1.loc == C2.loc)
-					output += "<li>overlapping sec. cameras at \[[C1.x], [C1.y], [C1.z]\] ([C1.loc.loc]) Networks: [C1.network] and [C2.network]</font></li>"
+					output += "<li>overlapping sec. cameras at \[[COORD(C1)]\] ([C1.loc.loc]) Networks: [C1.network] and [C2.network]</font></li>"
 		var/turf/T = get_step(C1,turn(C1.dir,180))
 		if(!T || !isturf(T) || !T.density )
 			if(!(locate(/obj/structure/grille,T)))
 				var/window_check = 0
-				for(var/obj/structure/window/W in T)
-					if (W.dir == turn(C1.dir,180) || W.dir in list(5,6,9,10) )
+				for(var/obj/structure/window/thin/W in T)
+					if (W.dir == turn(C1.dir,180))
 						window_check = 1
 						break
 				if(!window_check)
-					output += "<li><font color='red'>Camera not connected to wall at \[[C1.x], [C1.y], [C1.z]\] ([C1.loc.loc]) Network: [C1.network]</color></li>"
+					output += "<li><font color='red'>Camera not connected to wall at \[[COORD(C1)]\] ([C1.loc.loc]) Network: [C1.network]</color></li>"
 
 	output += "</ul>"
-	usr << browse(output,"window=airreport;size=1000x500")
+
+	var/datum/browser/popup = new(usr, "airreport", "CAMERA ANNOMALITIES REPORT", 1000, 500)
+	popup.set_content(output)
+	popup.open()
+
 	feedback_add_details("admin_verb","mCRP") //If you are copy-pasting this, ensure the 2nd parameter is unique to the new proc!
 
 /client/proc/intercom_view()
@@ -120,7 +121,7 @@ var/intercom_range_display_status = 0
 					qdel(F)
 	feedback_add_details("admin_verb","mIRD") //If you are copy-pasting this, ensure the 2nd parameter is unique to the new proc!
 
-var/list/debug_verbs = list (
+var/global/list/debug_verbs = list (
 	/client/proc/do_not_use_these
         ,/client/proc/camera_view
         ,/client/proc/sec_camera_report
@@ -132,7 +133,7 @@ var/list/debug_verbs = list (
         ,/client/proc/count_objects_all
         ,/client/proc/cmd_assume_direct_control
         ,/client/proc/startSinglo
-        ,/client/proc/fps	//allows you to set the ticklag.
+        ,/client/proc/set_fps	//allows you to set the ticklag.
         ,/client/proc/cmd_admin_grantfullaccess
 //        ,/client/proc/splash
         ,/client/proc/cmd_admin_areatest
@@ -143,10 +144,15 @@ var/list/debug_verbs = list (
         ,/client/proc/disable_movement
         ,/client/proc/Zone_Info
         ,/client/proc/Test_ZAS_Connection
+        ,/client/proc/debug_z_levels
+        ,/client/proc/create_mapping_job_icons
         ,/client/proc/hide_debug_verbs
 	,/client/proc/testZAScolors
 	,/client/proc/testZAScolors_remove
 	,/client/proc/setup_supermatter_engine
+	,/client/proc/burn_tile
+	,/client/proc/break_tile
+	,/client/proc/fix_tile
 	)
 
 
@@ -202,7 +208,7 @@ var/list/debug_verbs = list (
 	var/turf/simulated/location = get_turf(usr)
 
 	if(!istype(location, /turf/simulated)) // We're in space, let's not cause runtimes.
-		to_chat(usr, "\red this debug tool cannot be used from space")
+		to_chat(usr, "<span class='warning'>this debug tool cannot be used from space</span>")
 		return
 
 	var/icon/red = new('icons/misc/debug_group.dmi', "red")		//created here so we don't have to make thousands of these.
@@ -256,16 +262,13 @@ var/list/debug_verbs = list (
 /client/proc/count_objects_on_z_level()
 	set category = "Mapping"
 	set name = "Count Objects On Level"
-	var/level = input("Which z-level?","Level?") as text
-	if(!level) return
-	var/num_level = text2num(level)
-	if(!num_level) return
-	if(!isnum(num_level)) return
+	var/num_level = input("Which z-level?","Level?") as null|num
+	if(!num_level)
+		return
 
-	var/type_text = input("Which type path?","Path?") as text
-	if(!type_text) return
-	var/type_path = text2path(type_text)
-	if(!type_path) return
+	var/type_path = text2path(input("Which type path?","Path?") as null|text)
+	if(!type_path)
+		return
 
 	var/count = 1
 
@@ -290,7 +293,7 @@ var/list/debug_verbs = list (
 		for(var/j = 1; j <= 10; j++)
 			if(i*10+j <= atom_list.len)
 				temp_atom = atom_list[i*10+j]
-				line += " no.[i+10+j]@\[[temp_atom.x], [temp_atom.y], [temp_atom.z]\]; "
+				line += " no.[i+10+j]@\[[COORD(temp_atom)]\]; "
 		to_chat(world, line)*/
 
 	to_chat(world, "There are [count] objects of type [type_path] on z-level [num_level]")
@@ -317,7 +320,7 @@ var/list/debug_verbs = list (
 		for(var/j = 1; j <= 10; j++)
 			if(i*10+j <= atom_list.len)
 				temp_atom = atom_list[i*10+j]
-				line += " no.[i+10+j]@\[[temp_atom.x], [temp_atom.y], [temp_atom.z]\]; "
+				line += " no.[i+10+j]@\[[COORD(temp_atom)]\]; "
 		to_chat(world, line)*/
 
 	to_chat(world, "There are [count] objects of type [type_path] in the game world")
@@ -332,7 +335,7 @@ var/global/say_disabled = 0
 	set category = "Mapping"
 	set name = "Disable all communication verbs"
 
-	to_chat(usr, "\red Proc disabled.")
+	to_chat(usr, "<span class='warning'>Proc disabled.</span>")
 
 	/*say_disabled = !say_disabled
 	if(say_disabled)
@@ -347,7 +350,7 @@ var/global/movement_disabled_exception //This is the client that calls the proc,
 	set category = "Mapping"
 	set name = "Disable all movement"
 
-	to_chat(usr, "\red Proc disabled.")
+	to_chat(usr, "<span class='warning'>Proc disabled.</span>")
 
 	/*movement_disabled = !movement_disabled
 	if(movement_disabled)
@@ -355,3 +358,92 @@ var/global/movement_disabled_exception //This is the client that calls the proc,
 		movement_disabled_exception = usr.ckey
 	else
 		message_admins("[src.ckey] used 'Disable all movement', restoring all movement.")*/
+
+/client/proc/debug_z_levels()
+	set name = "Debug Z-Levels"
+	set category = "Mapping"
+
+	var/list/z_list = SSmapping.z_list
+	var/list/messages = list()
+	messages += "<b>World</b>: [world.maxx] x [world.maxy] x [world.maxz]<br>"
+
+	for(var/z in 1 to max(world.maxz, z_list.len))
+		if (z > z_list.len)
+			messages += "<b>[z]</b>: Unmanaged (out of bounds)<br>"
+			continue
+		var/datum/space_level/S = z_list[z]
+		if (!S)
+			messages += "<b>[z]</b>: Unmanaged (null)<br>"
+			continue
+		var/linkage
+		switch (S.linkage)
+			if (UNAFFECTED)
+				linkage = "no linkage"
+			if (SELFLOOPING)
+				linkage = "self-looping"
+			if (CROSSLINKED)
+				linkage = "crosslinked"
+			else
+				linkage = "unknown linkage '[S.linkage]'"
+
+		messages += "<b>[z]</b>: [S.name], [linkage], traits: [json_encode(S.traits)]<br>"
+		if (S.z_value != z)
+			messages += "-- z_value is [S.z_value], should be [z]<br>"
+		if (S.name == initial(S.name))
+			messages += "-- name not set<br>"
+		if (z > world.maxz)
+			messages += "-- exceeds max z"
+
+	to_chat(src, messages.Join(""))
+
+/client/proc/adminchangemap()
+	set category = "Server"
+	set name = "Change Map"
+
+	if(!config.maplist.len)
+		to_chat(usr, "Map config 'config/maps.txt' is missing or empty")
+		return
+
+	var/list/maprotatechoices = list()
+	for (var/map in config.maplist)
+		var/datum/map_config/VM = config.maplist[map]
+		var/mapname = VM.GetFullMapName()
+		maprotatechoices[mapname] = VM
+
+	var/chosenmap = tgui_input_list(usr, "Choose a map to change to", "Change Map", maprotatechoices)
+	if (!chosenmap)
+		return
+
+	var/datum/map_config/VM = maprotatechoices[chosenmap]
+	message_admins("[key_name_admin(usr)] is changing the map to [VM.map_name]")
+	log_admin("[key_name(usr)] is changing the map to [VM.map_name]")
+	if (SSmapping.changemap(VM))
+		message_admins("[key_name_admin(usr)] has changed the map to [VM.map_name]")
+
+//This generates the icon states for job starting location landmarks.
+/client/proc/create_mapping_job_icons()
+	set name = "Generate job landmarks icons"
+	set category = "Mapping"
+	var/icon/final = icon()
+	var/mob/living/carbon/human/dummy/D = new(locate(1,1,1)) //spawn on 1,1,1 so we don't have runtimes when items are deleted
+	D.set_dir(SOUTH)
+	for(var/job in subtypesof(/datum/job))
+		var/datum/job/JB = new job
+		switch(JB.title)
+			if("AI")
+				final.Insert(icon('icons/mob/ai.dmi', "ai", SOUTH, 1), "AI")
+			if("Cyborg")
+				final.Insert(icon('icons/mob/robots.dmi', "robot", SOUTH, 1), "Cyborg")
+			else
+				for(var/obj/item/I in D)
+					qdel(I)
+				D.randomize_appearance()
+				JB.equip(D, TRUE, FALSE)
+				COMPILE_OVERLAYS(D)
+				var/icon/I = icon(getFlatIcon(D), frame = 1)
+				final.Insert(I, JB.title)
+	qdel(D)
+	//Also add the x
+	for(var/x_number in 1 to 4)
+		final.Insert(icon('icons/hud/screen_gen.dmi', "x[x_number == 1 ? "" : x_number]"), "x[x_number == 1 ? "" : x_number]")
+	fcopy(final, "icons/mob/landmarks.dmi")

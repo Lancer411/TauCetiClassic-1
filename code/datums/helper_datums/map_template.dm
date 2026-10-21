@@ -6,21 +6,24 @@
 	var/mapfile = null
 	var/loaded = 0 // Times loaded this round
 	var/list/loaded_stuff = list()
+	var/list/bounds
 
 /datum/map_template/New(path = null, map = null, rename = null)
 	if(path)
 		mappath = path
-	if(mappath)
-		preload_size(mappath)
 	if(map)
 		mapfile = map
+	if(mappath)
+		preload_size(mappath)
+	else if(mapfile)
+		preload_size(mapfile)
 	if(rename)
 		name = rename
 
 /datum/map_template/proc/preload_size(path)
-	loaded_stuff = maploader.load_map(file(path), 1, 1, 1, cropMap=FALSE, measureOnly=TRUE)
+	loaded_stuff = maploader.load_map(get_file(), 1, 1, 1, cropMap=FALSE, measureOnly=TRUE)
 	if(loaded_stuff && loaded_stuff.len)
-		var/list/bounds = loaded_stuff["bounds"]
+		bounds = loaded_stuff["bounds"]
 		if(bounds && bounds.len)
 			width = bounds[MAP_MAXX] // Assumes all templates are rectangular, have a single Z level, and begin at 1,1,1
 			height = bounds[MAP_MAXY]
@@ -31,13 +34,15 @@
 	else
 		. = null
 
-/proc/initTemplateBounds(list/bounds)
+/proc/initTemplateBounds(list/bounds, forcemove_mobs = FALSE)
 	var/list/obj/machinery/atmospherics/atmos_machines = list()
 	var/list/obj/structure/cable/cables = list()
 	var/list/atom/atoms = list()
+	var/list/mob/mobs = list()
 
 	for(var/L in block(locate(bounds[MAP_MINX], bounds[MAP_MINY], bounds[MAP_MINZ]),
 	                   locate(bounds[MAP_MAXX], bounds[MAP_MAXY], bounds[MAP_MAXZ])))
+		atoms += L
 		var/turf/B = L
 		for(var/A in B)
 			atoms += A
@@ -47,12 +52,19 @@
 			if(istype(A,/obj/machinery/atmospherics))
 				atmos_machines += A
 				continue
+			if(ismob(A))
+				mobs += A
+				continue
 
-	SSobj.setup_template_objects(atoms)
-	SSmachine.setup_template_powernets(cables)
+	SSatoms.InitializeAtoms(atoms)
+	SSmachines.setup_template_powernets(cables)
 	SSair.setup_template_machinery(atmos_machines)
 
-/datum/map_template/proc/load(turf/T, centered = FALSE)
+	if(forcemove_mobs) // if we need to register change of area/loc
+		for(var/mob/M in mobs)
+			M.forceMove(M.loc, keep_buckled = TRUE)
+
+/datum/map_template/proc/load(turf/T, centered = FALSE, initBounds = TRUE)
 	if(centered)
 		T = locate(T.x - round(width/2) , T.y - round(height/2) , T.z)
 	if(!T)
@@ -66,17 +78,21 @@
 	if(!loaded_stuff || !loaded_stuff.len)
 		return 0
 
-	var/list/bounds = loaded_stuff["bounds"]
+	bounds = loaded_stuff["bounds"]
 	if(!bounds || !bounds.len)
 		return 0
 
 	var/list/stuff = loaded_stuff["stuff"]
 	. = stuff
 	//initialize things that are normally initialized after map load
-	initTemplateBounds(bounds)
+	if(initBounds)
+		initTemplateBounds(bounds, forcemove_mobs = TRUE)
 
-	log_game("[name] loaded at at [T.x],[T.y],[T.z]")
+	log_game("[name] loaded at [COORD(T)]")
 	loaded_stuff.Cut()
+
+/datum/map_template/proc/loadMap(z)
+	return maploader.load_map(get_file(), 1, 1, z, cropMap=TRUE)
 
 /datum/map_template/proc/get_file()
 	if(mapfile)
@@ -104,46 +120,7 @@
 
 	preloadShelterTemplates()
 	preloadHolodeckTemplates()
-	//preloadRuinTemplates()		//This all can be usefull, but not now
-	//preloadShuttleTemplates()
-
-/*
-/proc/preloadRuinTemplates()
-	// Still supporting bans by filename
-	var/list/banned = list()
-//	generateMapList("config/lavaRuinBlacklist.txt")
-//	banned += generateMapList("config/spaceRuinBlacklist.txt")
-
-	for(var/item in subtypesof(/datum/map_template/ruin))
-		var/datum/map_template/ruin/ruin_type = item
-		// screen out the abstract subtypes
-		if(!initial(ruin_type.id))
-			continue
-		var/datum/map_template/ruin/R = new ruin_type()
-
-		if(banned.Find(R.mappath))
-			continue
-
-		map_templates[R.name] = R
-		ruins_templates[R.name] = R
-
-		if(istype(R, /datum/map_template/ruin/lavaland))
-			lava_ruins_templates[R.name] = R
-		else if(istype(R, /datum/map_template/ruin/space))
-			space_ruins_templates[R.name] = R
-
-
-/proc/preloadShuttleTemplates()
-	for(var/item in subtypesof(/datum/map_template/shuttle))
-		var/datum/map_template/shuttle/shuttle_type = item
-		if(!(initial(shuttle_type.suffix)))
-			continue
-
-		var/datum/map_template/shuttle/S = new shuttle_type()
-
-		shuttle_templates[S.shuttle_id] = S
-		map_templates[S.shuttle_id] = S
-*/
+	preloadSpaceStructuresTemplates()
 
 /proc/preloadHolodeckTemplates()
 	for(var/item in subtypesof(/datum/map_template/holoscene))
@@ -163,3 +140,12 @@
 		var/datum/map_template/shelter/S = new shelter_type()
 		shelter_templates[S.id()] = S
 		map_templates[S.id()] = S
+
+/proc/preloadSpaceStructuresTemplates()
+	for(var/item in subtypesof(/datum/map_template/space_structure))
+		var/datum/map_template/space_structure/structure_type = item
+		if(!(initial(structure_type.mappath)))
+			continue
+		var/datum/map_template/space_structure/S = new structure_type()
+		spacestructures_templates[S.structure_id] = S
+		map_templates[S.structure_id] = S

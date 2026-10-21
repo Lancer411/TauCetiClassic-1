@@ -1,7 +1,5 @@
-//This file was auto-corrected by findeclaration.exe on 25.5.2012 20:42:33
-
 #define SOLAR_MAX_DIST 40
-#define SOLARGENRATE 1500
+#define SOLARGENRATE 1800
 
 // This will choose whether to get the solar list from the powernet or the powernet nodes,
 // depending on the size of the nodes.
@@ -18,14 +16,15 @@
 	desc = "A solar electrical generator."
 	icon = 'icons/obj/power.dmi'
 	icon_state = "sp_base"
-	anchored = 1
-	density = 1
-	directwired = 1
-	use_power = 0
+	anchored = TRUE
+	density = TRUE
+	use_power = NO_POWER_USE
 	idle_power_usage = 0
 	active_power_usage = 0
+	max_integrity = 150
+	integrity_failure = 0.33
+
 	var/id = 0
-	var/health = 10
 	var/obscured = 0
 	var/sunfrac = 0
 	var/adir = SOUTH
@@ -33,8 +32,8 @@
 	var/turn_angle = 0
 	var/obj/machinery/power/solar_control/control = null
 
-/obj/machinery/power/solar/New(var/turf/loc, var/obj/item/solar_assembly/S, var/process = 1)
-	..(loc)
+/obj/machinery/power/solar/atom_init(mapload, obj/item/solar_assembly/S, process = 1)
+	. = ..()
 	Make(S)
 	connect_to_network(process)
 
@@ -43,7 +42,7 @@
 	..()
 	SSsun.solars.Remove(src)
 
-/obj/machinery/power/solar/connect_to_network(var/process)
+/obj/machinery/power/solar/connect_to_network(process)
 	var/to_return = ..()
 	if(process)
 		SSsun.solars.Add(src)
@@ -54,7 +53,7 @@
 	if(!S)
 		S = new /obj/item/solar_assembly(src)
 		S.glass_type = /obj/item/stack/sheet/glass
-		S.anchored = 1
+		S.anchored = TRUE
 	S.loc = src
 	update_icon()
 
@@ -62,50 +61,54 @@
 
 /obj/machinery/power/solar/attackby(obj/item/weapon/W, mob/user)
 
-	if(iscrowbar(W))
-		playsound(src.loc, 'sound/machines/click.ogg', 50, 1)
+	if(isprying(W))
+		if(user.is_busy()) return
+		playsound(src, 'sound/machines/click.ogg', VOL_EFFECTS_MASTER)
 		if(do_after(user, 50,target = src))
-			var/obj/item/solar_assembly/S = locate() in src
-			if(S)
-				S.loc = src.loc
-				S.give_glass()
-			playsound(src.loc, 'sound/items/Deconstruct.ogg', 50, 1)
+			playsound(src, 'sound/items/Deconstruct.ogg', VOL_EFFECTS_MASTER)
 			user.visible_message("<span class='notice'>[user] takes the glass off the solar panel.</span>")
-			qdel(src)
+			deconstruct(TRUE)
 		return
-	else if (W)
-		src.add_fingerprint(user)
-		src.health -= W.force
-		src.healthcheck()
+	else
+		..()
+
+/obj/machinery/power/solar/play_attack_sound(damage_amount, damage_type = BRUTE, damage_flag = 0)
+	switch(damage_type)
+		if(BRUTE)
+			if(stat & BROKEN)
+				playsound(loc, 'sound/effects/hit_on_shattered_glass.ogg', VOL_EFFECTS_MASTER, 60, TRUE)
+			else
+				playsound(loc, 'sound/effects/glasshit.ogg', VOL_EFFECTS_MASTER, 90, TRUE)
+		if(BURN)
+			playsound(loc, 'sound/items/welder.ogg', VOL_EFFECTS_MASTER, 100, TRUE)
+
+/obj/machinery/power/solar/atom_break(damage_flag)
+	. = ..()
+	if(.)
+		playsound(loc, 'sound/effects/glassbr3.ogg', VOL_EFFECTS_MASTER, 100, TRUE)
+
+/obj/machinery/power/solar/deconstruct(disassembled = TRUE)
+	if(flags & NODECONSTRUCT)
+		return ..()
+	if(disassembled)
+		var/obj/item/solar_assembly/S = locate() in src
+		if(S)
+			S.forceMove(loc)
+			S.give_glass(stat & BROKEN)
+	else
+		playsound(loc, pick(SOUNDIN_SHATTER), VOL_EFFECTS_MASTER, 70, TRUE)
+		new /obj/item/weapon/shard(loc)
+		new /obj/item/weapon/shard(loc)
 	..()
-
-
-/obj/machinery/power/solar/blob_act()
-	src.health--
-	src.healthcheck()
-	return
-
-
-/obj/machinery/power/solar/proc/healthcheck()
-	if (src.health <= 0)
-		if(!(stat & BROKEN))
-			broken()
-		else
-			new /obj/item/weapon/shard(src.loc)
-			new /obj/item/weapon/shard(src.loc)
-			qdel(src)
-			return
-	return
-
 
 /obj/machinery/power/solar/update_icon()
 	..()
-	overlays.Cut()
+	cut_overlays()
 	if(stat & BROKEN)
-		overlays += image('icons/obj/power.dmi', icon_state = "solar_panel-b", layer = FLY_LAYER)
+		add_overlay(image('icons/obj/power.dmi', icon_state = "solar_panel-b", layer = FLY_LAYER))
 	else
-		overlays += image('icons/obj/power.dmi', icon_state = "solar_panel", layer = FLY_LAYER)
-		src.dir = angle2dir(adir)
+		add_overlay(image('icons/obj/power.dmi', icon_state = "solar_panel", layer = FLY_LAYER))
+		set_dir(angle2dir(adir))
 	return
 
 
@@ -127,60 +130,25 @@
 	if(!control)	return
 
 	if(adir != ndir)
-		adir = (360+adir+dd_range(-10,10,ndir-adir))%360
+		adir = (360+adir+clamp(ndir-adir,-10,10)) % 360
 		update_icon()
 		update_solar_exposure()
 
 	if(obscured)	return
 
-	var/sgen = SOLARGENRATE * sunfrac
+	var/sgen = calculate_energy_incoming()
 	add_avail(sgen)
 	if(powernet && control)
 		if(powernet.nodes[control])
 			control.gen += sgen
 
+//override this if you want more/less power incoming from solars
+/obj/machinery/power/solar/proc/calculate_energy_incoming()
+	//Enough for supply NSS Exodus
+	return SOLARGENRATE * sunfrac
 
-/obj/machinery/power/solar/proc/broken()
-	stat |= BROKEN
-	update_icon()
-	return
-
-
-/obj/machinery/power/solar/meteorhit()
-	if(stat & !BROKEN)
-		broken()
-	else
-		qdel(src)
-
-
-/obj/machinery/power/solar/ex_act(severity)
-	switch(severity)
-		if(1.0)
-			qdel(src)
-			if(prob(15))
-				new /obj/item/weapon/shard( src.loc )
-			return
-		if(2.0)
-			if (prob(25))
-				new /obj/item/weapon/shard( src.loc )
-				qdel(src)
-				return
-			if (prob(50))
-				broken()
-		if(3.0)
-			if (prob(25))
-				broken()
-	return
-
-
-/obj/machinery/power/solar/blob_act()
-	if(prob(75))
-		broken()
-		src.density = 0
-
-
-/obj/machinery/power/solar/fake/New(var/turf/loc, var/obj/item/solar_assembly/S)
-	..(loc, S, 0)
+/obj/machinery/power/solar/fake/atom_init(mapload, obj/item/solar_assembly/S)
+	. = ..(mapload, S, 0)
 
 /obj/machinery/power/solar/fake/process()
 	. = PROCESS_KILL
@@ -197,8 +165,8 @@
 	icon = 'icons/obj/power.dmi'
 	icon_state = "sp_base"
 	item_state = "electropack"
-	w_class = 4 // Pretty big!
-	anchored = 0
+	w_class = SIZE_NORMAL // Pretty big!
+	anchored = FALSE
 	var/tracker = 0
 	var/glass_type = null
 
@@ -207,55 +175,56 @@
 		..()
 
 // Give back the glass type we were supplied with
-/obj/item/solar_assembly/proc/give_glass()
-	if(glass_type)
-		var/obj/item/stack/sheet/S = new glass_type(src.loc)
-		S.amount = 2
-		glass_type = null
-
-
-/obj/item/solar_assembly/attackby(obj/item/weapon/W, mob/user)
-
-	if(!anchored && isturf(loc))
-		if(iswrench(W))
-			anchored = 1
-			user.visible_message("<span class='notice'>[user] wrenches the solar assembly into place.</span>")
-			playsound(src.loc, 'sound/items/Ratchet.ogg', 75, 1)
-			return 1
+/obj/item/solar_assembly/proc/give_glass(device_broken)
+	if(!glass_type)
+		return
+	var/turf/T = get_turf(loc)
+	if(device_broken)
+		new /obj/item/weapon/shard(T)
+		new /obj/item/weapon/shard(T)
 	else
-		if(iswrench(W))
-			anchored = 0
-			user.visible_message("<span class='notice'>[user] unwrenches the solar assembly from it's place.</span>")
-			playsound(src.loc, 'sound/items/Ratchet.ogg', 75, 1)
-			return 1
+		new glass_type(T, 2)
+	glass_type = null
 
-		if(istype(W, /obj/item/stack/sheet/glass) || istype(W, /obj/item/stack/sheet/rglass))
-			var/obj/item/stack/sheet/S = W
-			if(S.amount >= 2)
-				glass_type = W.type
-				S.use(2)
-				playsound(src.loc, 'sound/machines/click.ogg', 50, 1)
+
+/obj/item/solar_assembly/attackby(obj/item/I, mob/user, params)
+	if(!anchored && isturf(loc))
+		if(iswrenching(I))
+			anchored = TRUE
+			user.visible_message("<span class='notice'>[user] wrenches the solar assembly into place.</span>")
+			return TRUE
+	else
+		if(iswrenching(I))
+			anchored = FALSE
+			user.visible_message("<span class='notice'>[user] unwrenches the solar assembly from it's place.</span>")
+			return TRUE
+
+		if(istype(I, /obj/item/stack/sheet/glass) || istype(I, /obj/item/stack/sheet/rglass))
+			var/obj/item/stack/sheet/S = I
+			if(S.use(2))
+				glass_type = I.type
+				playsound(src, 'sound/machines/click.ogg', VOL_EFFECTS_MASTER)
 				user.visible_message("<span class='notice'>[user] places the glass on the solar assembly.</span>")
 				if(tracker)
 					new /obj/machinery/power/tracker(get_turf(src), src)
 				else
 					new /obj/machinery/power/solar(get_turf(src), src)
-			return 1
+			return TRUE
 
 	if(!tracker)
-		if(istype(W, /obj/item/weapon/tracker_electronics))
+		if(istype(I, /obj/item/weapon/tracker_electronics))
 			tracker = 1
-			user.drop_item()
-			qdel(W)
+			qdel(I)
 			user.visible_message("<span class='notice'>[user] inserts the electronics into the solar assembly.</span>")
-			return 1
+			return TRUE
 	else
-		if(iscrowbar(W))
+		if(isprying(I))
 			new /obj/item/weapon/tracker_electronics(src.loc)
 			tracker = 0
 			user.visible_message("<span class='notice'>[user] takes out the electronics from the solar assembly.</span>")
-			return 1
-	..()
+			return TRUE
+
+	return ..()
 
 //
 // Solar Control Computer
@@ -267,12 +236,17 @@
 	icon = 'icons/obj/computer.dmi'
 	icon_state = "solar"
 	light_color = "#b88b2e"
-	anchored = 1
-	density = 1
-	directwired = 1
-	use_power = 1
+	anchored = TRUE
+	density = TRUE
+	use_power = IDLE_POWER_USE
 	idle_power_usage = 5
 	active_power_usage = 20
+
+	max_integrity = 200
+	integrity_failure = 0.5
+
+	required_skills = null
+
 	var/light_range_on = 1.5
 	var/light_power_on = 3
 	var/id = 0
@@ -285,11 +259,24 @@
 	var/nexttime = 0		// Next clock time that manual tracking will move the array
 
 
-/obj/machinery/power/solar_control/New()
-	..()
-	if(ticker)
-		initialize()
+
+/obj/machinery/power/solar_control/atom_init()
+	. = ..()
 	connect_to_network()
+	if(track == 2 && SSticker.current_state != GAME_STATE_PLAYING)
+		RegisterSignal(SSticker, COMSIG_TICKER_ROUND_STARTING, .proc/on_sun_generated)
+
+/obj/machinery/power/solar_control/Destroy()
+		UnregisterSignal(SSticker, COMSIG_TICKER_ROUND_STARTING)
+		return ..()
+
+/obj/machinery/power/solar_control/proc/on_sun_generated(datum/source)
+	SIGNAL_HANDLER
+	if(!powernet)
+		return
+	setup_auto_tracking()
+	set_panels(cdir)
+	updateDialog()
 
 /obj/machinery/power/solar_control/disconnect_from_network()
 	..()
@@ -301,72 +288,73 @@
 		SSsun.solars.Add(src)
 	return to_return
 
-/obj/machinery/power/solar_control/initialize()
-	..()
-	if(!powernet) return
-	set_panels(cdir)
-
 /obj/machinery/power/solar_control/update_icon()
 	if(stat & BROKEN)
-		icon_state = "broken"
+		icon_state = "powerb"
 		set_light(0)
-		overlays.Cut()
+		cut_overlays()
 		return
 	if(stat & NOPOWER)
-		icon_state = "c_unpowered"
+		icon_state = "power0"
 		set_light(0)
-		overlays.Cut()
+		cut_overlays()
 		return
 	icon_state = "solar"
 	set_light(light_range_on, light_power_on)
-	overlays.Cut()
+	cut_overlays()
 	if(cdir > 0)
-		overlays += image('icons/obj/computer.dmi', "solcon-o", FLY_LAYER, angle2dir(cdir))
+		add_overlay(image('icons/obj/computer.dmi', "solar_overlay_[dir]", FLY_LAYER, angle2dir(cdir)))
 	return
 
-
-/obj/machinery/power/solar_control/attack_ai(mob/user)
-	add_fingerprint(user)
-	if(stat & (BROKEN | NOPOWER)) return
-	interact(user)
-
-
-/obj/machinery/power/solar_control/attack_hand(mob/user)
-	add_fingerprint(user)
-	if(stat & (BROKEN | NOPOWER)) return
-	interact(user)
-
-
-/obj/machinery/power/solar_control/attackby(I, user)
-	if(istype(I, /obj/item/weapon/screwdriver))
-		playsound(src.loc, 'sound/items/Screwdriver.ogg', 50, 1)
+/obj/machinery/power/solar_control/attackby(obj/item/weapon/I, mob/user)
+	if(isscrewing(I))
+		if(user.is_busy()) return
+		playsound(src, 'sound/items/Screwdriver.ogg', VOL_EFFECTS_MASTER)
 		if(do_after(user, 20, target = src))
-			if (src.stat & BROKEN)
-				to_chat(user, "\blue The broken glass falls out.")
-				var/obj/structure/computerframe/A = new /obj/structure/computerframe( src.loc )
-				new /obj/item/weapon/shard( src.loc )
-				var/obj/item/weapon/circuitboard/solar_control/M = new /obj/item/weapon/circuitboard/solar_control( A )
-				for (var/obj/C in src)
-					C.loc = src.loc
-				A.circuit = M
-				A.state = 3
-				A.icon_state = "3"
-				A.anchored = 1
-				qdel(src)
-			else
-				to_chat(user, "\blue You disconnect the monitor.")
-				var/obj/structure/computerframe/A = new /obj/structure/computerframe( src.loc )
-				var/obj/item/weapon/circuitboard/solar_control/M = new /obj/item/weapon/circuitboard/solar_control( A )
-				for (var/obj/C in src)
-					C.loc = src.loc
-				A.circuit = M
-				A.state = 4
-				A.icon_state = "4"
-				A.anchored = 1
-				qdel(src)
+			deconstruct(TRUE)
 	else
-		src.attack_hand(user)
+		attack_hand(user)
 	return
+
+/obj/machinery/power/solar_control/play_attack_sound(damage_amount, damage_type = BRUTE, damage_flag = 0)
+	switch(damage_type)
+		if(BRUTE)
+			if(stat & BROKEN)
+				playsound(loc, 'sound/effects/hit_on_shattered_glass.ogg', VOL_EFFECTS_MASTER, 70, TRUE)
+			else
+				playsound(loc, 'sound/effects/glasshit.ogg', VOL_EFFECTS_MASTER, 75, TRUE)
+		if(BURN)
+			playsound(loc, 'sound/items/welder.ogg', VOL_EFFECTS_MASTER, 100, TRUE)
+
+/obj/machinery/power/solar_control/atom_break(damage_flag)
+	. = ..()
+	if(.)
+		playsound(loc, 'sound/effects/glassbr3.ogg', VOL_EFFECTS_MASTER, 100, TRUE)
+
+/obj/machinery/power/solar_control/deconstruct(disassembled = TRUE, mob/user) // TODO change to computer?
+	if(flags & NODECONSTRUCT)
+		return ..()
+	var/obj/structure/computerframe/A = new /obj/structure/computerframe(loc)
+	A.set_dir(dir)
+	A.circuit = new /obj/item/weapon/circuitboard/solar_control(A)
+	A.anchored = TRUE
+	transfer_fingerprints_to(A)
+	if(stat & BROKEN || !disassembled)
+		if(user)
+			to_chat(user, "<span class='notice'>The broken glass falls out.</span>")
+		else
+			playsound(loc, 'sound/effects/hit_on_shattered_glass.ogg', VOL_EFFECTS_MASTER, 70, TRUE)
+		new /obj/item/weapon/shard(loc)
+		A.state = 3
+		A.icon_state = "3"
+	else
+		if(user)
+			to_chat(user, "<span class='notice'>You disconnect the monitor.</span>")
+		A.state = 4
+		A.icon_state = "4"
+	for(var/obj/C in src)
+		C.forceMove(loc)
+	..()
 
 
 /obj/machinery/power/solar_control/process()
@@ -385,7 +373,7 @@
 		set_panels(cdir)
 		update_icon()
 
-	src.updateDialog()
+	updateDialog()
 
 
 // called by solar tracker when sun position changes
@@ -395,21 +383,18 @@
 	cdir = angle
 	set_panels(cdir)
 	update_icon()
-	src.updateDialog()
+	updateDialog()
 
 
-/obj/machinery/power/solar_control/interact(mob/user)
-	if(stat & (BROKEN | NOPOWER)) return
-	if ( (get_dist(src, user) > 1 ))
-		if (!istype(user, /mob/living/silicon))
-			user.unset_machine()
-			user << browse(null, "window=solcon")
-			return
+/obj/machinery/power/solar_control/ui_interact(mob/user)
+	if(stat & (BROKEN | NOPOWER))
+		return
+	if (!Adjacent(user) && !issilicon(user) && !isobserver(user))
+		user.unset_machine()
+		user << browse(null, "window=solcon")
+		return
 
-	add_fingerprint(user)
-	user.set_machine(src)
-
-	var/t = "<TT><B>Solar Generator Control</B><HR><PRE>"
+	var/t = "<TT><PRE>"
 	t += "<B>Generated power</B> : [round(lastgen)] W<BR>"
 	t += "Station Rotational Period: [60/abs(SSsun.rate)] minutes<BR>"
 	t += "Station Rotational Direction: [SSsun.rate<0 ? "CCW" : "CW"]<BR>"
@@ -419,31 +404,26 @@
 	t += "Tracking: "
 	switch(track)
 		if(0)
-			t += "<B>Off</B> <A href='?src=\ref[src];track=1'>Manual</A> <A href='?src=\ref[src];track=2'>Automatic</A><BR>"
+			t += "<B>Off</B> <A href='byond://?src=\ref[src];track=1'>Manual</A> <A href='byond://?src=\ref[src];track=2'>Automatic</A><BR>"
 		if(1)
-			t += "<A href='?src=\ref[src];track=0'>Off</A> <B>Manual</B> <A href='?src=\ref[src];track=2'>Automatic</A><BR>"
+			t += "<A href='byond://?src=\ref[src];track=0'>Off</A> <B>Manual</B> <A href='byond://?src=\ref[src];track=2'>Automatic</A><BR>"
 		if(2)
-			t += "<A href='?src=\ref[src];track=0'>Off</A> <A href='?src=\ref[src];track=1'>Manual</A> <B>Automatic</B><BR>"
+			t += "<A href='byond://?src=\ref[src];track=0'>Off</A> <A href='byond://?src=\ref[src];track=1'>Manual</A> <B>Automatic</B><BR>"
 
 	t += "Manual Tracking Rate: [rate_control(src,"tdir","[trackrate/10]&deg/min ([trackdir<0 ? "CCW" : "CW"])",1,10)]<BR>"
 	t += "Manual Tracking Direction: "
 	switch(trackdir)
 		if(-1)
-			t += "<A href='?src=\ref[src];trackdir=1'>CW</A> <B>CCW</B><BR>"
+			t += "<A href='byond://?src=\ref[src];trackdir=1'>CW</A> <B>CCW</B><BR>"
 		if(1)
-			t += "<B>CW</B> <A href='?src=\ref[src];trackdir=-1'>CCW</A><BR>"
-	t += "<A href='?src=\ref[src];close=1'>Close</A></TT>"
-	user << browse(t, "window=solcon")
-	onclose(user, "solcon")
-	return
+			t += "<B>CW</B> <A href='byond://?src=\ref[src];trackdir=-1'>CCW</A><BR>"
+
+	var/datum/browser/popup = new(user, "solcon", "Solar Generator Control")
+	popup.set_content(t)
+	popup.open()
 
 
 /obj/machinery/power/solar_control/Topic(href, href_list)
-	if(href_list["close"])
-		usr << browse(null, "window=solcon")
-		usr.unset_machine(src)
-		return FALSE
-
 	. = ..()
 	if(!.)
 		return
@@ -455,33 +435,36 @@
 
 	else if(href_list["rate control"])
 		if(href_list["cdir"])
-			src.cdir = dd_range(0, 359, (360 + src.cdir + text2num(href_list["cdir"])) % 360)
+			src.cdir = clamp((360 + src.cdir + text2num(href_list["cdir"])) % 360, 0, 359)
 			spawn(1)
 				set_panels(cdir)
 				update_icon()
 		if(href_list["tdir"])
-			src.trackrate = dd_range(0, 360, src.trackrate + text2num(href_list["tdir"]))
+			src.trackrate = clamp(src.trackrate + text2num(href_list["tdir"]), 0, 360)
 			if(src.trackrate)
 				nexttime = world.time + 6000 / trackrate
 
 	else if(href_list["track"])
-		if(src.trackrate) 
+		if(src.trackrate)
 			nexttime = world.time + 6000 / trackrate
 		track = text2num(href_list["track"])
 		if(powernet && (track == 2))
-			if(!SSsun.solars.Find(src,1,0))
-				SSsun.solars.Add(src)
-			for(var/obj/machinery/power/tracker/T in get_solars_powernet())
-				if(powernet.nodes[T])
-					cdir = T.sun_angle
-					break
+			setup_auto_tracking()
 
 	else if(href_list["trackdir"])
 		trackdir = text2num(href_list["trackdir"])
 
 	set_panels(cdir)
 	update_icon()
-	src.updateUsrDialog()
+	updateUsrDialog()
+
+/obj/machinery/power/solar_control/proc/setup_auto_tracking()
+	if(!SSsun.solars.Find(src,1,0))
+		SSsun.solars.Add(src)
+	for(var/obj/machinery/power/tracker/T in get_solars_powernet())
+		if(powernet.nodes[T])
+			cdir = T.sun_angle
+			break
 
 
 /obj/machinery/power/solar_control/proc/set_panels(cdir)
@@ -502,38 +485,8 @@
 		spawn(rand(0, 15))
 			stat |= NOPOWER
 			update_icon()
-
-
-/obj/machinery/power/solar_control/proc/broken()
-	stat |= BROKEN
-	update_icon()
-
-
-/obj/machinery/power/solar_control/meteorhit()
-	broken()
-	return
-
-
-/obj/machinery/power/solar_control/ex_act(severity)
-	switch(severity)
-		if(1.0)
-			//SN src = null
-			qdel(src)
-			return
-		if(2.0)
-			if (prob(50))
-				broken()
-		if(3.0)
-			if (prob(25))
-				broken()
-	return
-
-
-/obj/machinery/power/solar_control/blob_act()
-	if (prob(75))
-		broken()
-		src.density = 0
-
+			update_power_use()
+	update_power_use()
 
 //
 // MISC

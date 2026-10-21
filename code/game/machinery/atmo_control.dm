@@ -3,11 +3,11 @@
 	icon_state = "gsensor1"
 	name = "Gas Sensor"
 
-	anchored = 1
+	anchored = TRUE
 	var/state = 0
 
 	var/id_tag
-	var/frequency = 1439
+	frequency = 1439
 
 	var/on = 1
 	var/output = 3
@@ -20,7 +20,7 @@
 	// 16 for nitrogen concentration
 	// 32 for carbon dioxide concentration
 
-	var/datum/radio_frequency/radio_connection
+
 
 /obj/machinery/air_sensor/update_icon()
 	icon_state = "gsensor[on]"
@@ -34,22 +34,22 @@
 
 		var/datum/gas_mixture/air_sample = return_air()
 
-		if(output&1)
-			signal.data["pressure"] = num2text(round(air_sample.return_pressure(),0.1),)
-		if(output&2)
-			signal.data["temperature"] = round(air_sample.temperature,0.1)
+		if(output & 1)
+			signal.data["pressure"] = num2text(round(air_sample.return_pressure(), 0.1))
+		if(output & 2)
+			signal.data["temperature"] = round(air_sample.temperature, 0.1)
 
-		if(output>4)
-			var/total_moles = air_sample.total_moles()
+		if(output > 4)
+			var/total_moles = air_sample.total_moles
 			if(total_moles > 0)
-				if(output&4)
-					signal.data["oxygen"] = round(100*air_sample.oxygen/total_moles,0.1)
-				if(output&8)
-					signal.data["phoron"] = round(100*air_sample.phoron/total_moles,0.1)
-				if(output&16)
-					signal.data["nitrogen"] = round(100*air_sample.nitrogen/total_moles,0.1)
-				if(output&32)
-					signal.data["carbon_dioxide"] = round(100*air_sample.carbon_dioxide/total_moles,0.1)
+				if(output & 4)
+					signal.data["oxygen"] = round(100 * air_sample.gas["oxygen"] / total_moles, 0.1)
+				if(output & 8)
+					signal.data["phoron"] = round(100 * air_sample.gas["phoron"] / total_moles, 0.1)
+				if(output & 16)
+					signal.data["nitrogen"] = round(100 * air_sample.gas["nitrogen"] / total_moles, 0.1)
+				if(output & 32)
+					signal.data["carbon_dioxide"] = round(100 * air_sample.gas["carbon_dioxide"] / total_moles, 0.1)
 			else
 				signal.data["oxygen"] = 0
 				signal.data["phoron"] = 0
@@ -59,49 +59,40 @@
 		radio_connection.post_signal(src, signal, filter = RADIO_ATMOSIA)
 
 
-/obj/machinery/air_sensor/proc/set_frequency(new_frequency)
+/obj/machinery/air_sensor/set_frequency(new_frequency)
 	radio_controller.remove_object(src, frequency)
 	frequency = new_frequency
-	radio_connection = radio_controller.add_object(src, frequency, RADIO_ATMOSIA)
+	if(frequency)
+		radio_connection = radio_controller.add_object(src, frequency, RADIO_ATMOSIA)
 
-/obj/machinery/air_sensor/initialize()
+/obj/machinery/air_sensor/atom_init()
+	. = ..()
 	set_frequency(frequency)
-
-/obj/machinery/air_sensor/New()
-	..()
-
-	if(radio_controller)
-		set_frequency(frequency)
-
-/obj/machinery/air_sensor/Destroy()
-	if(radio_controller)
-		radio_controller.remove_object(src, frequency)
-	return ..()
-
 
 /obj/machinery/computer/general_air_control
 	name = "Computer"
 	icon = 'icons/obj/computer.dmi'
 	icon_state = "tank"
+	state_broken_preset = "atmosb"
+	state_nopower_preset = "atmos0"
 	light_color = "#78eeea"
 	circuit = /obj/item/weapon/circuitboard/air_management
 
-	var/frequency = 1439
+	frequency = 1439
 	var/list/sensors = list()
 
 	var/list/sensor_information = list()
-	var/datum/radio_frequency/radio_connection
+	required_skills = list(/datum/skill/atmospherics = SKILL_LEVEL_TRAINED)
 
-/obj/machinery/computer/general_air_control/attack_hand(mob/user)
-	if(..(user))
-		return
-	user << browse(return_text(),"window=computer")
-	user.set_machine(src)
-	onclose(user, "computer")
+
+/obj/machinery/computer/general_air_control/ui_interact(mob/user)
+	var/datum/browser/popup = new(user, "window=computer", src.name)
+	popup.set_content(return_text())
+	popup.open()
 
 /obj/machinery/computer/general_air_control/process()
 	..()
-	src.updateUsrDialog()
+	updateUsrDialog()
 
 /obj/machinery/computer/general_air_control/Destroy()
 	radio_controller.remove_object(src, frequency)
@@ -129,15 +120,15 @@
 				if(data["temperature"])
 					sensor_part += "   <B>Temperature:</B> [data["temperature"]] K<BR>"
 				if(data["oxygen"]||data["phoron"]||data["nitrogen"]||data["carbon_dioxide"])
-					sensor_part += "   <B>Gas Composition :</B>"
+					sensor_part += "   <B>Gas Composition:</B>"
 					if(data["oxygen"])
-						sensor_part += "[data["oxygen"]]% O2; "
+						sensor_part += " [data["oxygen"]]% O2; "
 					if(data["nitrogen"])
-						sensor_part += "[data["nitrogen"]]% N; "
+						sensor_part += " [data["nitrogen"]]% N; "
 					if(data["carbon_dioxide"])
-						sensor_part += "[data["carbon_dioxide"]]% CO2; "
+						sensor_part += " [data["carbon_dioxide"]]% CO2; "
 					if(data["phoron"])
-						sensor_part += "[data["phoron"]]% TX; "
+						sensor_part += " [data["phoron"]]% TX; "
 				sensor_part += "<HR>"
 
 			else
@@ -153,24 +144,29 @@
 
 	return output
 
-/obj/machinery/computer/general_air_control/proc/set_frequency(new_frequency)
+/obj/machinery/computer/general_air_control/set_frequency(new_frequency)
 	radio_controller.remove_object(src, frequency)
 	frequency = new_frequency
 	radio_connection = radio_controller.add_object(src, frequency, RADIO_ATMOSIA)
 
-/obj/machinery/computer/general_air_control/initialize()
+/obj/machinery/computer/general_air_control/atom_init()
+	. = ..()
 	set_frequency(frequency)
 
 /obj/machinery/computer/general_air_control/large_tank_control
 	icon = 'icons/obj/computer.dmi'
 	icon_state = "tank"
+	state_broken_preset = "atmosb"
+	state_nopower_preset = "atmos0"
 
+	frequency = 1441
 	var/input_tag
 	var/output_tag
 
 	var/list/input_info
 	var/list/output_info
 
+	var/input_flow_setting = 200
 	var/pressure_setting = ONE_ATMOSPHERE * 45
 
 
@@ -179,30 +175,31 @@
 	//if(signal.data)
 	//	input_info = signal.data // Attempting to fix intake control -- TLE
 
-	output += "<B>Tank Control System</B><BR>"
+	output += "<B>Tank Control System</B><BR><BR>"
 	if(input_info)
 		var/power = (input_info["power"])
-		var/volume_rate = input_info["volume_rate"]
-		output += {"<B>Input</B>: [power?("Injecting"):("On Hold")] <A href='?src=\ref[src];in_refresh_status=1'>Refresh</A><BR>
-Rate: [volume_rate] L/sec<BR>"}
-		output += "Command: <A href='?src=\ref[src];in_toggle_injector=1'>Toggle Power</A><BR>"
+		var/volume_rate = round(input_info["volume_rate"], 0.1)
+		output += "<B>Input</B>: [power?("Injecting"):("On Hold")] <A href='byond://?src=\ref[src];in_refresh_status=1'>Refresh</A><BR>Flow Rate Limit: [volume_rate] L/s<BR>"
+		output += "Command: <A href='byond://?src=\ref[src];in_toggle_injector=1'>Toggle Power</A> <A href='byond://?src=\ref[src];in_set_flowrate=1'>Set Flow Rate</A><BR>"
 
 	else
-		output += "<FONT color='red'>ERROR: Can not find input port</FONT> <A href='?src=\ref[src];in_refresh_status=1'>Search</A><BR>"
+		output += "<FONT color='red'>ERROR: Can not find input port</FONT> <A href='byond://?src=\ref[src];in_refresh_status=1'>Search</A><BR>"
+
+	output += "Flow Rate Limit: <A href='byond://?src=\ref[src];adj_input_flow_rate=-100'>-</A> <A href='byond://?src=\ref[src];adj_input_flow_rate=-10'>-</A> <A href='byond://?src=\ref[src];adj_input_flow_rate=-1'>-</A> <A href='byond://?src=\ref[src];adj_input_flow_rate=-0.1'>-</A> [round(input_flow_setting, 0.1)] L/s <A href='byond://?src=\ref[src];adj_input_flow_rate=0.1'>+</A> <A href='byond://?src=\ref[src];adj_input_flow_rate=1'>+</A> <A href='byond://?src=\ref[src];adj_input_flow_rate=10'>+</A> <A href='byond://?src=\ref[src];adj_input_flow_rate=100'>+</A><BR>"
 
 	output += "<BR>"
 
 	if(output_info)
 		var/power = (output_info["power"])
 		var/output_pressure = output_info["internal"]
-		output += {"<B>Output</B>: [power?("Open"):("On Hold")] <A href='?src=\ref[src];out_refresh_status=1'>Refresh</A><BR>
+		output += {"<B>Output</B>: [power?("Open"):("On Hold")] <A href='byond://?src=\ref[src];out_refresh_status=1'>Refresh</A><BR>
 Max Output Pressure: [output_pressure] kPa<BR>"}
-		output += "Command: <A href='?src=\ref[src];out_toggle_power=1'>Toggle Power</A> <A href='?src=\ref[src];out_set_pressure=1'>Set Pressure</A><BR>"
+		output += "Command: <A href='byond://?src=\ref[src];out_toggle_power=1'>Toggle Power</A> <A href='byond://?src=\ref[src];out_set_pressure=1'>Set Pressure</A><BR>"
 
 	else
-		output += "<FONT color='red'>ERROR: Can not find output port</FONT> <A href='?src=\ref[src];out_refresh_status=1'>Search</A><BR>"
+		output += "<FONT color='red'>ERROR: Can not find output port</FONT> <A href='byond://?src=\ref[src];out_refresh_status=1'>Search</A><BR>"
 
-	output += "Max Output Pressure Set: <A href='?src=\ref[src];adj_pressure=-1000'>-</A> <A href='?src=\ref[src];adj_pressure=-100'>-</A> <A href='?src=\ref[src];adj_pressure=-10'>-</A> <A href='?src=\ref[src];adj_pressure=-1'>-</A> [pressure_setting] kPa <A href='?src=\ref[src];adj_pressure=1'>+</A> <A href='?src=\ref[src];adj_pressure=10'>+</A> <A href='?src=\ref[src];adj_pressure=100'>+</A> <A href='?src=\ref[src];adj_pressure=1000'>+</A><BR>"
+	output += "Max Output Pressure Set: <A href='byond://?src=\ref[src];adj_pressure=-1000'>-</A> <A href='byond://?src=\ref[src];adj_pressure=-100'>-</A> <A href='byond://?src=\ref[src];adj_pressure=-10'>-</A> <A href='byond://?src=\ref[src];adj_pressure=-1'>-</A> [pressure_setting] kPa <A href='byond://?src=\ref[src];adj_pressure=1'>+</A> <A href='byond://?src=\ref[src];adj_pressure=10'>+</A> <A href='byond://?src=\ref[src];adj_pressure=100'>+</A> <A href='byond://?src=\ref[src];adj_pressure=1000'>+</A><BR>"
 
 	return output
 
@@ -222,44 +219,54 @@ Max Output Pressure: [output_pressure] kPa<BR>"}
 	. = ..()
 	if(!.)
 		return
-
 	if(href_list["adj_pressure"])
 		var/change = text2num(href_list["adj_pressure"])
-		pressure_setting = between(0, pressure_setting + change, 50 * ONE_ATMOSPHERE)
-		spawn(1)
-			src.updateUsrDialog()
+		pressure_setting = between(0, pressure_setting + change, MAX_PUMP_PRESSURE)
+		updateUsrDialog()
+		return
+
+	if(href_list["adj_input_flow_rate"])
+		var/change = text2num(href_list["adj_input_flow_rate"])
+		input_flow_setting = between(0, input_flow_setting + change, ATMOS_DEFAULT_VOLUME_PUMP + 500) //default flow rate limit for air injectors
+		updateUsrDialog()
 		return
 
 	if(!radio_connection)
 		return FALSE
+
 	var/datum/signal/signal = new
+
 	signal.transmission_method = 1 //radio signal
 	signal.source = src
+
 	if(href_list["in_refresh_status"])
 		input_info = null
-		signal.data = list ("tag" = input_tag, "status")
+		signal.data = list ("tag" = input_tag, "status" = 1)
 
 	if(href_list["in_toggle_injector"])
 		input_info = null
-		signal.data = list ("tag" = input_tag, "power_toggle")
+		signal.data = list ("tag" = input_tag, "power_toggle" = 1)
+
+	if(href_list["in_set_flowrate"])
+		input_info = null
+		signal.data = list ("tag" = input_tag, "set_volume_rate" = "[input_flow_setting]")
 
 	if(href_list["out_refresh_status"])
 		output_info = null
-		signal.data = list ("tag" = output_tag, "status")
+		signal.data = list ("tag" = output_tag, "status" = 1)
 
 	if(href_list["out_toggle_power"])
 		output_info = null
-		signal.data = list ("tag" = output_tag, "power_toggle")
+		signal.data = list ("tag" = output_tag, "power_toggle" = 1)
 
 	if(href_list["out_set_pressure"])
 		output_info = null
 		signal.data = list ("tag" = output_tag, "set_internal_pressure" = "[pressure_setting]")
 
-	signal.data["sigtype"]="command"
+	signal.data["sigtype"] = "command"
 	radio_connection.post_signal(src, signal, filter = RADIO_ATMOSIA)
 
-	spawn(5)
-		src.updateUsrDialog()
+	updateUsrDialog()
 
 /obj/machinery/computer/general_air_control/fuel_injection
 	icon = 'icons/obj/computer.dmi'
@@ -272,6 +279,7 @@ Max Output Pressure: [output_pressure] kPa<BR>"}
 
 	var/cutoff_temperature = 2000
 	var/on_temperature = 1200
+	required_skills = list(/datum/skill/engineering = SKILL_LEVEL_PRO)
 
 /obj/machinery/computer/general_air_control/fuel_injection/process()
 	if(automation)
@@ -309,18 +317,18 @@ Max Output Pressure: [output_pressure] kPa<BR>"}
 	if(device_info)
 		var/power = device_info["power"]
 		var/volume_rate = device_info["volume_rate"]
-		output += {"Status: [power?("Injecting"):("On Hold")] <A href='?src=\ref[src];refresh_status=1'>Refresh</A><BR>
+		output += {"Status: [power?("Injecting"):("On Hold")] <A href='byond://?src=\ref[src];refresh_status=1'>Refresh</A><BR>
 Rate: [volume_rate] L/sec<BR>"}
 
 		if(automation)
-			output += "Automated Fuel Injection: <A href='?src=\ref[src];toggle_automation=1'>Engaged</A><BR>"
+			output += "Automated Fuel Injection: <A href='byond://?src=\ref[src];toggle_automation=1'>Engaged</A><BR>"
 			output += "Injector Controls Locked Out<BR>"
 		else
-			output += "Automated Fuel Injection: <A href='?src=\ref[src];toggle_automation=1'>Disengaged</A><BR>"
-			output += "Injector: <A href='?src=\ref[src];toggle_injector=1'>Toggle Power</A> <A href='?src=\ref[src];injection=1'>Inject (1 Cycle)</A><BR>"
+			output += "Automated Fuel Injection: <A href='byond://?src=\ref[src];toggle_automation=1'>Disengaged</A><BR>"
+			output += "Injector: <A href='byond://?src=\ref[src];toggle_injector=1'>Toggle Power</A> <A href='byond://?src=\ref[src];injection=1'>Inject (1 Cycle)</A><BR>"
 
 	else
-		output += "<FONT color='red'>ERROR: Can not find device</FONT> <A href='?src=\ref[src];refresh_status=1'>Search</A><BR>"
+		output += "<FONT color='red'>ERROR: Can not find device</FONT> <A href='byond://?src=\ref[src];refresh_status=1'>Search</A><BR>"
 
 	return output
 

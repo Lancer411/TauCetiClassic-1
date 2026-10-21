@@ -2,7 +2,8 @@
 	var/datum/computer/file/embedded_program/program
 
 	name = "Embedded Controller"
-	anchored = 1
+	anchored = TRUE
+	allowed_checks = ALLOWED_CHECK_TOPIC
 
 	var/on = 1
 
@@ -29,26 +30,17 @@
 		program.process()
 
 	update_icon()
-	src.updateDialog()
-
-/obj/machinery/embedded_controller/attack_ai(mob/user)
-	src.ui_interact(user)
+	updateUsrDialog()
 
 /obj/machinery/embedded_controller/attack_paw(mob/user)
 	to_chat(user, "You do not have the dexterity to use this.")
 	return
 
-/obj/machinery/embedded_controller/attack_hand(mob/user)
-	src.ui_interact(user)
-
-/obj/machinery/embedded_controller/ui_interact()
-	return
-
 /obj/machinery/embedded_controller/radio
 	icon = 'icons/obj/airlock_machines.dmi'
 	icon_state = "airlock_control_standby"
-	power_channel = ENVIRON
-	density = 0
+	power_channel = STATIC_ENVIRON
+	density = FALSE
 
 	// Setup parameters only
 	var/id_tag
@@ -60,11 +52,12 @@
 	var/tag_interior_sensor
 	var/tag_secure = 0
 
-	var/frequency = 1379
-	var/datum/radio_frequency/radio_connection
+	frequency = 1379
+
 	unacidable = 1
 
-/obj/machinery/embedded_controller/radio/initialize()
+/obj/machinery/embedded_controller/radio/atom_init()
+	. = ..()
 	set_frequency(frequency)
 	var/datum/computer/file/embedded_program/new_prog = new
 
@@ -76,6 +69,8 @@
 	new_prog.tag_exterior_sensor = tag_exterior_sensor
 	new_prog.tag_interior_sensor = tag_interior_sensor
 	new_prog.memory["secure"] = tag_secure
+
+	new_prog.memory["external_sensor_pressure"] = SSenvironment.air_pressure[z]
 
 	new_prog.master = src
 	program = new_prog
@@ -100,7 +95,8 @@
 	else
 		qdel(signal)
 
-/obj/machinery/embedded_controller/radio/proc/set_frequency(new_frequency)
+/obj/machinery/embedded_controller/radio/set_frequency(new_frequency)
 	radio_controller.remove_object(src, frequency)
 	frequency = new_frequency
-	radio_connection = radio_controller.add_object(src, frequency)
+	if(frequency)
+		radio_connection = radio_controller.add_object(src, frequency)

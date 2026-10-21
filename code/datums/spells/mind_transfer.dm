@@ -1,15 +1,16 @@
 /obj/effect/proc_holder/spell/targeted/mind_transfer
-	name = "Mind Transfer"
-	desc = "This spell allows the user to switch bodies with a target."
+	name = "Обмен Разумом"
+	desc = "Позволяет поменяться телом с целью."
 
 	school = "transmutation"
-	charge_max = 600
+	charge_max = 1800
 	clothes_req = 0
 	invocation = "GIN'YU CAPAN"
 	invocation_type = "whisper"
+	sound = 'sound/magic/MandSwap.ogg'
 	range = 1
 	action_icon_state = "mindswap"
-	var/list/protected_roles = list("Wizard","Changeling","Cultist") //which roles are immune to the spell
+	var/list/protected_roles = list(WIZARD, CHANGELING, CULTIST) //which roles are immune to the spell
 	var/list/compatible_mobs = list(/mob/living/carbon/human,/mob/living/carbon/monkey) //which types of mobs are affected by the spell. NOTE: change at your own risk
 	var/base_spell_loss_chance = 20 //base probability of the wizard losing a spell in the process
 	var/spell_loss_chance_modifier = 7 //amount of probability of losing a spell added per spell (mind_transfer included)
@@ -50,8 +51,18 @@ Also, you never added distance checking after target is selected. I've went ahea
 		to_chat(user, "They appear to be catatonic. Not even magic can affect their vacant mind.")
 		return
 
-	if(target.mind.special_role in protected_roles)
-		to_chat(user, "Their mind is resisting your spell.")
+	for(var/role in protected_roles)
+		if(isrole(role, target))
+			to_chat(user, "Their mind is resisting your spell.")
+			return
+
+	//If target has mindshield/loyalty implant we break it, adding some brainloss
+	if(ismindprotect(target))
+		to_chat(user, "Their mind seems to be protected, so you only manage to break it")
+		for(var/obj/item/weapon/implant/mind_protect/L in target.implants)
+			L.meltdown()
+		user.Paralyse(paralysis_amount_caster)
+		target.Paralyse(paralysis_amount_victim)
 		return
 
 	var/mob/living/victim = target//The target of the spell whos body will be transferred to.
@@ -68,8 +79,7 @@ Also, you never added distance checking after target is selected. I've went ahea
 			for(var/j=checked_spells.len,(j>0&&checked_spells.len),j--)//While the spell list to check is greater than zero and has spells in it, run this proc.
 				if(prob(base_spell_loss_chance))
 					checked_spells -= pick(checked_spells)//Pick a random spell to remove.
-					spawn(msg_wait)
-						to_chat(victim, "The mind transfer has robbed you of a spell.")
+					addtimer(CALLBACK(GLOBAL_PROC, GLOBAL_PROC_REF(to_chat), victim, "<span class='danger'>The mind transfer has robbed you of a spell.</span>"), msg_wait)
 					break//Spell lost. Break loop, going back to the previous for() statement.
 				else//Or keep checking, adding spell chance modifier to increase chance of losing a spell.
 					base_spell_loss_chance += spell_loss_chance_modifier
@@ -80,31 +90,17 @@ Also, you never added distance checking after target is selected. I've went ahea
 	//SPELL LOSS END
 
 	//MIND TRANSFER BEGIN
-	if(caster.mind.special_verbs.len)//If the caster had any special verbs, remove them from the mob verb list.
-		for(var/V in caster.mind.special_verbs)//Since the caster is using an object spell system, this is mostly moot.
-			caster.verbs -= V//But a safety nontheless.
-
-	if(victim.mind.special_verbs.len)//Now remove all of the victim's verbs.
-		for(var/V in victim.mind.special_verbs)
-			victim.verbs -= V
-
+	victim.logout_reason = LOGOUT_SWAP
+	caster.logout_reason = LOGOUT_SWAP
 	var/mob/dead/observer/ghost = victim.ghostize(can_reenter_corpse = FALSE)
 	ghost.spell_list = victim.spell_list//If they have spells, transfer them. Now we basically have a backup mob.
 
 	caster.mind.transfer_to(victim)
 	victim.spell_list = caster.spell_list//Now they are inside the victim's body.
 
-	if(victim.mind.special_verbs.len)//To add all the special verbs for the original caster.
-		for(var/V in caster.mind.special_verbs)//Not too important but could come into play.
-			caster.verbs += V
-
 	ghost.mind.transfer_to(caster)
 	caster.key = ghost.key	//have to transfer the key since the mind was not active
 	caster.spell_list = ghost.spell_list
-
-	if(caster.mind.special_verbs.len)//If they had any special verbs, we add them here.
-		for(var/V in caster.mind.special_verbs)
-			caster.verbs += V
 
 	//MIND TRANSFER END
 
@@ -113,5 +109,4 @@ Also, you never added distance checking after target is selected. I've went ahea
 	victim.Paralyse(paralysis_amount_victim)
 
 	//After a certain amount of time the victim gets a message about being in a different body.
-	spawn(msg_wait)
-		to_chat(caster, "\red You feel woozy and lightheaded. <b>Your body doesn't seem like your own.</b>")
+	addtimer(CALLBACK(GLOBAL_PROC, GLOBAL_PROC_REF(to_chat), caster, "<span class='warning'>You feel woozy and lightheaded. <b>Your body doesn't seem like your own.</b></span>"), msg_wait)

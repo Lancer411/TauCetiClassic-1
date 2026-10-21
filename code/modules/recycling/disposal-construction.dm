@@ -7,11 +7,10 @@
 	desc = "A huge pipe segment used for constructing disposal systems."
 	icon = 'icons/obj/pipes/disposal.dmi'
 	icon_state = "conpipe-s"
-	anchored = 0
-	density = 0
-	pressure_resistance = 5*ONE_ATMOSPHERE
+	anchored = FALSE
+	density = FALSE
 	m_amt = 1850
-	level = 2
+	resistance_flags = CAN_BE_HIT
 	var/ptype = 0
 	// 0=straight, 1=bent, 2=junction-j1, 3=junction-j2, 4=junction-y, 5=trunk, 6=disposal bin, 7=outlet, 8=inlet
 
@@ -65,38 +64,20 @@
 		if(10)
 			base_state = "pipe-j2s"
 			dpdir = dir | left | flip
-///// Z-Level stuff
+
 		if(11)
-			base_state = "pipe-u"
-			dpdir = dir
-		if(12)
-			base_state = "pipe-d"
-			dpdir = dir
-///// Z-Level stuff
-		if(13)
 			base_state = "pipe-tagger"
 			dpdir = dir | flip
-		if(14)
+
+		if(12)
 			base_state = "pipe-tagger-partial"
 			dpdir = dir | flip
 
 
-///// Z-Level stuff
-	if(ptype<6 || ptype>8 && !(ptype==11 || ptype==12))
-///// Z-Level stuff
+	if(ptype < 6 || ptype > 8)
 		icon_state = "con[base_state]"
 	else
 		icon_state = base_state
-
-	if(invisibility)				// if invisible, fade icon
-		alpha = 128
-
-	// hide called by levelupdate if turf intact status changes
-	// change visibility status and force update of icon
-/obj/structure/disposalconstruct/hide(intact)
-	invisibility = (intact && level==1) ? 101: 0	// hide if floor is intact
-	update()
-
 
 	// flip and rotate verbs
 /obj/structure/disposalconstruct/verb/rotate()
@@ -104,28 +85,29 @@
 	set name = "Rotate Pipe"
 	set src in view(1)
 
-	if(usr.stat)
+	if(usr.incapacitated())
 		return
 
 	if(anchored)
 		to_chat(usr, "You must unfasten the pipe before rotating it.")
 		return
 
-	dir = turn(dir, -90)
+	set_dir(turn(dir, -90))
 	update()
 
 /obj/structure/disposalconstruct/verb/flip()
 	set category = "Object"
 	set name = "Flip Pipe"
 	set src in view(1)
-	if(usr.stat)
+
+	if(usr.incapacitated())
 		return
 
 	if(anchored)
 		to_chat(usr, "You must unfasten the pipe before flipping it.")
 		return
 
-	dir = turn(dir, 180)
+	set_dir(turn(dir, 180))
 	switch(ptype)
 		if(2)
 			ptype = 3
@@ -157,15 +139,9 @@
 			return /obj/structure/disposalpipe/sortjunction
 		if(10)
 			return /obj/structure/disposalpipe/sortjunction/flipped
-///// Z-Level stuff
 		if(11)
-			return /obj/structure/disposalpipe/up
-		if(12)
-			return /obj/structure/disposalpipe/down
-///// Z-Level stuff
-		if(13)
 			return /obj/structure/disposalpipe/tagger
-		if(14)
+		if(12)
 			return /obj/structure/disposalpipe/tagger/partial
 	return
 
@@ -176,8 +152,8 @@
 
 /obj/structure/disposalconstruct/attackby(obj/item/I, mob/user)
 	var/nicetype = "pipe"
-	var/ispipe = 0 // Indicates if we should change the level of this pipe
-	src.add_fingerprint(user)
+	var/ispipe = 0 // Indicates if we should use undertile element
+	add_fingerprint(user)
 	switch(ptype)
 		if(6)
 			nicetype = "disposal bin"
@@ -188,10 +164,10 @@
 		if(9, 10)
 			nicetype = "sorting pipe"
 			ispipe = 1
-		if(13)
+		if(11)
 			nicetype = "tagging pipe"
 			ispipe = 1
-		if(14)
+		if(12)
 			nicetype = "partial tagging pipe"
 			ispipe = 1
 		else
@@ -199,19 +175,20 @@
 			ispipe = 1
 
 	var/turf/T = src.loc
-	if(T.intact)
+	if(T.underfloor_accessibility < UNDERFLOOR_INTERACTABLE)
 		to_chat(user, "You can only attach the [nicetype] if the floor plating is removed.")
 		return
 
 	var/obj/structure/disposalpipe/CP = locate() in T
 	if(ptype>=6 && ptype <= 8) // Disposal or outlet
-		if(CP) // There's something there
-			if(!istype(CP,/obj/structure/disposalpipe/trunk))
+		if (!(iswrenching(I) && anchored))
+			if(CP) // There's something there
+				if(!istype(CP,/obj/structure/disposalpipe/trunk))
+					to_chat(user, "The [nicetype] requires a trunk underneath it in order to work.")
+					return
+			else // Nothing under, fuck.
 				to_chat(user, "The [nicetype] requires a trunk underneath it in order to work.")
 				return
-		else // Nothing under, fuck.
-			to_chat(user, "The [nicetype] requires a trunk underneath it in order to work.")
-			return
 	else
 		if(CP)
 			update()
@@ -223,45 +200,40 @@
 				return
 
 
-	if(istype(I, /obj/item/weapon/wrench))
+	if(iswrenching(I))
+		anchored = !anchored
+
 		if(anchored)
-			anchored = 0
 			if(ispipe)
-				level = 2
-				density = 0
-			else
-				density = 1
-			to_chat(user, "You detach the [nicetype] from the underfloor.")
-		else
-			anchored = 1
-			if(ispipe)
-				level = 1 // We don't want disposal bins to disappear under the floors
-				density = 0
-			else
-				density = 1 // We don't want disposal bins or outlets to go density 0
+				density = FALSE
+				AddElement(/datum/element/undertile, TRAIT_T_RAY_VISIBLE, use_alpha = TRUE)
 			to_chat(user, "You attach the [nicetype] to the underfloor.")
-		playsound(src.loc, 'sound/items/Ratchet.ogg', 100, 1)
+		else
+			if(ispipe)
+				density = TRUE
+				RemoveElement(/datum/element/undertile, TRAIT_T_RAY_VISIBLE, use_alpha = TRUE)
+			to_chat(user, "You detach the [nicetype] from the underfloor.")
+
+		playsound(src, 'sound/items/Ratchet.ogg', VOL_EFFECTS_MASTER)
 		update()
 
-	else if(istype(I, /obj/item/weapon/weldingtool))
+	else if(iswelding(I))
 		if(anchored)
+			if(user.is_busy()) return
 			var/obj/item/weapon/weldingtool/W = I
-			if(W.remove_fuel(0,user))
-				playsound(src.loc, 'sound/items/Welder2.ogg', 100, 1)
+			if(W.use(0,user))
 				to_chat(user, "Welding the [nicetype] in place.")
-				if(do_after(user, 20, target = src))
-					if(!src || !W.isOn()) return
+				if(W.use_tool(src, user, 20, volume = 50, quality = QUALITY_WELDING))
 					to_chat(user, "The [nicetype] has been welded in place!")
 					update() // TODO: Make this neat
 					if(ispipe) // Pipe
 
 						var/pipetype = dpipetype()
 						var/obj/structure/disposalpipe/P = new pipetype(src.loc)
-						src.transfer_fingerprints_to(P)
-						P.base_icon_state = base_state
-						P.dir = dir
+						transfer_fingerprints_to(P)
+						P.icon_state = base_state
+						P.set_dir(dir)
 						P.dpdir = dpdir
-						P.updateicon()
 
 						//Needs some special treatment ;)
 						if(ptype==9 || ptype==10)
@@ -270,22 +242,21 @@
 
 					else if(ptype==6) // Disposal bin
 						var/obj/machinery/disposal/P = new /obj/machinery/disposal(src.loc)
-						src.transfer_fingerprints_to(P)
+						transfer_fingerprints_to(P)
 						P.mode = 0 // start with pump off
 
 					else if(ptype==7) // Disposal outlet
 
-						var/obj/structure/disposaloutlet/P = new /obj/structure/disposaloutlet(src.loc)
-						src.transfer_fingerprints_to(P)
-						P.dir = dir
+						var/obj/structure/disposaloutlet/P = new /obj/structure/disposaloutlet(src.loc, dir)
+						transfer_fingerprints_to(P)
 						var/obj/structure/disposalpipe/trunk/Trunk = CP
 						Trunk.linked = P
 
 					else if(ptype==8) // Disposal outlet
 
 						var/obj/machinery/disposal/deliveryChute/P = new /obj/machinery/disposal/deliveryChute(src.loc)
-						src.transfer_fingerprints_to(P)
-						P.dir = dir
+						transfer_fingerprints_to(P)
+						P.set_dir(dir)
 
 					qdel(src)
 					return

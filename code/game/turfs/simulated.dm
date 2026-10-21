@@ -1,8 +1,9 @@
 /turf/simulated
 	name = "station"
+	plane = FLOOR_PLANE
+
 	var/wet = 0
 	var/image/wet_overlay = null
-
 	var/thermite = 0
 	oxygen = MOLES_O2STANDARD
 	nitrogen = MOLES_N2STANDARD
@@ -10,28 +11,29 @@
 	var/max_fire_temperature_sustained = 0 //The max temperature of the fire which it was subjected to
 	var/dirt = 0
 
-/turf/simulated/New()
+	var/wet_timer_id
+
+/turf/simulated/atom_init()
 	..()
+	return INITIALIZE_HINT_LATELOAD
+
+/turf/simulated/atom_init_late()
 	levelupdate()
 
-/turf/simulated/proc/AddTracks(typepath,bloodDNA,comingdir,goingdir,bloodcolor="#A10808")
-	var/obj/effect/decal/cleanable/blood/tracks/tracks = locate(typepath) in src
-	if(!tracks)
-		tracks = new typepath(src)
-	tracks.AddTracks(bloodDNA,comingdir,goingdir,bloodcolor)
+/turf/simulated/ChangeTurf()
+	if(wet_timer_id)
+		deltimer(wet_timer_id)
+	return ..()
 
 /turf/simulated/Entered(atom/A, atom/OL)
 	if(movement_disabled && usr.ckey != movement_disabled_exception)
-		to_chat(usr, "\red Movement is admin-disabled.")//This is to identify lag problems
+		to_chat(usr, "<span class='warning'>Передвижение отключено администрацией.</span>")//This is to identify lag problems
 		return
 
-	if (istype(A, /mob/living/simple_animal/hulk))
-		var/mob/living/simple_animal/hulk/Hulk = A
-		if(!Hulk.lying)
-			playsound(src, 'sound/effects/hulk_step.ogg', 50, 1)
-	if (istype(A,/mob/living/carbon))
+	if (iscarbon(A))
 		var/mob/living/carbon/M = A
-		if(M.lying && !M.crawling)        return
+		if(M.lying && !M.crawling)
+			return
 
 		dirt++
 		if (dirt >= 200)
@@ -43,171 +45,46 @@
 			else
 				dirtoverlay.alpha = min(dirtoverlay.alpha+5, 255)
 
-		if(istype(M, /mob/living/carbon/human))
-			var/mob/living/carbon/human/H = M
-
-			//Footstep sound
-			if(istype(H:shoes, /obj/item/clothing/shoes) && !H.buckled)
-				var/obj/item/clothing/shoes/O = H.shoes
-
-				var/footstepsound = "footsteps"
-
-				if(istype(H.shoes, /obj/item/clothing/shoes/clown_shoes))
-					if(prob(25))
-						footstepsound = "clownstep"
-				if(H.shoes.wet)
-					footstepsound = 'sound/effects/waterstep.ogg'
-
-				if(H.m_intent == "run")
-					if(O.footstep >= 2)
-						O.footstep = 0
-						playsound(src, footstepsound, 50, 1)
-					else
-						O.footstep++
-				else
-					playsound(src, footstepsound, 20, 1)
-
-			// Tracking blood
-			var/list/bloodDNA = null
-			var/bloodcolor=""
-			if(H.shoes)
-				var/obj/item/clothing/shoes/S = H.shoes
-				if(S.track_blood && S.blood_DNA)
-					bloodDNA = S.blood_DNA
-					bloodcolor=S.blood_color
-					S.track_blood--
-			else
-				if(H.track_blood && H.feet_blood_DNA)
-					bloodDNA = H.feet_blood_DNA
-					bloodcolor=H.feet_blood_color
-					H.track_blood--
-
-			if (bloodDNA)
-				src.AddTracks(/obj/effect/decal/cleanable/blood/tracks/footprints,bloodDNA,H.dir,0,bloodcolor) // Coming
-				var/turf/simulated/from = get_step(H,reverse_direction(H.dir))
-				if(istype(from) && from)
-					from.AddTracks(/obj/effect/decal/cleanable/blood/tracks/footprints,bloodDNA,0,H.dir,bloodcolor) // Going
-
-				bloodDNA = null
-
-		switch (src.wet)
-			if(1)
-				if(istype(M, /mob/living/carbon/human)) // Added check since monkeys don't have shoes
-					if ((M.m_intent == "run") && !((istype(M:shoes, /obj/item/clothing/shoes) && M:shoes.flags&NOSLIP) || (istype(M:wear_suit, /obj/item/clothing/suit/space/rig) && M:wear_suit.flags&NOSLIP)))
-						M.stop_pulling()
-						step(M, M.dir)
-						to_chat(M, "\blue You slipped on the wet floor!")
-						playsound(src, 'sound/misc/slip.ogg', 50, 1, -3)
-						M.Stun(5)
-						M.Weaken(3)
-					else
-						M.inertia_dir = 0
-						return
-				else if(!istype(M, /mob/living/carbon/slime))
-					if (M.m_intent == "run")
-						M.stop_pulling()
-						step(M, M.dir)
-						to_chat(M, "\blue You slipped on the wet floor!")
-						playsound(src, 'sound/misc/slip.ogg', 50, 1, -3)
-						M.Stun(5)
-						M.Weaken(3)
-					else
-						M.inertia_dir = 0
-						return
-
-			if(2) //lube                //can cause infinite loops - needs work
-				if(!istype(M, /mob/living/carbon/slime))
-					M.stop_pulling()
-					step(M, M.dir)
-					spawn(1) step(M, M.dir)
-					spawn(2) step(M, M.dir)
-					spawn(3) step(M, M.dir)
-					spawn(4) step(M, M.dir)
-					M.take_organ_damage(2) // Was 5 -- TLE
-					to_chat(M, "\blue You slipped on the floor!")
-					playsound(src, 'sound/misc/slip.ogg', 50, 1, -3)
-					M.Weaken(10)
-			if(3) // Ice
-				if(istype(M, /mob/living/carbon/human)) // Added check since monkeys don't have shoes
-					if ((M.m_intent == "run") && (!(istype(M:shoes, /obj/item/clothing/shoes) && M:shoes.flags&NOSLIP) || !(istype(M:wear_suit, /obj/item/clothing/suit/space/rig) && M:wear_suit.flags&NOSLIP)) && prob(30))
-						M.stop_pulling()
-						step(M, M.dir)
-						to_chat(M, "\blue You slipped on the icy floor!")
-						playsound(src, 'sound/misc/slip.ogg', 50, 1, -3)
-						M.Stun(4)
-						M.Weaken(3)
-					else
-						M.inertia_dir = 0
-						return
-				else if(!istype(M, /mob/living/carbon/slime))
-					if (M.m_intent == "run" && prob(30))
-						M.stop_pulling()
-						step(M, M.dir)
-						to_chat(M, "\blue You slipped on the icy floor!")
-						playsound(src, 'sound/misc/slip.ogg', 50, 1, -3)
-						M.Stun(4)
-						M.Weaken(3)
-					else
-						M.inertia_dir = 0
-						return
-
 	..()
 
-//returns 1 if made bloody, returns 0 otherwise
-/turf/simulated/add_blood(mob/living/carbon/human/M)
-	if (!..())
-		return 0
 
-	for(var/obj/effect/decal/cleanable/blood/B in contents)
-		if(!B.blood_DNA[M.dna.unique_enzymes])
-			B.blood_DNA[M.dna.unique_enzymes] = M.dna.b_type
-			B.virus2 = virus_copylist(M.virus2)
-		return 1 //we bloodied the floor
+//Wet floor procs.
+/turf/simulated/proc/make_wet_floor(severity = WATER_FLOOR)
+	wet_timer_id = addtimer(CALLBACK(src, PROC_REF(make_dry_floor)), rand(71 SECONDS, 80 SECONDS), TIMER_UNIQUE|TIMER_OVERRIDE|TIMER_STOPPABLE)
+	if(wet < severity)
+		wet = severity
+		UpdateSlip()
+		if(wet_overlay || severity >= LUBE_FLOOR)
+			return
+		wet_overlay = image('icons/effects/water.dmi', "wet_floor", src)
+		add_overlay(wet_overlay)
 
+/turf/simulated/proc/make_dry_floor()
+	if(wet)
+		if(wet_overlay)
+			cut_overlay(wet_overlay)
+			wet_overlay = null
+		wet = 0
+		UpdateSlip()
 
-
-	//if there isn't a blood decal already, make one.
-	var/obj/effect/decal/cleanable/blood/newblood = new /obj/effect/decal/cleanable/blood(src)
-
-	//Species-specific blood.
-	if(M.species)
-		newblood.basecolor = M.species.blood_color
-	else
-		newblood.basecolor = "#A10808"
-
-	newblood.blood_DNA[M.dna.unique_enzymes] = M.dna.b_type
-	newblood.virus2 = virus_copylist(M.virus2)
-	newblood.update_icon()
-
-	return 1 //we bloodied the floor
-
-
-// Only adds blood on the floor -- Skie
-/turf/simulated/proc/add_blood_floor(mob/living/carbon/M)
-	if(istype(M, /mob/living/carbon/monkey))
-
-		var/obj/effect/decal/cleanable/blood/this = new /obj/effect/decal/cleanable/blood(src)
-		this.blood_DNA[M.dna.unique_enzymes] = M.dna.b_type
-		this.basecolor = "#A10808"
-		this.update_icon()
-
-	else if(istype(M,/mob/living/carbon/human))
-
-		var/obj/effect/decal/cleanable/blood/this = new /obj/effect/decal/cleanable/blood(src)
-		var/mob/living/carbon/human/H = M
-
-		//Species-specific blood.
-		if(H.species)
-			this.basecolor = H.species.blood_color
+/turf/simulated/proc/UpdateSlip()
+	switch(wet)
+		if(WATER_FLOOR)
+			AddComponent(/datum/component/slippery, 2, NO_SLIP_WHEN_WALKING)
+		if(LUBE_FLOOR)
+			AddComponent(/datum/component/slippery, 5, SLIDE | GALOSHES_DONT_HELP)
 		else
-			this.basecolor = "#A10808"
-		this.update_icon()
+			qdel(GetComponent(/datum/component/slippery))
 
-		this.blood_DNA[M.dna.unique_enzymes] = M.dna.b_type
-
-	else if( istype(M, /mob/living/carbon/alien ))
-		var/obj/effect/decal/cleanable/blood/xeno/this = new /obj/effect/decal/cleanable/blood/xeno(src)
-		this.blood_DNA["UNKNOWN BLOOD"] = "X*"
-
-	else if( istype(M, /mob/living/silicon/robot ))
-		new /obj/effect/decal/cleanable/blood/oil(src)
+/turf/simulated/ex_act(severity) // todo: we need contents_explosion from tg
+	for(var/thing in contents)
+		var/atom/movable/movable_thing = thing
+		if(QDELETED(movable_thing))
+			continue
+		switch(severity)
+			if(EXPLODE_DEVASTATE)
+				SSexplosions.high_mov_atom += movable_thing
+			if(EXPLODE_HEAVY)
+				SSexplosions.med_mov_atom += movable_thing
+			if(EXPLODE_LIGHT)
+				SSexplosions.low_mov_atom += movable_thing

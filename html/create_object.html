@@ -14,13 +14,14 @@
       color: #00f;
       font-family: Georgia, Arial, sans-serif;
     }
-    img { 
-      border: 0px; 
+    img {
+      border: 0px;
     }
     p.lic {
       font-size: 6pt;
     }
   </style>
+  /* custom style */
 </head>
 
 <body>
@@ -36,11 +37,12 @@
 		Number: <input type="text" name="object_count" value="1" style="width:30px">
 		Dir: <input type="text" name="object_dir" value="2" style="width:30px">
 		Name: <input type="text" name="object_name" value="" style="width:180px"><br>
-		Where: 
+		Where:
 			<select name='object_where' style="width:320px">
 				<option value='onfloor'>On floor below own mob</option>
 				<option value='inhand'>In own mob's hand</option>
 				<option value='inmarked'>In marked object</option>
+				<option value='dropped'>From the sky on floor below</option>
 			</select>
 		<br><br>
 		<select name="object_list" id="object_list" size="18" multiple style="width:98%"></select><br>

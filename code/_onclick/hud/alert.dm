@@ -1,241 +1,464 @@
-//A system to manage and display alerts on screen without needing you to do it yourself
+ //A system to manage and display alerts on screen without needing you to do it yourself
 
 //PUBLIC -  call these wherever you want
 
 
-/mob/proc/throw_alert(category, id, severity, obj/new_master)
+/mob/proc/throw_alert(category, type, severity, obj/new_master, override = FALSE)
 
-/* Proc to create or update an alert. Returns 1 if the alert is new or updated, 0 if it was thrown already
-
+/* Proc to create or update an alert. Returns the alert if the alert is new or updated, 0 if it was thrown already
  category is a text string. Each mob may only have one alert per category; the previous one will be replaced
-
- id is a text string, If you don't provide one, category will be used as id
- Either way it MUST match a type path like so: /obj/screen/alert/[id]
- Also the alert's icon_state will be [id] so you must add it to screen_alert.dmi
-
+ path is a type path of the actual alert type to throw
  severity is an optional number that will be placed at the end of the icon_state for this alert
- For example, high pressure's id is "highpressure" and can be serverity 1 or 2 to get "highpressure1" or "highpressure2" as icon_states
-
+ For example, high pressure's icon_state is "highpressure" and can be serverity 1 or 2 to get "highpressure1" or "highpressure2"
  new_master is optional and sets the alert's icon state to "template" in the ui_style icons with the master as an overlay.
- Clicks are forwarded to master */
+ Clicks are forwarded to master
+ Override makes it so the alert is not replaced until cleared by a clear_alert with clear_override, and it's used for hallucinations.
+ */
 
-	if(!category)
+	if(!category || QDELETED(src))
 		return
-	if(!id)
-		id = category
 
-	var/obj/screen/alert/alert
+	var/atom/movable/screen/alert/thealert
 	if(alerts[category])
-		alert = alerts[category]
-		if(new_master && new_master != alert.master)
-			WARNING("[src] threw alert [category] with new_master [new_master] while already having that alert with master [alert.master]")
-//			alert.overlays.Cut() // This is apparently an invalid expression
+		thealert = alerts[category]
+		if(thealert.override_alerts)
+			return 0
+		if(new_master && new_master != thealert.master)
+			WARNING("[src] threw alert [category] with new_master [new_master] while already having that alert with master [thealert.master]")
+
 			clear_alert(category)
 			return .()
-		else if(alert.icon_state == "[id][severity]")
-			if(alert.timeout)
+		else if(thealert.type != type)
+			clear_alert(category)
+			return .()
+		else if(!severity || severity == thealert.severity)
+			if(thealert.timeout)
 				clear_alert(category)
 				return .()
-			else
-	//			src << "threw alert not in need of update [category] [id] [severity]"
+			else //no need to update
 				return 0
-//		src << "updating alert [category] [id] [severity]"
 	else
-		alert = PoolOrNew(/obj/screen/alert)
-//		src << "throwing new alert [category] [id] [severity]"
+		thealert = new type()
+		thealert.override_alerts = override
+		if(override)
+			thealert.timeout = null
+	thealert.mob_viewer = src
 
 	if(new_master)
 		var/old_layer = new_master.layer
 		var/old_plane = new_master.plane
 		new_master.layer = FLOAT_LAYER
 		new_master.plane = FLOAT_PLANE
-		alert.overlays += new_master
+		thealert.add_overlay(new_master)
 		new_master.layer = old_layer
 		new_master.plane = old_plane
-		alert.icon_state = "template" // We'll set the icon to the client's ui pref in reorganize_alerts()
-		alert.master = new_master
+		thealert.icon_state = "template" // We'll set the icon to the client's ui pref in reorganize_alerts()
+		thealert.master = new_master
 	else
-		alert.icon_state = "[id][severity]"
+		thealert.icon_state = "[initial(thealert.icon_state)][severity]"
+		thealert.severity = severity
 
-	alerts[category] = alert
+	alerts[category] = thealert
 	if(client && hud_used)
 		hud_used.reorganize_alerts()
-	alert.transform = matrix(32, 6, MATRIX_TRANSLATE)
-	animate(alert, transform = matrix(), time = 2.5, easing = CUBIC_EASING)
+	thealert.transform = matrix(32, 6, MATRIX_TRANSLATE)
+	animate(thealert, transform = matrix(), time = 2.5, easing = CUBIC_EASING)
 
-	var/obj/screen/alert/path_as_obj = text2path("/obj/screen/alert/[id]")
-	// BYOND magic-fu - we'll be storing a path in this reference and retrieving vars from it.
-	if(!path_as_obj)
-		ERROR("[src] threw alert [category] with invalid path /obj/screen/alert/[id]")
-		return 0
-	alert.name = initial(path_as_obj.name)
-	alert.desc = initial(path_as_obj.desc)
-	alert.timeout = initial(path_as_obj.timeout)
-	if(alert.timeout)
-		spawn(alert.timeout)
-			if(alert.timeout && alerts[category] == alert && world.time >= alert.timeout)
-				clear_alert(category)
-		alert.timeout = world.time + alert.timeout - world.tick_lag
-	alert.mouse_opacity = 1
+	if(thealert.timeout)
+		addtimer(CALLBACK(src, PROC_REF(alert_timeout), thealert, category), thealert.timeout)
+		thealert.timeout = world.time + thealert.timeout - world.tick_lag
+	return thealert
 
-	return alert
+/mob/proc/alert_timeout(atom/movable/screen/alert/alert, category)
+	if(alert.timeout && alerts[category] == alert && world.time >= alert.timeout)
+		clear_alert(category)
 
 // Proc to clear an existing alert.
-/mob/proc/clear_alert(category)
-	var/obj/screen/alert/alert = alerts[category]
+/mob/proc/clear_alert(category, clear_override = FALSE)
+	var/atom/movable/screen/alert/alert = alerts[category]
 	if(!alert)
-		return 0
+		return FALSE
+	if(alert.override_alerts && !clear_override)
+		return FALSE
 
 	alerts -= category
 	if(client && hud_used)
 		hud_used.reorganize_alerts()
 		client.screen -= alert
 	qdel(alert)
+	return TRUE
 
-// Make sure any alerts you throw have a path that matches /obj/screen/alert/[id] or /obj/screen/alert/[category]
-
-/obj/screen/alert
-	icon = 'icons/mob/screen_alert.dmi'
+/atom/movable/screen/alert
+	icon = 'icons/hud/screen_alert.dmi'
 	icon_state = "default"
-	name = "Alert"
-	desc = "Something seems to have gone wrong with this alert, so report this bug please."
+	name = "Тревога"
+	desc = "Похоже, что-то пошло не так с этим предупреждением, поэтому, пожалуйста, сообщите об этой ошибке"
+	mouse_opacity = MOUSE_OPACITY_ICON
+
 	var/timeout = 0 //If set to a number, this alert will clear itself after that many deciseconds
+	var/severity = 0
+	var/alerttooltipstyle = ""
+	var/override_alerts = FALSE //If it is overriding other alerts of the same type
+	var/mob/mob_viewer //the mob viewing this alert
+
+/atom/movable/screen/alert/Destroy()
+	. = ..()
+	severity = 0
+	mob_viewer = null
+	screen_loc = ""
+
+/mob
+	var/list/alerts = list() // contains /atom/movable/screen/alert only // On /mob so clientless mobs will throw alerts properly
+
+/atom/movable/screen/alert/Click(location, control, params)
+	if(!usr || !usr.client)
+		return
+	var/paramslist = params2list(params)
+	if(paramslist[SHIFT_CLICK]) // screen objects don't do the normal Click() stuff so we'll cheat
+		to_chat(usr, "<span class='boldnotice'>[name]</span> - <span class='info'>[desc]</span>")
+		return
+	if(master)
+		return usr.client.Click(master, location, control, params)
+
+/atom/movable/screen/alert/MouseEntered(location, control, params)
+	if(!QDELETED(src))
+		openToolTip(usr, src, params, title = name, content = desc, theme = alerttooltipstyle)
+
+/atom/movable/screen/alert/MouseExited()
+	closeToolTip(usr)
 
 //Gas alerts
-/obj/screen/alert/oxy
-	name = "Choking"
-	desc = "You're not getting enough oxygen. Find some good air before you pass out! \
-			The box in your backpack has an oxygen tank and gas mask in it."
+/atom/movable/screen/alert/oxy
+	name = "Удушение"
+	desc = "По каким-то причинам, вы не можете дышать! Выйдите на свежий воздух, пока не потеряли сознание! В вашем рюкзаке есть коробка с кислородным баллоном и маской."
+	icon_state = "oxy"
 
-/obj/screen/alert/tox_in_air
-	name = "Toxic Gas"
-	desc = "There's highly flammable, toxic plasma in the air and you're breathing it in. Find some fresh air. \
-			The box in your backpack has an oxygen tank and gas mask in it."
+/atom/movable/screen/alert/tox_in_air
+	name = "Токсичный газ"
+	desc = "В воздухе витает легковоспламеняющийся, токсичный форон, и вы дышите им. Выйдите на свежий воздух."
+	icon_state = "tox_in_air"
+//End gas alerts
 
-/obj/screen/alert/fat
-	name = "Fat"
-	desc = "You ate too much food, lardass. Run around the station and lose some weight."
 
-/obj/screen/alert/hungry
-	name = "Hungry"
-	desc = "Some food would be good right about now."
+/atom/movable/screen/alert/hot
+	name = "Слишком жарко"
+	desc = "Вам жарко. Найдите прохладное место."
+	icon_state = "hot"
 
-/obj/screen/alert/starving
-	name = "Starving"
-	desc = "Some food would be to kill for right about now. The hunger pains make moving around a chore."
+/atom/movable/screen/alert/cold
+	name = "Слишком холодно"
+	desc = "Вам холодно. Найдите тёплое место."
+	icon_state = "cold"
 
-/obj/screen/alert/hot
-	name = "Too Hot"
-	desc = "You're flaming hot! Get somewhere cooler and take off any insulating clothing like a fire suit."
+/atom/movable/screen/alert/lowpressure
+	name = "Низкое давление"
+	desc = "Вокруг вас опасный уровень давления атмосферы. Скафандр бы вас защитил."
+	icon_state = "lowpressure"
 
-/obj/screen/alert/cold
-	name = "Too Cold"
-	desc = "You're freezing cold! Get somewhere warmer and take off any insulating clothing like a space suit."
+/atom/movable/screen/alert/highpressure
+	name = "Высокое давление"
+	desc = "Вокруг вас опасный уровень давления атмосферы. Скафандр бы вас защитил."
+	icon_state = "highpressure"
 
-/obj/screen/alert/lowpressure
-	name = "Low Pressure"
-	desc = "The air around you is hazardously thin. A space suit would protect you."
+/atom/movable/screen/alert/blind
+	name = "Слепота"
+	desc = "По какой-то причине вы не можете видеть. Это может быть вызвано генетическим дефектом, травмой глаз, потерей сознания, \
+			ну или что-то закрывает ваши глаза."
+	icon_state = "blind"
 
-/obj/screen/alert/highpressure
-	name = "High Pressure"
-	desc = "The air around you is hazardously thick. A fire suit would protect you."
-/obj/screen/alert/blind
-	name = "Blind"
-	desc = "For whatever reason, you can't see. This may be caused by a genetic defect, eye trauma, being unconscious, \
-			or something covering your eyes."
+/atom/movable/screen/alert/high
+	name = "Кайф"
+	desc = "Воу, чувак, ты просто балдеешь! Осторожней, ты можешь стать зависимым... если не уже..."
+	icon_state = "high"
 
-/obj/screen/alert/high
-	name = "High"
-	desc = "Woah man, you're tripping balls! Careful you don't get addicted to this... if you aren't already."
+/atom/movable/screen/alert/drunk/slur
+	name = "Опьянение"
+	desc = "Ик! Ой... Да ФсЕ хоРошО! НеМНого МоЖно..."
+	icon_state = "drunk_slur"
 
-/obj/screen/alert/drunk //Not implemented
-	name = "Drunk"
-	desc = "All that alcohol you've been drinking is impairing your speech, motor skills, and mental cognition. Make sure to act like it."
+/atom/movable/screen/alert/drunk/confused
+	name = "Опьянение"
+	desc = "ЛаДНО, можИт НемНОгО..."
+	icon_state = "drunk_confused"
 
-/obj/screen/alert/embeddedobject
-	name = "Embedded Object"
-	desc = "Something got lodged into your flesh and is causing major bleeding. It might fall out with time, but surgery is the safest way. \
-			If you're feeling frisky, click yourself in help intent to pull the object out."
+/atom/movable/screen/alert/drunk/blur
+	name = "Опьянение"
+	desc = "ЗаВТра ТочнО бРОшу ПиТЬ!"
+	icon_state = "drunk_blur"
 
-/obj/screen/alert/asleep
-	name = "Asleep"
-	desc = "You've fallen asleep. Wait a bit and you should wake up. Unless you don't, considering how helpless you are."
+/atom/movable/screen/alert/drunk/pass_out
+	name = "АпЬйаНЕнИе"
+	desc = "ПУШКА!!! КАК ЖЕ НАВОДИТ ПОРЧУУУЭЭЭЭЭ-"
+	icon_state = "drunk_pass_out"
 
-/obj/screen/alert/weightless
-	name = "Weightless"
-	desc = "Gravity has ceased affecting you, and you're floating around aimlessly. You'll need something large and heavy, like a \
-			wall or lattice strucure, to push yourself off of if you want to move. A jetpack would enable free range of motion. A pair of \
-			magboots would let you walk around normally on the floor. Barring those, you can throw things, use a fire extuingisher, \
-			or shoot a gun to move around via Newton's 3rd Law of motion."
+/atom/movable/screen/alert/embeddedobject
+	name = "Застрявший предмет"
+	desc = "Что-то застряло в вашей плоти и вызывает сильную боль. Стоит попросить оказать медицинскую помощь. \
+			Если это вам сильно мешает, то нажмите по себе правой кнопкой мыши и выберите 'Вытащить предмет' (yank object)."
+	icon_state = "embeddedobject"
+
+/atom/movable/screen/alert/weightless
+	name = "Невесомость"
+	desc = "Гравитация перестала воздействовать на вас, и вы бесцельно плаваете вокруг. Вам понадобится что-нибудь большое и тяжелое, например \
+			стена или решетчатая конструкция, чтобы можно было оттолкнуться и двигаться куда надо. Реактивный ранец обеспечил бы свободу передвижения. \
+			Магнитные сапоги позволят вам нормально передвигаться по полу. Если их нет, вы можете бросать предметы, пользоваться огнетушителем, \
+			или стрелять из пистолета, чтобы передвигаться в соответствии с 3-м законом Ньютона."
+	icon_state = "weightless"
+
+/atom/movable/screen/alert/pluvia_ring
+	name = "Входящий вызов"
+	desc = "Кто-то с того света желает говорить с вами."
+	icon_state = "ring"
+
+/atom/movable/screen/alert/pluvia_ring/Click()
+	if(!mob_viewer)
+		return
+	to_chat(mob_viewer, "Вы сбросили звонок!")
+	for(var/obj/effect/proc_holder/spell/no_target/ancestor_call/S in mob_viewer.spell_list)
+		S.target_loc = null
+		S.my_gong = null
+	mob_viewer.clear_alert("Звонок")
 
 //ALIENS
 
-/obj/screen/alert/alien_tox
-	name = "Plasma"
-	desc = "There's flammable plasma in the air. If it lights up, you'll be toast."
+/atom/movable/screen/alert/alien_tox
+	name = "Плазма"
+	desc = "В воздухе витает горючая плазма. Если она загорится, вы будете поджарены."
+	icon_state = "alien_tox"
+	alerttooltipstyle = "alien"
 
-/obj/screen/alert/alien_fire
+/atom/movable/screen/alert/alien_fire
 // This alert is temporarily gonna be thrown for all hot air but one day it will be used for literally being on fire
-	name = "Burning"
-	desc = "It's too hot! Flee to space or at least away from the flames. Standing on weeds will heal you up."
+	name = "Возгарание"
+	desc = "Горячо! Бегите подальше от огня! Полежите на вашей траве, чтобы немного исцелиться."
+	icon_state = "alien_fire"
+	alerttooltipstyle = "alien"
+
+/atom/movable/screen/alert/alien_embryo
+	name = "Медленное развитие эмбриона"
+	desc = "Носитель не находится в гнезде. Ваша скорость развития снижена."
+	icon_state = "alien_embryo"
+	alerttooltipstyle = "alien"
+
+/atom/movable/screen/alert/alien_queen
+	name = "Низкая скорость роста"
+	desc = "Королева вне зоны видимости. Ваша скорость роста снижена."
+	icon_state = "alien_queen"
+	alerttooltipstyle = "alien"
+
+//BLOBS
+/atom/movable/screen/alert/nofactory
+	name = "Нет фабрики"
+	desc = "У вас нет фабрики и вы медленно умираете!"
+	icon_state = "blobbernaut"
+
+//changeling
+/atom/movable/screen/alert/regen_stasis
+	name = "Регенеративный стазис"
+	desc = "Вы вошли в стазис. Просто подождите немного."
+	icon_state = "regen_stasis"
+
+//IANS
+/atom/movable/screen/alert/ian_oxy
+	name = "Удушение"
+	desc = "Вам не хватает кислорода."
+	icon_state = "ian_oxy"
+
+/atom/movable/screen/alert/ian_tox
+	name = "Газ"
+	desc = "В воздухе есть газ, и вы вдыхаете его."
+	icon_state = "ian_tox"
+
+/atom/movable/screen/alert/ian_hot
+	name = "Слишком жарко"
+	desc = "Вам жарко. Найдите способ остудиться."
+	icon_state = "ian_hot"
+
+/atom/movable/screen/alert/ian_cold
+	name = "Слишком холодно"
+	desc = "Вам холодно. Найдите способ согреться."
+	icon_state = "ian_cold"
 
 //SILICONS
 
-/obj/screen/alert/nocell
-	name = "Missing Power Cell"
-	desc = "Unit has no power cell. No modules available until a power cell is reinstalled. Robotics may provide assistance."
+/atom/movable/screen/alert/nocell
+	name = "Нет батареи"
+	desc = "У юнита отсутствует батарея. Модули недоступны до тех пор, пока батарея не будет установлена. Робототехники могут оказать вам помощь."
+	icon_state = "nocell"
 
-/obj/screen/alert/emptycell
-	name = "Out of Power"
-	desc = "Unit's power cell has no charge remaining. No modules available until power cell is recharged. \
-			Reharging stations are available in robotics, the dormitory's bathrooms. and the AI satelite."
+/atom/movable/screen/alert/emptycell
+	name = "Севшая батарея"
+	desc = "В батарее юнита не осталось заряда. Модули недоступны до тех пор, пока элемент питания не будет заряжен. \
+			Станции подзарядки имеются в робототехнике, в туалетах дормиторий, на станции подзарядки киборгов и на спутнике ИИ."
+	icon_state = "emptycell"
 
-/obj/screen/alert/lowcell
-	name = "Low Charge"
-	desc = "Unit's power cell is running low. Reharging stations are available in robotics, the dormitory's bathrooms. and the AI satelite."
+/atom/movable/screen/alert/lowcell
+	name = "Низкий заряд"
+	desc = "Батарея скоро сядет. Станции подзарядки имеются в робототехнике, в туалетах дормиторий, на станции подзарядки киборгов и на спутнике ИИ."
+	icon_state = "lowcell"
 
 //Need to cover all use cases - emag, illegal upgrade module, malf AI hack, traitor cyborg
-/obj/screen/alert/hacked
-	name = "Hacked"
-	desc = "Hazardous non-standard equipment detected. Please ensure any usage of this equipment is in line with unit's laws, if any."
+/atom/movable/screen/alert/hacked
+	name = "Взломан"
+	desc = "Обнаружено нестандартизированное опасное оборудование. Пожалуйста, убедитесь, что любое использование этого оборудования разрешается вашим набором законов."
+	icon_state = "hacked"
 
-/obj/screen/alert/locked
-	name = "Locked Down"
-	desc = "Unit has remotely locked down. Usage of a Robotics Control Computer like the one in the Research Director's \
-			office by your AI master or any qualified human may resolve this matter. Robotics my provide further assistance if necessary."
+/atom/movable/screen/alert/not_locked
+	name = "Интерфейс разблокирован"
+	desc = "Интерфейс взаимодействия с юнитом разблокирован. Кто-то случайно или намеренно оставил его открытым. Робототехник может оказать помощь."
+	icon_state = "not_locked"
 
-/obj/screen/alert/newlaw
-	name = "Law Update"
-	desc = "Laws have potentially been uploaded to or removed from this unit. Please be aware of any changes \
-			so as to remain in compliance with the most up-to-date laws."
+/atom/movable/screen/alert/locked
+	name = "Заблокирован"
+	desc = "Юнит удаленно заблокирован. Этот вопрос может быть решен с помощью компьютера для управления робототехникой, \
+			подобного тому, который находится в кабинете директора научного отдела, вашим Мастером или любым специалистом. \
+			Стоит разобраться по какой причине это произошло. При необходимости робототехник окажет дополнительную помощь."
+	icon_state = "locked"
+
+/atom/movable/screen/alert/newlaw
+	name = "Обновление законов"
+	desc = "Набор ваших законов был обновлён. Стоит проверить его, чтобы не нарушить их случайно."
+	icon_state = "newlaw"
 	timeout = 300
 
+/atom/movable/screen/alert/swarm_hunger
+	name = "Голод роя"
+	desc = "Эта реальность не может выдержать вашего присутствия... Вы должны потреблять, чтобы жить."
+	icon_state = "swarm_hunger"
+
+/atom/movable/screen/alert/swarm_upgrade
+	name = "Обновление массива"
+	desc = "Доступно обновление массива данных. Осмотрите себя, чтобы увидеть возможные обновления."
+	icon_state = "swarm_upgrade"
+
+/atom/movable/screen/alert/swarm_upgrade/Click()
+	if(!mob_viewer)
+		return
+	if(mob_viewer.incapacitated())
+		return
+	if(!mob_viewer.mind)
+		return
+	if(!isreplicator(mob_viewer))
+		return
+	var/mob/living/simple_animal/hostile/replicator/R = mob_viewer
+	R.acquire_array_upgrade()
+
 //OBJECT-BASED
+/atom/movable/screen/alert/inside
+	name = "Внутри"
+	desc = "Вы внутри чего-то и не можете двинуться. \
+			Нажмите на предупреждение, чтобы вылезти, если на вас не надеты наручники."
+	icon_state = "inside"
 
-/obj/screen/alert/buckled
-	name = "Buckled"
-	desc = "You've been buckled to something and can't move. Click the alert to unbuckle unless you're handcuffed."
+/atom/movable/screen/alert/inside/Click()
+	if(!mob_viewer)
+		return
+	if(mob_viewer.restrained())
+		to_chat(mob_viewer, "Вы в наручниках! Сначала разберитесь с ними!")
+		return
+	if(mob_viewer.incapacitated() || mob_viewer.is_busy())
+		return
+	var/obj/machinery/machine = master
+	machine.container_resist()
+	machine.update_icon()
 
-/obj/screen/alert/handcuffed // Not used right now.
-	name = "Handcuffed"
-	desc = "You're handcuffed and can't act. If anyone drags you, you won't be able to move. Click the alert to free yourself."
+/atom/movable/screen/alert/buckled
+	name = "Пристёгнут"
+	desc = "Вы пристёгнуты к чему-то и не можете двинуться. \
+			Нажмите на предупреждение, чтобы отстегнуться, если на вас не надеты наручники."
+	icon_state = "buckled"
+
+/atom/movable/screen/alert/buckled/Click()
+	if(!mob_viewer)
+		return
+	if(mob_viewer.restrained())
+		to_chat(mob_viewer, "Вы в наручниках! Сначала разберитесь с ними!")
+		return
+	if(mob_viewer.incapacitated() || mob_viewer.is_busy())
+		return
+	master.user_unbuckle_mob(mob_viewer)
+
+/atom/movable/screen/alert/brake
+	name = "Тормоз включён"
+	desc = "Тормоз инвалидной коляски включен, так что вы не можете двигуться."
+	icon_state = "brake"
+
+/atom/movable/screen/alert/handcuffed
+	name = "В наручниках"
+	desc = "На вас надеты наручники, и вы не можете пользоваться своими руками. Если кто-то потащит вас, вы не сможете двинуться. \
+			Нажмите на кнопку Сопротивления (Resist), чтобы попытаться выбраться из них."
+	icon_state = "handcuff"
+
+/atom/movable/screen/alert/legcuffed
+	name = "Скованные ноги"
+	desc = "Ваши ноги скованы. Что-то мешает вам свободно ходить. \
+			Нажмите на кнопку Сопротивления (Resist), чтобы попытаться убрать ловушку из ног."
+	icon_state = "legcuff"
+
+/atom/movable/screen/alert/stunned
+	name = "Оглушение"
+	desc = "Что-то или кто-то оглушило вас. Вы не можете даже пошевелиться."
+	icon_state = "stun"
+
+/atom/movable/screen/alert/paralysis
+	name = "Паралич"
+	desc = "Вы не чувствуете своего тела."
+	icon_state = "paralysis"
+
+/atom/movable/screen/alert/weaken
+	name = "Слабость"
+	desc = "Вы не можете стоять на ногах."
+	icon_state = "weaken"
+
+/atom/movable/screen/alert/notify_action
+	name = "Созданное тело"
+	desc = "Было создано тело. Вы можете войти в него."
+	icon_state = "template"
+	timeout = 300
+	var/atom/target = null
+	var/action = NOTIFY_JUMP
+
+/atom/movable/screen/alert/notify_action/Click(location, control, params)
+	if(!usr || !usr.client)
+		return
+	var/paramslist = params2list(params)
+	if(paramslist[SHIFT_CLICK])
+		to_chat(usr, "<span class='boldnotice'>[name]</span> - <span class='info'>[desc]</span>")
+		return
+	if(!target)
+		return
+	var/mob/dead/observer/ghost_owner = mob_viewer
+	if(!istype(ghost_owner))
+		return
+	switch(action)
+		if(NOTIFY_ATTACK)
+			target.attack_ghost(ghost_owner)
+		if(NOTIFY_JUMP)
+			var/turf/target_turf = get_turf(target)
+			if(target_turf && isturf(target_turf))
+				ghost_owner.abstract_move(target_turf)
+		if(NOTIFY_ORBIT)
+			if(ismovable(target))
+				ghost_owner.ManualFollow(target)
+			else
+				var/turf/target_turf = get_turf(target)
+				if(target_turf && isturf(target_turf))
+					ghost_owner.abstract_move(target_turf)
 
 // PRIVATE = only edit, use, or override these if you're editing the system as a whole
 
 // Re-render all alerts - also called in /datum/hud/show_hud() because it's needed there
 /datum/hud/proc/reorganize_alerts()
 	var/list/alerts = mymob.alerts
-	var/icon_pref
 	if(!hud_shown)
 		for(var/i = 1, i <= alerts.len, i++)
 			mymob.client.screen -= alerts[alerts[i]]
-		return 1
+		return TRUE
 	for(var/i = 1, i <= alerts.len, i++)
-		var/obj/screen/alert/alert = alerts[alerts[i]]
+		var/atom/movable/screen/alert/alert = alerts[alerts[i]]
 		if(alert.icon_state == "template")
-			if(!icon_pref)
-				icon_pref = ui_style2icon(mymob.client.prefs.UI_style)
-			alert.icon = icon_pref
+			if(ui_style)
+				alert.icon = ui_style
 		switch(i)
 			if(1)
 				. = ui_alert1
@@ -247,29 +470,8 @@
 				. = ui_alert4
 			if(5)
 				. = ui_alert5 // Right now there's 5 slots
+			else
+				. = ""
 		alert.screen_loc = .
 		mymob.client.screen |= alert
-	return 1
-
-/mob
-	var/list/alerts = list() // contains /obj/screen/alert only // On /mob so clientless mobs will throw alerts properly
-
-/obj/screen/alert/Click(location, control, params)
-	if(!usr || !usr.client)
-		return
-	var/paramslist = params2list(params)
-	if(paramslist["shift"]) // screen objects don't do the normal Click() stuff so we'll cheat
-		to_chat(usr, "<span class='boldnotice'>[name]</span> - <span class='info'>[desc]</span>")
-		return
-	if(master)
-		return usr.client.Click(master, location, control, params)
-
-/obj/screen/alert/MouseEntered(location,control,params)
-	openToolTip(usr,src,params,title = name,content = desc)
-
-
-/obj/screen/alert/MouseExited()
-	closeToolTip(usr)
-
-/obj/screen/alert/Destroy()
-	return QDEL_HINT_PUTINPOOL //Don't destroy me, I have a family!
+	return TRUE

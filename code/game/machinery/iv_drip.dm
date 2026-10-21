@@ -1,16 +1,17 @@
 /obj/machinery/iv_drip
-	name = "\improper IV drip"
+	name = "IV drip"
 	icon = 'icons/obj/iv_drip.dmi'
 	icon_state = "iv_drip"
-	anchored = 0
-	density = 1
+	anchored = FALSE
+	density = FALSE
+	interact_offline = TRUE
 	var/mob/living/carbon/human/attached = null
 	var/mode = 1 // 1 is injecting, 0 is taking blood.
 	var/obj/item/weapon/reagent_containers/beaker = null
 
 
-/obj/machinery/iv_drip/New()
-	..()
+/obj/machinery/iv_drip/atom_init()
+	. = ..()
 	update_icon()
 
 /obj/machinery/iv_drip/update_icon()
@@ -25,13 +26,13 @@
 		else
 			icon_state = "donateidle"
 
-	overlays = null
+	cut_overlays()
 
 	if(beaker)
 		if(attached)
-			overlays += "beakeractive"
+			add_overlay("beakeractive")
 		else
-			overlays += "beakeridle"
+			add_overlay("beakeridle")
 		if(beaker.reagents.total_volume)
 			var/image/filling = image('icons/obj/iv_drip.dmi', src, "reagent")
 
@@ -46,38 +47,48 @@
 				if(91 to INFINITY)	filling.icon_state = "reagent100"
 
 			filling.icon += mix_color_from_reagents(beaker.reagents.reagent_list)
-			overlays += filling
+			add_overlay(filling)
+
+/obj/machinery/iv_drip/on_reagent_change()
+	..()
+	update_icon()
 
 /obj/machinery/iv_drip/MouseDrop(over_object, src_location, over_location)
 	..()
-
+	if(!iscarbon(usr) && !isrobot(usr))
+		return
 	if(attached)
 		visible_message("[src.attached] is detached from \the [src]")
 		src.attached = null
-		src.update_icon()
+		update_icon()
 		return
 
-	if(in_range(src, usr) && ishuman(over_object) && get_dist(over_object, src) <= 1)
+	if(!(Adjacent(usr) && Adjacent(over_object) && usr.Adjacent(over_object)))
+		return
+
+	if(ishuman(over_object))
 		visible_message("[usr] attaches \the [src] to \the [over_object].")
 		src.attached = over_object
-		src.update_icon()
-
+		update_icon()
 
 /obj/machinery/iv_drip/attackby(obj/item/weapon/W, mob/user)
-	if (istype(W, /obj/item/weapon/reagent_containers))
+	if (istype(W, /obj/item/weapon/reagent_containers/glass/beaker) || istype(W, /obj/item/weapon/reagent_containers/blood) || istype(W, /obj/item/weapon/reagent_containers/glass/bottle))
 		if(!isnull(src.beaker))
 			to_chat(user, "There is already a reagent container loaded!")
 			return
-
-		user.drop_item()
-		W.loc = src
+		user.drop_from_inventory(W, src)
 		src.beaker = W
 		to_chat(user, "You attach \the [W] to \the [src].")
-		src.update_icon()
+		update_icon()
 		return
 	else
 		return ..()
 
+/obj/machinery/iv_drip/deconstruct(disassembled = TRUE)
+	if(flags & NODECONSTRUCT)
+		return ..()
+	new /obj/item/stack/sheet/metal(loc)
+	..()
 
 /obj/machinery/iv_drip/process()
 	//set background = 1
@@ -86,9 +97,9 @@
 
 		if(!(get_dist(src, src.attached) <= 1 && isturf(src.attached.loc)))
 			visible_message("The needle is ripped out of [src.attached], doesn't that hurt?")
-			src.attached:apply_damage(3, BRUTE, pick("r_arm", "l_arm"))
+			attached:apply_damage(3, BRUTE, pick(BP_R_ARM , BP_L_ARM))
 			src.attached = null
-			src.update_icon()
+			update_icon()
 			return
 
 	if(src.attached && src.beaker)
@@ -99,7 +110,7 @@
 				if(istype(src.beaker, /obj/item/weapon/reagent_containers/blood))
 					// speed up transfer on blood packs
 					transfer_amount = 4
-				src.beaker.reagents.trans_to(src.attached, transfer_amount)
+				beaker.reagents.trans_to(src.attached, transfer_amount)
 				update_icon()
 
 		// Take blood
@@ -119,38 +130,38 @@
 			if(NOCLONE in T.mutations)
 				return
 
-			if(T.species && T.species.flags[NO_BLOOD])
+			if(HAS_TRAIT(T, TRAIT_NO_BLOOD))
 				return
 
 			// If the human is losing too much blood, beep.
-			if(T.vessel.get_reagent_amount("blood") < BLOOD_VOLUME_SAFE) if(prob(5))
+			if(T.blood_amount() < BLOOD_VOLUME_SAFE && prob(5))
 				visible_message("\The [src] beeps loudly.")
 
-			var/datum/reagent/B = T.take_blood(beaker,amount)
+			T.take_blood(beaker, amount)
 
-			if (B)
-				beaker.reagents.reagent_list |= B
-				beaker.reagents.update_total()
-				beaker.on_reagent_change()
-				beaker.reagents.handle_reactions()
-				update_icon()
+/obj/machinery/iv_drip/attack_ai(mob/user)
+	if(IsAdminGhost(user))
+		return ..()
 
 /obj/machinery/iv_drip/attack_hand(mob/user)
-	if(src.beaker)
-		src.beaker.loc = get_turf(src)
-		src.beaker = null
+	. = ..()
+	if(.)
+		return
+
+	if(beaker)
+		beaker.loc = get_turf(src)
+		beaker = null
 		update_icon()
-	else
-		return ..()
 
 /obj/machinery/iv_drip/verb/toggle_mode()
 	set name = "Toggle Mode"
 	set category = "Object"
 	set src in oview(1)
 
-	if(isliving(usr) && usr.stat != DEAD)
+	if(isliving(usr) && !usr.incapacitated())
 		mode = !mode
 		to_chat(usr, "The IV drip is now [mode ? "injecting" : "taking blood"].")
+		update_icon()
 
 /obj/machinery/iv_drip/examine(mob/user)
 	..()

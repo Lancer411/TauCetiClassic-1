@@ -1,86 +1,23 @@
 /obj/item/weapon/gun/projectile/revolver/rocketlauncher
 	name = "Goliath missile launcher"
-	desc = "The Goliath is a single-shot shoulder-fired multipurpose missile launcher."
+	cases = list("пусковая установка Голиаф","пусковой установки Голиаф","пусковой установке Голиаф","пусковую установку Голиаф","пусковой установкой Голиаф","пусковой установке Голиаф")
+	desc = "Голиаф - это однозарядная, многоцелевая переносная пусковая установка для ракет, стреляющая с плеча."
 	icon_state = "rocket"
 	item_state = "rocket"
-	w_class = 4.0
+	w_class = SIZE_NORMAL
 	force = 5
-	flags =  FPRINT | TABLEPASS | CONDUCT | USEDELAY
+	flags =  CONDUCT
 	origin_tech = "combat=8;materials=5"
 	slot_flags = 0
-	mag_type = /obj/item/ammo_box/magazine/internal/cylinder/rocket
-	var/wielded = 0
+	initial_mag = /obj/item/ammo_box/magazine/internal/cylinder/rocket
+	can_be_holstered = FALSE
+	two_hand_weapon = ONLY_TWOHAND
 	fire_sound = 'sound/effects/bang.ogg'
-
-/obj/item/weapon/gun/projectile/revolver/rocketlauncher/isHandgun()
-	return 0
-
-/obj/item/weapon/gun/projectile/revolver/rocketlauncher/proc/unwield()
-	wielded = 0
-	update_icon()
-
-/obj/item/weapon/gun/projectile/revolver/rocketlauncher/proc/wield()
-	wielded = 1
-	update_icon()
-
-/obj/item/weapon/gun/projectile/revolver/rocketlauncher/mob_can_equip(M, slot)
-	//Cannot equip wielded items.
-	if(wielded)
-		to_chat(M, "<span class='warning'>Unwield the [initial(name)] first!</span>")
-		return 0
-
-	return ..()
 
 /obj/item/weapon/gun/projectile/revolver/rocketlauncher/process_chamber()
 	return ..(1, 1)
 
-/obj/item/weapon/gun/projectile/revolver/rocketlauncher/dropped(mob/user)
-	//handles unwielding a twohanded weapon when dropped as well as clearing up the offhand
-	if(user)
-		var/obj/item/weapon/gun/projectile/revolver/rocketlauncher/O = user.get_inactive_hand()
-		if(istype(O))
-			O.unwield()
-	return	unwield()
-
-/obj/item/weapon/gun/projectile/revolver/rocketlauncher/pickup(mob/user)
-	unwield()
-
 /obj/item/weapon/gun/projectile/revolver/rocketlauncher/attack_self(mob/user)
-	if(wielded) //Trying to unwield it
-		unwield()
-		to_chat(user, "<span class='notice'>You are now carrying the [name] with one hand.</span>")
-		if(user.hand)
-			user.update_inv_l_hand()
-		else
-			user.update_inv_r_hand()
-
-		var/obj/item/weapon/twohanded/offhand/O = user.get_inactive_hand()
-		if(O && istype(O))
-			O.unwield()
-		return
-
-	else //Trying to wield it
-		if(user.get_inactive_hand())
-			to_chat(user, "<span class='warning'>You need your other hand to be empty</span>")
-			return
-		wield()
-		to_chat(user, "<span class='notice'>You grab the [initial(name)] with both hands.</span>")
-
-		if(user.hand)
-			user.update_inv_l_hand()
-		else
-			user.update_inv_r_hand()
-
-		var/obj/item/weapon/twohanded/offhand/O = new(user) ////Let's reserve his other hand~
-		O.name = "[initial(name)] - offhand"
-		O.desc = "Your second grip on the [initial(name)]."
-		user.put_in_inactive_hand(O)
-		return
-
-/obj/item/weapon/gun/projectile/revolver/rocketlauncher/attack_hand(mob/user)
-	if(loc != user)
-		..()
-		return	//let them pick it up
 	var/num_unloaded = 0
 	while (get_ammo() > 0)
 		var/obj/item/ammo_casing/CB
@@ -91,16 +28,25 @@
 		CB.update_icon()
 		num_unloaded++
 	if (num_unloaded)
-		to_chat(user, "<span class = 'notice'>You unload [num_unloaded] missile\s from [src].</span>")
+		to_chat(user, "<span class = 'notice'>Вы разряжаете [num_unloaded] [pluralize_russian(num_unloaded, "снаряд", "снаряда", "снарядов")] из [CASE(src, GENITIVE_CASE)].</span>")
 	else
-		to_chat(user, "<span class='notice'>[src] is empty.</span>")
+		to_chat(user, "<span class='notice'>[CASE(src, NOMINATIVE_CASE)] пуста.</span>")
 
-/obj/item/weapon/gun/projectile/revolver/rocketlauncher/afterattack(atom/target, mob/living/user, flag, params) //what I tried to do here is just add a check to see if the cover is open or not and add an icon_state change because I can't figure out how c-20rs do it with overlays
-	if(!wielded)
-		to_chat(user, "<span class='notice'>You need wield [src] in both hands before firing!</span>")
-		return
-	else
-		..()
-		if(chambered)
-			qdel(chambered)
-			chambered = null
+/obj/item/weapon/gun/projectile/revolver/rocketlauncher/anti_singulo
+	name = "XASL Mk.2 singularity buster"
+	cases = list("разрушитель сингулярностей ЭАСУ МК 2", "разрушителя сингулярностей ЭАСУ МК 2", "разрушителю сингулярностей ЭАСУ МК 2", "разрушитель сингулярностей ЭАСУ МК 2", "разрушителем сингулярностей ЭАСУ МК 2", "разрушителе сингулярностей ЭАСУ МК 2")
+	desc = "Эксперементальная Анти-Сингулярная пусковая установка. В случае чрезвычайной ситуации вам следует направить ее на сверхмассивную чёрную дыру, приближающуюся к вам."
+	icon_state = "anti-singulo"
+	item_state = "anti-singulo"
+	slot_flags = SLOT_FLAGS_BACK
+	initial_mag = /obj/item/ammo_box/magazine/internal/cylinder/rocket/anti_singulo
+	fire_sound = 'sound/weapons/guns/gunpulse_emitter2.ogg'
+	origin_tech = "combat=3;bluespace=6"
+
+/obj/item/weapon/gun/projectile/revolver/rocketlauncher/commando
+	name = "\'Commando\' rocket launcher"
+	cases = list("ракетная установка \'Commando\'","ракетной установки \'Commando\'","ракетной установке \'Commando\'","ракетную установку \'Commando\'","ракетной установкой \'Commando\'","ракетной установке \'Commando\'")
+	desc = "Четырёхзарядная ракетная установка. Это тот случай, когда тебя вообще не волнует целостность станции."
+	icon_state = "commando"
+	item_state = "commando"
+	initial_mag = /obj/item/ammo_box/magazine/internal/cylinder/rocket/four

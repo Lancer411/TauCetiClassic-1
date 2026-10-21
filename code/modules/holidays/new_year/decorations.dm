@@ -1,116 +1,235 @@
+#define FLICKER_CD_MAX 5
+#define FLICKER_CD_MIN 4
+
 /obj/item/decoration
 	name = "decoration"
 	desc = "Winter is coming!"
-	icon = 'code/modules/holidays/new_year/decorations.dmi'
+	icon = 'icons/holidays/new_year/decorations.dmi'
 	icon_state = "santa"
 	layer = 4.1
 
-///Garland
+/obj/item/decoration/attack_hand(mob/user)
+	var/choice = input("Do you want to take \the [src]?") in list("Yes", "Cancel")
+	if(choice == "Yes" && get_dist(src, user) <= 1)
+		..()
+
+/obj/item/decoration/afterattack(atom/target, mob/user, proximity, params)
+	if(!proximity)
+		return
+	if(iswallturf(target))
+		usr.remove_from_mob(src)
+		forceMove(target)
+
+// Garland
 /obj/item/decoration/garland
 	name = "garland"
 	desc = "Beautiful lights! Shinee!"
-	icon_state = "garland"
-	var/on = 0
-	var/brightness = 2
+	icon_state = "garland_1"
+	var/icon_state_off = "garland"
+	var/light_colors = list("#ff0000", "#6111ff", "#ffa500", "#44faff")
+	var/on = TRUE
+	var/brightness = 4
+	var/random = TRUE
+	var/variations = 3
+	glow_icon = 'icons/holidays/new_year/decorations.dmi'
 
-/obj/item/decoration/garland/initialize()
-	..()
+/obj/item/decoration/garland/long
+	icon_state = "garland_1"
+	icon_state_off = "garland_1"
+	glow_icon_state = "garland_1_lights"
+	random = FALSE
+
+/obj/item/decoration/garland/medium
+	icon_state = "garland_2"
+	icon_state_off = "garland_2"
+	glow_icon_state = "garland_2_lights"
+	random = FALSE
+
+/obj/item/decoration/garland/short
+	icon_state = "garland_3"
+	icon_state_off = "garland_3"
+	glow_icon_state = "garland_3_lights"
+	random = FALSE
+
+/obj/item/decoration/garland/proc/update_garland()
 	if(on)
-		icon_state = "[initial(icon_state)]_on"
+		icon_state = "[icon_state_off]_on"
 		set_light(brightness)
 	else
-		icon_state = initial(icon_state)
+		icon_state = "[icon_state_off]"
 		set_light(0)
 
-/obj/item/decoration/garland/New()
-	on = 1
-	light_color = pick("#FF0000","#6111FF","#FFA500","#44FAFF")
-	initialize()
+/obj/item/decoration/garland/atom_init()
+	. = ..()
+	if(random)
+		icon_state_off = "garland_[rand(1, variations)]"
+		glow_icon_state = "[icon_state_off]_lights"
 
-/obj/item/decoration/garland/attack_hand()
+	light_color = pick(light_colors)
+	update_garland()
+
+/obj/item/decoration/garland/attack_self(mob/user)
+	. = ..()
+	if(user.is_busy())
+		return
+	if(do_after(user, 5, target = src))
+		toggle()
+
+/obj/item/decoration/garland/verb/toggle()
+	set name = "Toggle garland"
+	set category = "Object"
+	set src in view(1)
+
+	var/mob/living/carbon/C = usr
 	on = !on
-	initialize()
+	C.visible_message("<span class='notice'>[C] turns \the [src] [on ? "on" : "off"].</span>", "<span class='notice'>You turn \the [src] [on ? "on" : "off"].</span>")
+	update_garland()
 
-///Tinsels
+// Tinsels
 /obj/item/decoration/tinsel
 	name = "tinsel"
-	desc = "Soft tinsel, pleasant to the touch. Ahhh..."
-	icon_state = "tinsel_g"
+	desc = "What's this? What's this? There's color everywhere!"
+	icon = 'icons/holidays/new_year/tinsel.dmi'
+	icon_state = "1"
+	var/variations = 20
+	var/random = TRUE
 
-/obj/item/decoration/tinsel/New()
-	icon_state = "tinsel[pick("_g","_r","_y","_w")]"
+/obj/item/decoration/tinsel/atom_init()
+	. = ..()
+	if(random)
+		icon_state = "[rand(1, variations)]"
 
-/obj/item/decoration/tinsel/green
-	icon_state = "tinsel_g"
-	New()
+/obj/item/decoration/tinsel/attack_self(mob/user)
+	. = ..()
+	if(user.is_busy())
 		return
+	set_dir(turn(dir,-90))
 
-/obj/item/decoration/tinsel/red
-	icon_state = "tinsel_r"
-	New()
-		return
+/obj/item/decoration/tinsel/socks
+	icon_state = "1"
+	random = FALSE
 
-/obj/item/decoration/tinsel/yellow
-	icon_state = "tinsel_y"
-	New()
-		return
+/obj/item/decoration/tinsel/snowmen
+	icon_state = "2"
+	random = FALSE
 
-/obj/item/decoration/tinsel/white
-	icon_state = "tinsel_w"
-	New()
-		return
+/obj/item/decoration/tinsel/pines
+	icon_state = "3"
+	random = FALSE
 
-//Snowflakes
+/obj/item/decoration/tinsel/stars
+	icon_state = "4"
+	random = FALSE
+
+/obj/item/decoration/tinsel/balls
+	icon_state = "5"
+	random = FALSE
+
+// Snowflakes
 /obj/item/decoration/snowflake
 	name = "snowflake"
 	desc = "Snowflakes from very soft and pleasant to touch material."
 	icon_state = "snowflakes_1"
 
-/obj/item/decoration/snowflake/New()
-	icon_state = "snowflakes_[rand(1,4)]"
+/obj/item/decoration/snowflake/atom_init()
+	. = ..()
+	icon_state = "snowflakes_[rand(1, 4)]"
 
-/obj/item/decoration/snowflake/afterattack(atom/target, mob/living/user, flag, params)
-	if(istype(target,/turf/simulated/wall))
-		usr.remove_from_mob(src)
-		src.forceMove(target)
-
-//Snowman head
+// Snowman head
 /obj/item/decoration/snowman
 	name = "snowman head"
 	desc = "Snowman head, which looks right into your soul."
 	icon_state = "snowman"
 
-//Xmas tree
+// Xmas tree
 /obj/item/device/flashlight/lamp/fir/special
 	name = "present xmas tree"
 	desc = "Hello, happy holidays, we have got presents..."
 
-	layer = 5
+	layer = FLY_LAYER
 	var/gifts_dealt = 0
-	var/list/decals = list()
+	var/flicker_raising = FALSE
+	var/light_flicker = 5
 
-/obj/item/device/flashlight/lamp/fir/special/attackby(obj/item/W, mob/user, params)
-	if (!W) return
+/obj/item/device/flashlight/lamp/fir/special/atom_init()
+	. = ..()
+	START_PROCESSING(SSobj, src)
+	AddComponent(/datum/component/clickplace)
 
-	if(!(W.flags & ABSTRACT))
-		if(user.drop_item())
-			user.visible_message("[user] attaches [W] to \the [src] .","<span class='notice'>You attache [W] to \the [src].</span>")
-			W.forceMove(loc)
-			W.layer = 5.1	//Item should be on the tree, not under
-			W.anchored = 1	//Make item a part of the tree
-			decals += W
-			var/list/click_params = params2list(params)
-			//Center the icon where the user clicked.
-			W.pixel_x = (text2num(click_params["icon-x"]) - 16)
-			W.pixel_y = (text2num(click_params["icon-y"]) - 16)
-			if(istype(W,/obj/item/weapon/organ/head))
-				W.pixel_y -= 10	//Head always has 10 pixels shift
-				W.dir = 2	//Rotate head face to us
-				W.transform = turn(null, null)	//Turn it to initial angle
-	return
+/obj/item/device/flashlight/lamp/fir/special/process()
+	if(!on)
+		STOP_PROCESSING(SSobj, src)
+		return
+
+	if(light_flicker >= FLICKER_CD_MAX)
+		flicker_raising = FALSE
+	else if(light_flicker <= FLICKER_CD_MIN)
+		flicker_raising = TRUE
+	light_color = pick("#39ff49", "#ff2f2f", "#248aff", "#fffa18")
+	light_flicker += flicker_raising ? 1 : -1
+	set_light(light_flicker)
+
+/obj/item/device/flashlight/lamp/fir/special/attack_self(mob/user)
+	. = ..()
+	if(!.)
+		return
+	if(on)
+		START_PROCESSING(SSobj, src)
+	else
+		STOP_PROCESSING(SSobj, src)
+
+/obj/item/device/flashlight/lamp/fir/special/examine(mob/user)
+	..()
+	if(!gifts_dealt || ((world.time - gifts_dealt) > 5000))
+		to_chat(user, "<span class='notice'>Looks like there is something stuck between the branches... Have you been a good boy this year?</span>")
+	to_chat(user, "<span class='notice'>You can place a wrapped item here as a gift to someone special.</span>")
+
+/obj/item/device/flashlight/lamp/fir/special/attackby(obj/item/I, mob/user, params)
+	if(iswrenching(I))
+		return ..()
+	if(I.flags & ABSTRACT)
+		return
+	if(istype(I, /obj/item/weapon/gift))
+		var/obj/item/weapon/gift/present = I
+		var/recipient = sanitize(input("Who is that present for? Write a name (Do it right):") as text|null)
+		var/sender = sanitize(input("Enter your name:") as text|null)
+		if(src && recipient && sender && present && get_dist(src, user) <= 1)
+			present.recipient = recipient
+			present.sender = sender
+			user.drop_from_inventory(present, src)
+			user.visible_message("[user] gently puts a gift under \the [src] .", "<span class='notice'>You gently put a gift under \the [src].</span>")
+		return
+	user.visible_message("<span class='notice'>[user] stands on \his tiptoes to hang [I] on [src].</span>")
+	if(!do_after(user, 10, TRUE, src))
+		to_chat(user, "<span class='warning'>You fail to hang [I] on [src]!</span>")
+		return
+	. = ..()
+	if(istype(I, /obj/item/organ/external/head))
+		I.set_dir(2) // Rotate head face to us
+		I.transform = turn(null, null)	//Turn it to initial angle
+	I.layer = layer + 0.1
 
 /obj/item/device/flashlight/lamp/fir/special/attack_hand(mob/user)
-	shake()
+	if(!ishuman(user))
+		return
+	var/mob/living/carbon/human/H = user
+	var/how_many_gifts = 0
+	var/choosen_gift
+	for(var/O in src.contents)
+		if(istype(O, /obj/item/weapon/gift))
+			var/obj/item/weapon/gift/present = O
+			if(present.recipient == H.name)
+				how_many_gifts++
+				choosen_gift = present
+	if(how_many_gifts)
+		var/obj/item/weapon/gift/G = choosen_gift
+		to_chat(user, "<span class='notice'>Looks like there is [how_many_gifts] gifts for you under the tree!</span>")
+		visible_message("<span class='notice'>[H] takes a gift from \the [src].</span>",
+			"<span class='notice'>You take a gift from \the [src].</span>")
+		G.forceMove(H.loc)
+		user.put_in_active_hand(G)
+	else
+		shake()
 	return
 
 /obj/item/device/flashlight/lamp/fir/special/verb/shake()
@@ -121,15 +240,24 @@
 	var/mob/living/carbon/C = usr
 
 	if(iscarbon(C))
-		if(!gifts_dealt || ((world.time - gifts_dealt) > 3000))
+		if(!gifts_dealt || ((world.time - gifts_dealt) > 5000))
 
-			C.visible_message("[C] shakes [src].","<span class='notice'>You shake [src].</span>")
+			C.visible_message("<span class='notice'>[C] shakes [src].</span>","<span class='notice'>You shake [src].</span>")
 
-			if(!C.client.prefs.warnbans)
+			var/bad_boy = 0
+			for(var/datum/job/job in SSjob.all_occupations)
+				if(jobban_isbanned(C, job.title))
+					bad_boy += 1
+			if(!bad_boy)
 				to_chat(C, "<span class='notice'>You understand that this year you was good boy!</span>")
-				C.adjustBruteLoss(-10)
-				C.adjustToxLoss(-10)
-				C.adjustFireLoss(-10)
+				C.adjustBruteLoss(-1)
+				C.adjustToxLoss(-1)
+				C.adjustFireLoss(-1)
+			if(bad_boy >= 5)
+				to_chat(C, "<span class='notice'>You understand that this year you was bad boy!</span>")
+				C.adjustBruteLoss(10)
+				C.adjustToxLoss(10)
+				C.adjustFireLoss(10)
 
 			new /obj/item/weapon/present(src.loc)
 			new /obj/item/weapon/present(src.loc)
@@ -144,18 +272,69 @@
 				new /obj/item/weapon/present(src.loc)
 			gifts_dealt = world.time
 		else
-			C.visible_message("[C] shakes [src].","<span class='notice'>You shake [src] but nothing happens.</span>")
+			C.visible_message("<span class='notice'>[C] shakes [src].</span>", "<span class='notice'>You shake [src] but nothing happens. Have patience!</span>")
 
-	if(decals.len && (C.a_intent != "help"))
-		for(var/item in decals)
-			var/obj/item/I = item
-			if(!I)
-				return
-			I.forceMove(src.loc)
-			I.layer = initial(layer)
-			I.pixel_x = initial(pixel_x)
-			I.pixel_y = initial(pixel_y)
-			I.anchored = 0
-			decals.Cut()
+/obj/item/device/flashlight/lamp/fir/special/alternative
+	icon = 'icons/obj/flora/pinetrees.dmi'
+	icon_state = "pine_c"
 
-		src.visible_message("Something dropped from \the [src].")
+/obj/structure/snowman
+	name = "snowman"
+	desc = "That's a snowman. He is staring at you. Where is his hat, though?"
+	icon = 'icons/holidays/new_year/decorations.dmi'
+	icon_state = "snowman_s"
+	anchored = FALSE
+
+	max_integrity = 50
+	damage_deflection = 5
+	resistance_flags = CAN_BE_HIT
+
+/obj/structure/snowman/attackby(obj/item/W, mob/user)
+	. = ..()
+	if(istype(W, /obj/item/clothing/head/that))
+		if(icon_state == "snowman_s")
+			qdel(W)
+			icon_state = "snowman_hat"
+			visible_message("<span class='notice'>[user] puts a hat on the snowman. He looks happy!</span>",
+			"<span class='notice'>You put a hat on the snowman. He looks happy!</span>")
+		else
+			to_chat(user, "<span class='warning'>But snowman already has a hat!</span>")
+		return
+	..()
+
+/obj/structure/snowman/take_damage(damage_amount, damage_type, damage_flag, sound_effect, attack_dir)
+	. = ..()
+	if(. && !QDELING(src))
+		visible_message("<span class='notice'>[src] is damaged!</span>")
+
+/obj/structure/snowman/deconstruct(disassembled)
+	if(flags & NODECONSTRUCT)
+		return ..()
+	visible_message("<span class='warning'>[src] is destroyed!</span>")
+	for(var/i in 1 to 6)
+		new /obj/item/snowball(loc)
+	if(icon_state == "snowman_hat")
+		new /obj/item/clothing/head/that(loc)
+	..()
+
+
+/obj/item/device/flashlight/lamp/fir_small
+	name = "small fir"
+	desc = "Маленькая ёлочка."
+	icon = 'icons/holidays/new_year/decorations.dmi'
+	icon_state = "small_christmas_tree"
+	brightness_on = 2
+	light_power = 0.6
+	light_color = list("#ff0000", "#6111ff", "#ffa500", "#44faff")
+
+	glow_icon = 'icons/holidays/new_year/decorations.dmi'
+	glow_icon_state = "small_christmas_tree_lights"
+
+
+/obj/item/decoration/wreath
+	name = "chistmas wreath"
+	desc = "Merry Christmas!"
+	icon_state = "wreath"
+
+#undef FLICKER_CD_MAX
+#undef FLICKER_CD_MIN

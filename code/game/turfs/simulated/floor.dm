@@ -7,7 +7,7 @@
 #define LIGHTFLOOR_STATE_BITS 3
 
 //This is so damaged or burnt tiles or platings don't get remembered as the default tile
-var/list/icons_to_ignore_at_floor_init = list("damaged1","damaged2","damaged3","damaged4",
+var/global/list/icons_to_ignore_at_floor_init = list("damaged1","damaged2","damaged3","damaged4",
 				"damaged5","panelscorched","floorscorched1","floorscorched2","platingdmg1","platingdmg2",
 				"platingdmg3","plating","light_on","light_on_flicker1","light_on_flicker2",
 				"light_on_clicker3","light_on_clicker4","light_on_clicker5","light_broken",
@@ -20,12 +20,6 @@ var/list/icons_to_ignore_at_floor_init = list("damaged1","damaged2","damaged3","
 				"ironsand6", "ironsand7", "ironsand8", "ironsand9", "ironsand10", "ironsand11",
 				"ironsand12", "ironsand13", "ironsand14", "ironsand15")
 
-var/list/plating_icons = list("plating","platingdmg1","platingdmg2","platingdmg3","asteroid","asteroid_dug",
-				"ironsand1", "ironsand2", "ironsand3", "ironsand4", "ironsand5", "ironsand6", "ironsand7",
-				"ironsand8", "ironsand9", "ironsand10", "ironsand11",
-				"ironsand12", "ironsand13", "ironsand14", "ironsand15")
-var/list/wood_icons = list("wood","wood-broken")
-
 /turf/simulated/floor
 
 	//Note to coders, the 'intact' var can no longer be used to determine if the floor is a plating or not.
@@ -37,74 +31,91 @@ var/list/wood_icons = list("wood","wood-broken")
 	var/icon_regular_floor = "floor" //used to remember what icon the tile should have by default
 	var/icon_plating = "plating"
 	thermal_conductivity = 0.040
-	heat_capacity = 10000
-	var/lava = 0
-	var/broken = 0
-	var/burnt = 0
 	var/mineral = "metal"
 	var/floor_type = /obj/item/stack/tile/plasteel
 	var/lightfloor_state // for light floors, this is the state of the tile. 0-7, 0x4 is on-bit - use the helper procs below
+	footstep = FOOTSTEP_FLOOR
+	barefootstep = FOOTSTEP_HARD_BAREFOOT
+	clawfootstep = FOOTSTEP_HARD_CLAW
+	heavyfootstep = FOOTSTEP_GENERIC_HEAVY
+	can_deconstruct = TRUE
 
-	proc/get_lightfloor_state()
-		return lightfloor_state & LIGHTFLOOR_STATE_BITS
+	var/datum/holy_turf/holy
 
-	proc/get_lightfloor_on()
-		return lightfloor_state & LIGHTFLOOR_ON_BIT
+	var/broken = 0
+	var/mutable_appearance/damage_overlay
+	var/burnt = 0
+	var/mutable_appearance/scorch_overlay
 
-	proc/set_lightfloor_state(n)
-		lightfloor_state = get_lightfloor_on() | (n & LIGHTFLOOR_STATE_BITS)
+/turf/simulated/floor/proc/get_lightfloor_state()
+	return lightfloor_state & LIGHTFLOOR_STATE_BITS
 
-	proc/set_lightfloor_on(n)
-		if(n)
-			lightfloor_state |= LIGHTFLOOR_ON_BIT
-		else
-			lightfloor_state &= ~LIGHTFLOOR_ON_BIT
+/turf/simulated/floor/proc/get_lightfloor_on()
+	return lightfloor_state & LIGHTFLOOR_ON_BIT
 
-	proc/toggle_lightfloor_on()
-		lightfloor_state ^= LIGHTFLOOR_ON_BIT
+/turf/simulated/floor/proc/set_lightfloor_state(n)
+	lightfloor_state = get_lightfloor_on() | (n & LIGHTFLOOR_STATE_BITS)
 
-/turf/simulated/floor/New()
-	..()
+/turf/simulated/floor/proc/set_lightfloor_on(n)
+	if(n)
+		lightfloor_state |= LIGHTFLOOR_ON_BIT
+	else
+		lightfloor_state &= ~LIGHTFLOOR_ON_BIT
+
+/turf/simulated/floor/proc/toggle_lightfloor_on()
+	lightfloor_state ^= LIGHTFLOOR_ON_BIT
+
+/turf/simulated/floor/atom_init()
+	. = ..()
 	if(icon_state in icons_to_ignore_at_floor_init) //so damaged/burned tiles or plating icons aren't saved as the default
 		icon_regular_floor = "floor"
 	else
 		icon_regular_floor = icon_state
 
+/turf/simulated/floor/ChangeTurf()
+	var/old_holy = holy
+	. = ..()
+	if(istype(src)) // turf is changed, is it still a floor?
+		holy = old_holy
+	else // nope, it's not a floor
+		qdel(old_holy)
+
 /turf/simulated/floor/Destroy()
 	if(floor_type)
 		floor_type = null
+	QDEL_NULL(holy)
 	return ..()
 
-//turf/simulated/floor/CanPass(atom/movable/mover, turf/target, height=0, air_group=0)
+//turf/simulated/floor/CanPass(atom/movable/mover, turf/target, height=0)
 //	if ((istype(mover, /obj/machinery/vehicle) && !(src.burnt)))
 //		if (!( locate(/obj/machinery/mass_driver, src) ))
 //			return 0
 //	return ..()
 
 /turf/simulated/floor/ex_act(severity)
+	..()
 	//set src in oview(1)
 	switch(severity)
-		if(1.0)
-			src.ChangeTurf(/turf/space)
-		if(2.0)
-			switch(pick(1,2;75,3))
-				if (1)
-					src.ReplaceWithLattice()
-					if(prob(33)) new /obj/item/stack/sheet/metal(src)
+		if(EXPLODE_DEVASTATE)
+			ChangeTurf(basetype)
+		if(EXPLODE_HEAVY)
+			switch(pick(prob(10);1, prob(10);2, 3))
+				if(1)
+					ReplaceWithLattice()
+					if(prob(33))
+						new /obj/item/stack/sheet/metal(src)
 				if(2)
-					src.ChangeTurf(/turf/space)
+					ChangeTurf(basetype)
 				if(3)
 					if(prob(80))
-						src.break_tile_to_plating()
+						break_tile_to_plating()
 					else
-						src.break_tile()
-					src.hotspot_expose(1000,CELL_VOLUME)
-					if(prob(33)) new /obj/item/stack/sheet/metal(src)
-		if(3.0)
-			if (prob(50))
-				src.break_tile()
-				src.hotspot_expose(1000,CELL_VOLUME)
-	return
+						break_tile()
+					if(prob(33))
+						new /obj/item/stack/sheet/metal(src)
+		if(EXPLODE_LIGHT)
+			if(prob(50))
+				break_tile()
 
 /turf/simulated/floor/fire_act(datum/gas_mixture/air, exposed_temperature, exposed_volume)
 	if(!burnt && prob(5))
@@ -117,9 +128,12 @@ var/list/wood_icons = list("wood","wood-broken")
 /turf/simulated/floor/adjacent_fire_act(turf/simulated/floor/adj_turf, datum/gas_mixture/adj_air, adj_temp, adj_volume)
 	var/dir_to = get_dir(src, adj_turf)
 
-	for(var/obj/structure/window/W in src)
-		if(W.dir == dir_to || W.is_fulltile()) //Same direction or diagonal (full tile)
+	for(var/obj/structure/window/thin/W in src)
+		if(W.dir == dir_to) //Same direction
 			W.fire_act(adj_air, adj_temp, adj_volume)
+
+	for(var/obj/structure/window/fulltile/W in src)
+		W.fire_act(adj_air, adj_temp, adj_volume)
 
 /turf/simulated/floor/blob_act()
 	return
@@ -143,15 +157,12 @@ var/list/wood_icons = list("wood","wood-broken")
 		else if(prob(50))
 			ReplaceWithLattice()
 
-turf/simulated/floor/proc/update_icon()
-	if(lava)
-		return
-	else if(is_plasteel_floor())
-		if(!broken && !burnt)
-			icon_state = icon_regular_floor
+// todo: sort this between floor/type/update_icon, wtf
+/turf/simulated/floor/update_icon()
+	if(is_plasteel_floor())
+		icon_state = icon_regular_floor
 	else if(is_plating())
-		if(!broken && !burnt)
-			icon_state = icon_plating //Because asteroids are 'platings' too.
+		icon_state = icon_plating //Because asteroids are 'platings' too.
 	else if(is_light_floor())
 		if(get_lightfloor_on())
 			switch(get_lightfloor_state())
@@ -172,78 +183,24 @@ turf/simulated/floor/proc/update_icon()
 			set_light(0)
 			icon_state = "light_off"
 	else if(is_grass_floor())
-		if(!broken && !burnt)
-			if(!(icon_state in list("grass1","grass2","grass3","grass4")))
-				icon_state = "grass[pick("1","2","3","4")]"
-	else if(is_carpet_floor())
-		if(!broken && !burnt)
-			if(icon_state != "carpetsymbol")
-				var/connectdir = 0
-				for(var/direction in cardinal)
-					if(istype(get_step(src,direction),/turf/simulated/floor))
-						var/turf/simulated/floor/FF = get_step(src,direction)
-						if(FF.is_carpet_floor())
-							connectdir |= direction
-
-				//Check the diagonal connections for corners, where you have, for example, connections both north and east. In this case it checks for a north-east connection to determine whether to add a corner marker or not.
-				var/diagonalconnect = 0 //1 = NE; 2 = SE; 4 = NW; 8 = SW
-
-				//Northeast
-				if(connectdir & NORTH && connectdir & EAST)
-					if(istype(get_step(src,NORTHEAST),/turf/simulated/floor))
-						var/turf/simulated/floor/FF = get_step(src,NORTHEAST)
-						if(FF.is_carpet_floor())
-							diagonalconnect |= 1
-
-				//Southeast
-				if(connectdir & SOUTH && connectdir & EAST)
-					if(istype(get_step(src,SOUTHEAST),/turf/simulated/floor))
-						var/turf/simulated/floor/FF = get_step(src,SOUTHEAST)
-						if(FF.is_carpet_floor())
-							diagonalconnect |= 2
-
-				//Northwest
-				if(connectdir & NORTH && connectdir & WEST)
-					if(istype(get_step(src,NORTHWEST),/turf/simulated/floor))
-						var/turf/simulated/floor/FF = get_step(src,NORTHWEST)
-						if(FF.is_carpet_floor())
-							diagonalconnect |= 4
-
-				//Southwest
-				if(connectdir & SOUTH && connectdir & WEST)
-					if(istype(get_step(src,SOUTHWEST),/turf/simulated/floor))
-						var/turf/simulated/floor/FF = get_step(src,SOUTHWEST)
-						if(FF.is_carpet_floor())
-							diagonalconnect |= 8
-
-				icon_state = "carpet[connectdir]-[diagonalconnect]"
-
+		if(!(icon_state in list("grass1","grass2","grass3","grass4")))
+			icon_state = "grass[pick("1","2","3","4")]"
+	// volas why
+	else if(is_fairygrass_floor())
+		icon_state = "fairygrass[pick("1","2","3","4")]"
+		set_light(2, 1, COLOR_BLUE_LIGHT)
 	else if(is_wood_floor())
-		if(!broken && !burnt)
-			if(!(icon_state in wood_icons))
-				icon_state = "wood"
-				//world << "[icon_state]y's got [icon_state]"
-	/*spawn(1)
-		if(istype(src,/turf/simulated/floor)) //Was throwing runtime errors due to a chance of it changing to space halfway through.
-			if(air)
-				update_visuals(air)*/
+		icon_state = "wood"
 
-/turf/simulated/floor/return_siding_icon_state()
+	if(!broken && damage_overlay)
+		remove_damaged_overlay()
+	if(!burnt && scorch_overlay)
+		remove_scorched_overlay()
+
 	..()
-	if(is_grass_floor())
-		var/dir_sum = 0
-		for(var/direction in cardinal)
-			var/turf/T = get_step(src,direction)
-			if(!(T.is_grass_floor()))
-				dir_sum += direction
-		if(dir_sum)
-			return "wood_siding[dir_sum]"
-		else
-			return 0
-
 
 /turf/simulated/floor/attack_paw(mob/user)
-	return src.attack_hand(user)
+	return attack_hand(user)
 
 /turf/simulated/floor/attack_hand(mob/user)
 	if (is_light_floor())
@@ -277,6 +234,9 @@ turf/simulated/floor/proc/update_icon()
 	else
 		return 0
 
+/turf/simulated/floor/proc/is_fairygrass_floor()
+	return ispath(floor_type, /obj/item/stack/tile/fairygrass)
+
 /turf/simulated/floor/is_wood_floor()
 	if(ispath(floor_type, /obj/item/stack/tile/wood))
 		return 1
@@ -298,59 +258,92 @@ turf/simulated/floor/proc/update_icon()
 	return 0
 
 /turf/simulated/floor/proc/break_tile()
-	if(istype(src,/turf/simulated/floor/engine))
-		return
-	if(istype(src,/turf/simulated/floor/mech_bay_recharge_floor))
-		src.ChangeTurf(/turf/simulated/floor/plating)
 	if(broken)
 		return
-	if(is_plasteel_floor())
-		src.icon_state = "damaged[pick(1,2,3,4,5)]"
-		broken = 1
-	else if(is_light_floor())
-		src.icon_state = "light_broken"
-		broken = 1
-	else if(is_plating())
-		src.icon_state = "platingdmg[pick(1,2,3)]"
-		broken = 1
-	else if(is_wood_floor())
-		src.icon_state = "wood-broken"
-		broken = 1
-	else if(is_carpet_floor())
-		src.icon_state = "carpet-broken"
-		broken = 1
-	else if(is_grass_floor())
-		src.icon_state = "sand[pick("1","2","3")]"
-		broken = 1
 
-/turf/simulated/floor/proc/burn_tile()
-	if(istype(src,/turf/simulated/floor/engine))
-		return
-	if(istype(src,/turf/simulated/floor/plating/airless/asteroid))
-		return//Asteroid tiles don't burn
-	if(broken || burnt)
-		return
+	var/damage_state
+
+	// some turfs change icon_state, some turfs use overlay
 	if(is_plasteel_floor())
-		src.icon_state = "damaged[pick(1,2,3,4,5)]"
-		burnt = 1
-	else if(is_plasteel_floor())
-		src.icon_state = "floorscorched[pick(1,2)]"
-		burnt = 1
+		damage_state = "damaged_[pick(1,2,3,4)]"
+		broken = TRUE
+	else if(is_light_floor())
+		icon_state = "light_broken"
+		broken = TRUE
 	else if(is_plating())
-		src.icon_state = "panelscorched"
-		burnt = 1
+		damage_state = "damaged_[pick(1,2,3,4)]"
+		broken = TRUE
 	else if(is_wood_floor())
-		src.icon_state = "wood-broken"
-		burnt = 1
+		damage_state = "wood_damaged_[pick(1,2,3,4,5,6,7)]"
+		broken = TRUE
 	else if(is_carpet_floor())
-		src.icon_state = "carpet-broken"
-		burnt = 1
+		damage_state = "carpet_damaged"
+		broken = TRUE
+	else if(istype(src, /turf/simulated/floor/glass))
+		damage_state = "glass_damaged_[pick("1","2","3")]"
+		broken = TRUE
 	else if(is_grass_floor())
-		src.icon_state = "sand[pick("1","2","3")]"
-		burnt = 1
+		src.icon_state = "ironsand[pick("1","2","3")]"
+		broken = TRUE
+
+	if(damage_state)
+		add_damaged_overlay(damage_state)
+
+/turf/simulated/floor/proc/add_damaged_overlay(state)
+	if(damage_overlay)
+		return
+
+	damage_overlay = mutable_appearance('icons/turf/floors/damaged_overlays.dmi', state)
+	add_overlay(damage_overlay)
+
+/turf/simulated/floor/proc/remove_damaged_overlay()
+	if(!damage_overlay)
+		return
+
+	cut_overlay(damage_overlay)
+	damage_overlay = null
+
+/turf/simulated/floor/proc/burn_tile() //
+	if(burnt || broken) // broken overlay has priority, should not overlap
+		return
+
+	var/scorch_state
+
+	if(is_plasteel_floor())
+		scorch_state = "scorched_[pick(1,2)]"
+		burnt = TRUE
+	else if(is_plating())
+		scorch_state = "scorched_[pick(1,2)]"
+		burnt = TRUE
+	else if(is_wood_floor())
+		scorch_state = "wood_damaged_[pick(1,2,3,4,5,6,7)]"
+		burnt = TRUE
+	else if(is_carpet_floor())
+		scorch_state = "carpet_damaged"
+		burnt = TRUE
+	else if(is_grass_floor())
+		src.icon_state = "ironsand[pick("1","2","3")]"
+		burnt = TRUE
+
+	if(scorch_state)
+		add_scorched_overlay(scorch_state)
+
+/turf/simulated/floor/proc/add_scorched_overlay(state)
+	if(scorch_overlay)
+		return
+
+	scorch_overlay = mutable_appearance('icons/turf/floors/damaged_overlays.dmi', state)
+	add_overlay(scorch_overlay)
+
+/turf/simulated/floor/proc/remove_scorched_overlay()
+	if(!scorch_overlay)
+		return
+
+	cut_overlay(scorch_overlay)
+	scorch_overlay = null
 
 //This proc will set floor_type to null and the update_icon() proc will then change the icon_state of the turf
-//This proc auto corrects the grass tiles' siding.
+//This proc auto corrects the grass tiles' siding (but we don't have them).
 /turf/simulated/floor/proc/make_plating()
 	if(istype(src,/turf/simulated/floor/engine))
 		return
@@ -362,23 +355,18 @@ turf/simulated/floor/proc/update_icon()
 			if(istype(get_step(src,direction),/turf/simulated/floor))
 				var/turf/simulated/floor/FF = get_step(src,direction)
 				FF.update_icon() //so siding get updated properly
-	else if(is_carpet_floor())
-		spawn(5)
-			if(src)
-				for(var/direction in list(1,2,4,8,5,6,9,10))
-					if(istype(get_step(src,direction),/turf/simulated/floor))
-						var/turf/simulated/floor/FF = get_step(src,direction)
-						FF.update_icon() //so siding get updated properly
 
 	if(!floor_type)
 		return
+	name = "plating"
 	icon_plating = "plating"
 	set_light(0)
 	floor_type = null
-	intact = 0
+	underfloor_accessibility = UNDERFLOOR_INTERACTABLE
 	broken = 0
 	burnt = 0
 
+	clean_turf_decals()
 	update_icon()
 	levelupdate()
 
@@ -388,7 +376,7 @@ turf/simulated/floor/proc/update_icon()
 /turf/simulated/floor/proc/make_plasteel_floor(obj/item/stack/tile/plasteel/T = null)
 	broken = 0
 	burnt = 0
-	intact = 1
+	underfloor_accessibility = UNDERFLOOR_HIDDEN
 	set_light(0)
 	if(T)
 		if(istype(T,/obj/item/stack/tile/plasteel))
@@ -415,7 +403,7 @@ turf/simulated/floor/proc/update_icon()
 /turf/simulated/floor/proc/make_light_floor(obj/item/stack/tile/light/T = null)
 	broken = 0
 	burnt = 0
-	intact = 1
+	underfloor_accessibility = UNDERFLOOR_HIDDEN
 	if(T)
 		if(istype(T,/obj/item/stack/tile/light))
 			floor_type = T.type
@@ -433,7 +421,7 @@ turf/simulated/floor/proc/update_icon()
 /turf/simulated/floor/proc/make_grass_floor(obj/item/stack/tile/grass/T = null)
 	broken = 0
 	burnt = 0
-	intact = 1
+	underfloor_accessibility = UNDERFLOOR_HIDDEN
 	if(T)
 		if(istype(T,/obj/item/stack/tile/grass))
 			floor_type = T.type
@@ -446,12 +434,53 @@ turf/simulated/floor/proc/update_icon()
 	update_icon()
 	levelupdate()
 
+//This proc will place a turf into tile. Hate this
+/turf/simulated/floor/proc/place_floor(obj/item/C)
+	var/obj/item/stack/tile/T = C
+	if(!T.use(1))
+		return
+	playsound(src, 'sound/weapons/Genhit.ogg', VOL_EFFECTS_MASTER)
+	if(T.use_change_turf)
+		ChangeTurf(T.turf_type)
+		return
+	floor_type = T.type
+	icon = initial(T.turf_type.icon)
+	name = initial(T.turf_type.name)
+	underfloor_accessibility = UNDERFLOOR_HIDDEN
+	if(istype(T,/obj/item/stack/tile/light))
+		var/obj/item/stack/tile/light/L = T
+		set_lightfloor_state(L.state)
+		set_lightfloor_on(L.on)
+	if(istype(T,/obj/item/stack/tile/grass))
+		for(var/direction in cardinal)
+			if(istype(get_step(src,direction),/turf/simulated/floor))
+				var/turf/simulated/floor/FF = get_step(src,direction)
+				FF.update_icon() //so siding gets updated properly
+	update_icon()
+	levelupdate()
+
+//Proc for make turf into plating
+/turf/simulated/floor/proc/remove_floor(obj/item/C, mob/user)
+	if(broken || burnt)
+		to_chat(user, "<span class='warning'>Вы сняли поврежденное покрытие.</span>")
+	else
+		if(is_wood_floor())
+			to_chat(user, "<span class='warning'>Вы с трудом отодрали доски, сломав их.</span>")
+		else
+			var/obj/item/I = new floor_type(src)
+			if(is_light_floor())
+				var/obj/item/stack/tile/light/L = I
+				L.on = get_lightfloor_on()
+				L.state = get_lightfloor_state()
+			to_chat(user, "<span class='warning'>Вы демонтировали плитку.</span>")
+	make_plating()
+
 //This proc will make a turf into a wood floor. Fun eh? Insert the wood tile to be used as the argument
 //If no argument is given a new one will be made.
 /turf/simulated/floor/proc/make_wood_floor(obj/item/stack/tile/wood/T = null)
 	broken = 0
 	burnt = 0
-	intact = 1
+	underfloor_accessibility = UNDERFLOOR_HIDDEN
 	if(T)
 		if(istype(T,/obj/item/stack/tile/wood))
 			floor_type = T.type
@@ -464,28 +493,19 @@ turf/simulated/floor/proc/update_icon()
 	update_icon()
 	levelupdate()
 
-//This proc will make a turf into a carpet floor. Fun eh? Insert the carpet tile to be used as the argument
-//If no argument is given a new one will be made.
-/turf/simulated/floor/proc/make_carpet_floor(obj/item/stack/tile/carpet/T = null)
-	broken = 0
-	burnt = 0
-	intact = 1
-	if(T)
-		if(istype(T,/obj/item/stack/tile/carpet))
-			floor_type = T.type
-			update_icon()
-			levelupdate()
-			return
-	//if you gave a valid parameter, it won't get thisf ar.
-	floor_type = /obj/item/stack/tile/carpet
-
-	update_icon()
-	levelupdate()
-
 /turf/simulated/floor/attackby(obj/item/C, mob/user)
-
 	if(!C || !user)
 		return 0
+	. = ..()
+	if(.)
+		return
+	user.SetNextMove(CLICK_CD_INTERACT)
+	if(istype(C, /obj/item/weapon/sledgehammer))
+		var/obj/item/weapon/sledgehammer/S = C
+		if(HAS_TRAIT(S, TRAIT_DOUBLE_WIELDED))
+			playsound(user, 'sound/items/sledgehammer_hit.ogg', VOL_EFFECTS_MASTER)
+			shake_camera(user, 1, 1)
+			break_tile()
 
 	if(istype(C,/obj/item/weapon/light/bulb)) //only for light tiles
 		if(is_light_floor())
@@ -494,129 +514,138 @@ turf/simulated/floor/proc/update_icon()
 				qdel(C)
 				set_lightfloor_state(0) //fixing it by bashing it with a light bulb, fun eh?
 				update_icon()
-				to_chat(user, "\blue You replace the light bulb.")
+				to_chat(user, "<span class='notice'>Вы заменили лампочку.</span>")
 			else
-				to_chat(user, "\blue The lightbulb seems fine, no need to replace it.")
+				to_chat(user, "<span class='notice'>Похоже, лампочка в порядке, менять её не нужно.</span>")
 
-	if(istype(C, /obj/item/weapon/crowbar) && (!(is_plating())))
-		if(broken || burnt)
-			to_chat(user, "\red You remove the broken plating.")
-		else
-			if(is_wood_floor())
-				to_chat(user, "\red You forcefully pry off the planks, destroying them in the process.")
-			else
-				var/obj/item/I = new floor_type(src)
-				if(is_light_floor())
-					var/obj/item/stack/tile/light/L = I
-					L.on = get_lightfloor_on()
-					L.state = get_lightfloor_state()
-				to_chat(user, "\red You remove the [I.name].")
-
-		make_plating()
+	if(isprying(C) && !is_plating() && !is_catwalk())
+		remove_floor(C, user)
 		// Can't play sounds from areas. - N3X
-		playsound(src, 'sound/items/Crowbar.ogg', 80, 1)
-
+		playsound(src, 'sound/items/Crowbar.ogg', VOL_EFFECTS_MASTER)
 		return
 
-	if(istype(C, /obj/item/weapon/screwdriver))
+	if(isscrewing(C))
 		if(is_wood_floor())
 			if(broken || burnt)
 				return
 			else
 				if(is_wood_floor())
-					to_chat(user, "\red You unscrew the planks.")
+					to_chat(user, "<span class='warning'>Вы открутили доски.</span>")
 					new floor_type(src)
 
 			make_plating()
-			playsound(src, 'sound/items/Screwdriver.ogg', 80, 1)
-		if(is_catwalk())
+			playsound(src, 'sound/items/Screwdriver.ogg', VOL_EFFECTS_MASTER)
+		else if(is_catwalk())
 			if(broken)
 				return
 			ReplaceWithLattice()
-			playsound(src, 'sound/items/Screwdriver.ogg', 80, 1)
+			playsound(src, 'sound/items/Screwdriver.ogg', VOL_EFFECTS_MASTER)
+			// todo: move catwalk to standart smooth system
+			for(var/direction in cardinal)
+				var/turf/T = get_step(src,direction)
+				if(T.is_catwalk())
+					var/turf/simulated/floor/plating/airless/catwalk/CW=T
+					CW.update_icon(0)
+		else if(istype(src, /turf/simulated/floor/grid_floor))
+			var/turf/simulated/floor/grid_floor/GF = src
+			GF.toggle_cower()
+			to_chat(user, "<span class='warning'>Вы открутили решетку.</span>")
+			playsound(src, 'sound/items/Screwdriver.ogg', VOL_EFFECTS_MASTER)
 		return
 
 	if(istype(C, /obj/item/stack/rods))
 		var/obj/item/stack/rods/R = C
 		if (is_plating())
-			if (R.amount >= 2)
-				to_chat(user, "\blue Reinforcing the floor...")
-				if(do_after(user, 30, target = src) && R && R.amount >= 2 && is_plating())
+			if (R.get_amount() >= 2)
+				if(user.is_busy(src))
+					return
+				to_chat(user, "<span class='notice'>Вы начинаете укреплять обшивку.</span>")
+				if(R.use_tool(src, user, 30, amount = 2, volume = 50) && is_plating())
 					ChangeTurf(/turf/simulated/floor/engine)
-					playsound(src, 'sound/items/Deconstruct.ogg', 80, 1)
-					R.use(2)
+					playsound(src, 'sound/items/Deconstruct.ogg', VOL_EFFECTS_MASTER)
 					return
 			else
-				to_chat(user, "\red You need more rods.")
+				to_chat(user, "<span class='warning'>Нужно больше стержней.</span>")
 		else if (is_catwalk())
-			to_chat(user, "\red The entire thing is 100% rods already, it doesn't need any more.")
+			to_chat(user, "<span class='warning'>Объект уже на 100% состоит из стержней, больше не нужно.</span>")
 		else
-			to_chat(user, "\red You must remove the plating first.")
+			to_chat(user, "<span class='warning'>Сначала нужно удалить покрытие.</span>")
 		return
 
 	if(istype(C, /obj/item/stack/tile))
 		if (is_catwalk())
-			to_chat(user, "\red The catwalk is too primitive to support tiling.")
+			to_chat(user, "<span class='warning'>Помост не приспособлен для установки на нем покрытия.</span>")
+		if (!is_plating())
+			var/obj/item/CB = user.get_inactive_hand()
+			if(CB)
+				if (!isprying(CB))
+					return
+				remove_floor(CB, user)
+				place_floor(C)
 		if(is_plating())
 			if(!broken && !burnt)
-				var/obj/item/stack/tile/T = C
-				floor_type = T.type
-				intact = 1
-				if(istype(T,/obj/item/stack/tile/light))
-					var/obj/item/stack/tile/light/L = T
-					set_lightfloor_state(L.state)
-					set_lightfloor_on(L.on)
-				if(istype(T,/obj/item/stack/tile/grass))
-					for(var/direction in cardinal)
-						if(istype(get_step(src,direction),/turf/simulated/floor))
-							var/turf/simulated/floor/FF = get_step(src,direction)
-							FF.update_icon() //so siding gets updated properly
-				else if(istype(T,/obj/item/stack/tile/carpet))
-					for(var/direction in list(1,2,4,8,5,6,9,10))
-						if(istype(get_step(src,direction),/turf/simulated/floor))
-							var/turf/simulated/floor/FF = get_step(src,direction)
-							FF.update_icon() //so siding gets updated properly
-				T.use(1)
-				update_icon()
-				levelupdate()
-				playsound(src, 'sound/weapons/Genhit.ogg', 50, 1)
+				place_floor(C)
 			else
-				to_chat(user, "\blue This section is too damaged to support a tile. Use a welder to fix the damage.")
+				to_chat(user, "<span class='notice'>Эта секция слишком повреждена, чтобы выдержать покрытие. Используйте сварочный аппарат для ремонта.</span>")
 
-
-	if(istype(C, /obj/item/weapon/cable_coil))
+	if(iscoil(C))
 		if(is_plating() || is_catwalk())
-			var/obj/item/weapon/cable_coil/coil = C
+			var/obj/item/stack/cable_coil/coil = C
 			for(var/obj/structure/cable/LC in src)
 				if((LC.d1==0)||(LC.d2==0))
 					LC.attackby(C,user)
 					return
 			coil.turf_place(src, user)
 		else
-			to_chat(user, "\red You must remove the plating first.")
+			to_chat(user, "<span class='warning'>Сначала нужно удалить покрытие.</span>")
+
+	if(ispulsing(C))
+		if(istype(src, /turf/simulated/floor/glass))
+			var/turf/simulated/floor/glass/GF = src
+			GF.toggle_underfloor()
+			to_chat(user, "<span class='warning'>Вы переключили видимость под плиткой.</span>")
+			C.play_tool_sound(src)
 
 	if(istype(C, /obj/item/weapon/shovel))
 		if(is_grass_floor())
 			new /obj/item/weapon/ore/glass(src)
 			new /obj/item/weapon/ore/glass(src) //Make some sand if you shovel grass
-			to_chat(user, "\blue You shovel the grass.")
+			to_chat(user, "<span class='notice'>Вы вскапываете траву.</span>")
 			make_plating()
 		else
-			to_chat(user, "\red You cannot shovel this.")
+			to_chat(user, "<span class='warning'>Это нельзя вскопать.</span>")
 
-	if(istype(C, /obj/item/weapon/weldingtool))
-		var/obj/item/weapon/weldingtool/welder = C
-		if(welder.isOn() && (is_plating()))
-			if(broken || burnt)
-				if(welder.remove_fuel(0,user))
-					to_chat(user, "\red You fix some dents on the broken plating.")
-					playsound(src, 'sound/items/Welder.ogg', 80, 1)
-					icon_state = "plating"
-					burnt = 0
-					broken = 0
-				else
-					to_chat(user, "\blue You need more welding fuel to complete this task.")
-
+	if(iswelding(C))
+		var/obj/item/weapon/weldingtool/W = C
+		if(!is_plating())
+			return
+		if(!can_deconstruct)
+			return
+		if(!W.use(0, user))
+			to_chat(user, "<span class='notice'>Нужно больше топлива для сварки.</span>")
+			return
+		if(user.a_intent == INTENT_HELP)
+			if(!broken && !burnt)
+				return
+			to_chat(user, "<span class='warning'>Вы отремонтировали обшивку.</span>")
+			playsound(src, 'sound/items/Welder.ogg', VOL_EFFECTS_MASTER)
+			burnt = 0
+			broken = 0
+			update_icon()
+		else
+			user.visible_message(
+				"<span class='warning'><B>[user]</B> начинает разбирать обшивку! По ту сторону открытый космос!</span>",
+				"<span class='warning'>Вы начинаете разрезать обшивку! За ней открытый космос!</span>",
+				"<span class='warning'>Вы слышите звуки будто разрезают обшивку! По ту сторону должен быть открытый космос!</span>",
+				viewing_distance = 5)
+			if(W.use_tool(src, user, 100, 3, 100, quality = QUALITY_WELDING))
+				user.visible_message(
+					"<span class='warning'><B>[user]</B> завершает разборку обшивки!</span>",
+					"<span class='warning'>Вы разобрали обшивку!</span>",
+					"<span class='warning'>Звуки прекратились. Похоже, обшивка была разрезана на части!</span>",
+					viewing_distance = 5)
+				new /obj/item/stack/tile/plasteel(src)
+				ReplaceWithLattice()
 #undef LIGHTFLOOR_ON_BIT
 
 #undef LIGHTFLOOR_STATE_OK

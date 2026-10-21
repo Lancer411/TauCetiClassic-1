@@ -1,88 +1,99 @@
-/obj/nano_module/crew_monitor
+/obj/crew_monitor_module
 	name = "Crew monitor"
+	flags = ABSTRACT
 	var/list/tracked = new
 
-/obj/nano_module/crew_monitor/Topic(href, href_list)
-	if(..()) return
-	var/turf/T = get_turf(src)
-	if (!T || !(T.z in config.player_levels))
-		to_chat(usr, "<span class='warning'>Unable to establish a connection<span>: You're too far away from the station!")
-		return 0
-	if(href_list["close"] )
-		var/mob/user = usr
-		var/datum/nanoui/ui = nanomanager.get_open_ui(user, src, "main")
-		usr.unset_machine()
-		ui.close()
-		return 0
-	if(href_list["update"])
-		src.updateDialog()
-		return 1
+/obj/crew_monitor_module/tgui_host(mob/user)
+	return loc
 
-/obj/nano_module/crew_monitor/ui_interact(mob/user, ui_key = "main", datum/nanoui/ui = null, force_open = 1)
-	user.set_machine(src)
-	src.scan()
-
-	var/data[0]
-	var/turf/T = get_turf(src)
-	var/list/crewmembers = list()
-	for(var/obj/item/clothing/under/C in src.tracked)
-
-		var/turf/pos = get_turf(C)
-
-		if((C) && (C.has_sensor) && (pos) && (T && pos.z == T.z) && (C.sensor_mode != SUIT_SENSOR_OFF))
-			if(istype(C.loc, /mob/living/carbon/human))
-
-				var/mob/living/carbon/human/H = C.loc
-				if(H.w_uniform != C)
-					continue
-
-				var/list/crewmemberData = list("dead"=0, "oxy"=-1, "tox"=-1, "fire"=-1, "brute"=-1, "area"="", "x"=-1, "y"=-1)
-
-				crewmemberData["sensor_type"] = C.sensor_mode
-				crewmemberData["name"] = H.get_authentification_name(if_no_id="Unknown")
-				crewmemberData["rank"] = H.get_authentification_rank(if_no_id="Unknown", if_no_job="No Job")
-				crewmemberData["assignment"] = H.get_assignment(if_no_id="Unknown", if_no_job="No Job")
-
-				if(C.sensor_mode >= SUIT_SENSOR_BINARY)
-					crewmemberData["dead"] = H.stat > 1
-
-				if(C.sensor_mode >= SUIT_SENSOR_VITAL)
-					crewmemberData["oxy"] = round(H.getOxyLoss(), 1)
-					crewmemberData["tox"] = round(H.getToxLoss(), 1)
-					crewmemberData["fire"] = round(H.getFireLoss(), 1)
-					crewmemberData["brute"] = round(H.getBruteLoss(), 1)
-
-				if(C.sensor_mode >= SUIT_SENSOR_TRACKING)
-					var/area/A = get_area(H)
-					crewmemberData["area"] = html_encode(A.name)
-					crewmemberData["x"] = pos.x
-					crewmemberData["y"] = pos.y
-
-				crewmembers[++crewmembers.len] = crewmemberData
-
-	crewmembers = sortByKey(crewmembers, "name")
-
-	data["crewmembers"] = crewmembers
-
-	ui = nanomanager.try_update_ui(user, src, ui_key, ui, data, force_open)
+/obj/crew_monitor_module/tgui_interact(mob/user, datum/tgui/ui)
+	ui = SStgui.try_update_ui(user, src, ui)
 	if(!ui)
-		ui = new(user, src, ui_key, "crew_monitor.tmpl", "Crew Monitoring Computer", 900, 600)
-
-		// adding a template with the key "mapContent" enables the map ui functionality
-		ui.add_template("mapContent", "crew_monitor_map_content.tmpl")
-		// adding a template with the key "mapHeader" replaces the map header content
-		ui.add_template("mapHeader", "crew_monitor_map_header.tmpl")
-
-		ui.set_initial_data(data)
+		ui = new(user, src, "CrewMonitor", "Crew Monitoring Computer")
 		ui.open()
 
-		// should make the UI auto-update; doesn't seem to?
-		ui.set_auto_update(1)
+/obj/crew_monitor_module/tgui_data(mob/user)
+	scan()
+	var/list/data = list()
+	var/turf/monitor_turf = get_turf(src)
+	var/list/crewmembers = list()
 
-/obj/nano_module/crew_monitor/proc/scan()
-	for(var/mob/living/carbon/human/H in mob_list)
-		if(istype(H.w_uniform, /obj/item/clothing/under))
-			var/obj/item/clothing/under/C = H.w_uniform
-			if (C.has_sensor)
+	var/list/available_z_levels = SSmapping.levels_by_any_trait(list(ZTRAIT_STATION, ZTRAIT_MINING))
+	available_z_levels.Add(monitor_turf.z)
+
+	for(var/tracked_atom in tracked)
+		var/mob/living/carbon/human/H = null
+		var/tracking_sensor = SUIT_SENSOR_TRACKING
+		if(isunder(tracked_atom))
+			var/obj/item/clothing/under/C = tracked_atom
+			if(C.sensor_mode == SUIT_SENSOR_OFF)
+				continue
+			var/mob/living/carbon/human/who_weared_suit = C.loc
+			if(!istype(who_weared_suit))
+				continue
+			tracking_sensor = C.sensor_mode
+			H = who_weared_suit
+		else if(ishuman(tracked_atom))
+			H = tracked_atom
+		var/turf/atom_position = get_turf(H)
+		//nullspace? other z-level?
+		if(!atom_position || !available_z_levels.Find(atom_position.z))
+			continue
+
+		var/list/crewmemberData = list("dead"=FALSE)
+
+		crewmemberData["sensorType"] = tracking_sensor
+		crewmemberData["name"] = H.get_authentification_name(if_no_id="Unknown")
+		crewmemberData["rank"] = H.get_authentification_rank(if_no_id="Unknown", if_no_job="No Job")
+		crewmemberData["assignment"] = H.get_assignment(if_no_id="Unknown", if_no_job="No Job")
+		crewmemberData["ref"] = "\ref[H]"
+
+		if(tracking_sensor >= SUIT_SENSOR_BINARY)
+			crewmemberData["dead"] = H.stat > UNCONSCIOUS
+
+		if(tracking_sensor >= SUIT_SENSOR_VITAL)
+			crewmemberData["vitals"] = list(
+				"oxy" = round(H.getOxyLoss(), 1),
+				"tox" = round(H.getToxLoss(), 1),
+				"fire" = round(H.getFireLoss(), 1),
+				"brute" = round(H.getBruteLoss(), 1)
+			)
+
+		if(tracking_sensor >= SUIT_SENSOR_TRACKING)
+			var/area/A = get_area(H)
+			crewmemberData["position"] = list(
+				"area" = html_decode(A.name),
+				"x" = atom_position.x,
+				"y" = atom_position.y,
+				"z" = atom_position.z
+			)
+
+		crewmembers[++crewmembers.len] = crewmemberData
+
+
+	data["crewMembers"] = crewmembers
+
+	data["currentZ"] = monitor_turf.z
+
+	return data
+
+/obj/crew_monitor_module/tgui_static_data(mob/user)
+	var/list/data = list()
+	data["nanomapPayload"] = SSmapping.tgui_nanomap_payload()
+	return data
+
+/obj/crew_monitor_module/proc/scan()
+	for(var/mob/living/carbon/human/H as anything in human_list)
+		var/obj/item/clothing/under/C
+		if(isunder(H.w_uniform))
+			C = H.w_uniform
+			if(C.has_sensor)
 				tracked |= C
+				//remove virus record
+				tracked -= H
+		if(H in SSmobs.virus_monitored_mobs)
+			tracked |= H
+			//remove non virus record
+			if(C)
+				tracked -= C
 	return 1

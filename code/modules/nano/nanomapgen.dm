@@ -19,42 +19,46 @@
 /client/proc/nanomapgen_DumpImage()
 	set name = "Generate NanoUI Map"
 	set category = "Server"
-	
-	if(holder)
-		nanomapgen_DumpTile(1, 1, text2num(input(usr,"Enter the Z level to generate")))	
 
-/client/proc/nanomapgen_DumpTile(startX = 1, startY = 1, currentZ = 1, endX = -1, endY = -1)
+	if(holder)
+		var/input_z = input(usr,"Enter the Z level to generate") as num
+		if(!input_z)
+			return
+		nanomapgen_DumpTile(1, 1, text2num(input_z), showAreaColor = FALSE)
+		nanomapgen_DumpTile(1, 1, text2num(input_z), showAreaColor = TRUE)
+
+/client/proc/nanomapgen_DumpTile(startX = 1, startY = 1, currentZ = 1, endX = -1, endY = -1, showAreaColor = FALSE)
 
 	if (endX < 0 || endX > world.maxx)
 		endX = world.maxx
-		
+
 	if (endY < 0 || endY > world.maxy)
 		endY = world.maxy
-		
+
 	if (currentZ < 0 || currentZ > world.maxz)
 		to_chat(usr, "NanoMapGen: <B>ERROR: currentZ ([currentZ]) must be between 1 and [world.maxz]</B>")
-		
+
 		sleep(3)
 		return NANOMAP_TERMINALERR
-		
+
 	if (startX > endX)
 		to_chat(usr, "NanoMapGen: <B>ERROR: startX ([startX]) cannot be greater than endX ([endX])</B>")
-		
+
 		sleep(3)
 		return NANOMAP_TERMINALERR
-		
+
 	if (startY > endX)
 		to_chat(usr, "NanoMapGen: <B>ERROR: startY ([startY]) cannot be greater than endY ([endY])</B>")
 		sleep(3)
 		return NANOMAP_TERMINALERR
-		
+
 	var/icon/Tile = icon(file("nano/mapbase1024.png"))
 	if (Tile.Width() != NANOMAP_MAX_ICON_DIMENSION || Tile.Height() != NANOMAP_MAX_ICON_DIMENSION)
 		world.log << "NanoMapGen: <B>ERROR: BASE IMAGE DIMENSIONS ARE NOT [NANOMAP_MAX_ICON_DIMENSION]x[NANOMAP_MAX_ICON_DIMENSION]</B>"
 		sleep(3)
 		return NANOMAP_TERMINALERR
-		
-	world.log << "NanoMapGen: <B>GENERATE MAP ([startX],[startY],[currentZ]) to ([endX],[endY],[currentZ])</B>"	
+
+	world.log << "NanoMapGen: <B>GENERATE MAP ([startX],[startY],[currentZ]) to ([endX],[endY],[currentZ])</B>"
 	to_chat(usr, "NanoMapGen: <B>GENERATE MAP ([startX],[startY],[currentZ]) to ([endX],[endY],[currentZ])</B>")
 
 	var/count = 0;
@@ -62,26 +66,50 @@
 		for(var/WorldY = startY, WorldY <= endY, WorldY++)
 
 			var/atom/Turf = locate(WorldX, WorldY, currentZ)
-			
+
 			var/icon/TurfIcon = new(Turf.icon, Turf.icon_state)
 			TurfIcon.Scale(NANOMAP_ICON_SIZE, NANOMAP_ICON_SIZE)
-			
+
 			Tile.Blend(TurfIcon, ICON_OVERLAY, ((WorldX - 1) * NANOMAP_ICON_SIZE), ((WorldY - 1) * NANOMAP_ICON_SIZE))
-			
+
+			if(showAreaColor)
+				var/area/Area = get_area(Turf)
+				var/areaState
+				if(istype(Area, /area/station/security) && !istype(Area, /area/station/security/vacantoffice) && !istype(Area, /area/station/security/checkpoint))
+					areaState = "brig_base"
+				else if(istype(Area, /area/station/rnd))
+					areaState = "research_base"
+				else if(istype(Area, /area/station/medical))
+					areaState = "medical_base"
+				else if(istype(Area, /area/station/engineering))
+					areaState = "engineering_base"
+				else if(istype(Area, /area/station/cargo))
+					areaState = "cargo_base"
+				else if(istype(Area, /area/station/bridge))
+					areaState = "command_base"
+				else if(istype(Area, /area/station/hallway/secondary/exit))
+					areaState = "escape_base"
+				else if(istype(Area, /area/station/hallway/secondary/arrival))
+					areaState = "arrival_base"
+				if(areaState)
+					var/icon/AreaIcon = icon('icons/turf/areas.dmi', areaState)
+					AreaIcon.Scale(NANOMAP_ICON_SIZE, NANOMAP_ICON_SIZE)
+					Tile.Blend(AreaIcon, ICON_OVERLAY, ((WorldX - 1) * NANOMAP_ICON_SIZE), ((WorldY - 1) * NANOMAP_ICON_SIZE))
+
 			count++
-			
+
 			if (count % 8000 == 0)
 				world.log << "NanoMapGen: <B>[count] tiles done</B>"
 				sleep(1)
-				
-	var/mapFilename = "nanomap_z[currentZ]-new.png"
-	
+
+	var/mapFilename = "nanomap_z[currentZ][showAreaColor ? "-areas" : ""]-new.png"
+
 	world.log << "NanoMapGen: <B>sending [mapFilename] to client</B>"
 
 	usr << browse(Tile, "window=picture;file=[mapFilename];display=0")
-	
+
 	world.log << "NanoMapGen: <B>Done.</B>"
-	
+
 	to_chat(usr, "NanoMapGen: <B>Done. File [mapFilename] uploaded to your cache.</B>")
 
 	if (Tile.Width() != NANOMAP_MAX_ICON_DIMENSION || Tile.Height() != NANOMAP_MAX_ICON_DIMENSION)

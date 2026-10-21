@@ -40,21 +40,35 @@
 #define ui_inv1 "CENTER-2:16,SOUTH:5"			//borgs
 #define ui_inv2 "CENTER-1:16,SOUTH:5"			//borgs
 #define ui_inv3 "CENTER  :16,SOUTH:5"			//borgs
-#define ui_borg_store "CENTER+2:16,SOUTH:5"		//borgs
+#define ui_borg_store "CENTER+1:16,SOUTH:5"		//borgs
 #define ui_borg_inventory "CENTER-3:16,SOUTH:5"	//borgs
-#define ui_borg_pull "EAST-2:26,SOUTH+1:7"
+#define ui_borg_pull "EAST-3:24,SOUTH+1:7"
 #define ui_borg_module "EAST-1:28,SOUTH+1:7"
 #define ui_borg_panel "EAST-2:26,SOUTH:5"
 #define ui_borg_health "EAST-1:28,CENTER-1:15"	//borgs have the health display where humans have the pressure damage indicator.
+#define ui_borg_component "EAST-2:26,SOUTH+1:7"
+#define ui_borg_sensor "SOUTH+1:6,WEST+2"
+#define ui_borg_diagnostic "EAST-4:22,SOUTH:5"
+#define ui_borg_light "CENTER+2:22,SOUTH:5"
+#define ui_borg_show_laws "SOUTH:6,WEST"
+#define ui_borg_state_laws "SOUTH:6,WEST+1"
+#define ui_borg_show_manifest "SOUTH:6,WEST+2"
+#define ui_borg_show_alerts "SOUTH:6,WEST+3"
+#define ui_borg_show_pda "SOUTH+1:6,WEST"
+#define ui_borg_show_foto "SOUTH+1:6,WEST+1"
+#define ui_borg_namepick "EAST:-6,NORTH:-6"
 
-#define ui_monkey_mask "CENTER-3:14,SOUTH:5"	//monkey
-#define ui_monkey_back "CENTER-2:14,SOUTH:5"	//monkey
+// Monkey
+#define ui_monkey_mask "CENTER-4:14,SOUTH:5"
+#define ui_monkey_neck "CENTER-3:14,SOUTH:5"
+#define ui_monkey_back "CENTER-2:14,SOUTH:5"
 
 #define ui_alien_head "CENTER-4:12,SOUTH:5"
 #define ui_alien_oclothing "CENTER-3:14,SOUTH:5"
 
 //Lower right, persistant menu
-#define ui_dropbutton "EAST-4:22,SOUTH:5"
+#define ui_crawl "EAST-4:20,SOUTH:5"
+#define ui_crafting "EAST-4:22,SOUTH:5"
 #define ui_drop_throw "EAST-1:28,SOUTH+1:7"
 #define ui_pull_resist "EAST-2:26,SOUTH+1:7"
 #define ui_movi "EAST-2:26,SOUTH:5"
@@ -78,15 +92,25 @@
 
 
 //Middle right (status indicators)
-#define ui_healthdoll "EAST-1:28,CENTER-1:15"
-#define ui_health "EAST-1:28,CENTER:17"
-#define ui_internal "EAST-1:28,CENTER+1:19"
+#define ui_nutrition "EAST-1:28,CENTER+1:13"
+#define ui_healthdoll "EAST-1:28,CENTER-2:15"
+#define ui_health "EAST-1:28,CENTER-1:17"
+#define ui_mood "EAST-1:28,CENTER:17"
+#define ui_internal "EAST-1:28,CENTER-3:19"
 
 //aliens
-#define ui_alien_nightvision "EAST-1:28,CENTER:17"
-#define ui_alien_health "EAST-1:28,CENTER-1:15"			//aliens have the health display where humans have the pressure damage indicator.
+#define ui_alien_nightvision "EAST-1:28,CENTER-1:15" //aliens have the nightvision display where humans have the pressure damage indicator.
+#define ui_alien_health "EAST-1:28,CENTER:17"
 #define ui_alienplasmadisplay "EAST-1:28,CENTER-2:15"
 
+// Ghosts
+#define ui_ghost_toggle_darkness "SOUTH:6,CENTER-3:16"
+#define ui_ghost_jumptomob       "SOUTH:6,CENTER-2:16"
+#define ui_ghost_orbit           "SOUTH:6,CENTER-1:16"
+#define ui_ghost_reenter_corpse  "SOUTH:6,CENTER:16"
+#define ui_ghost_teleport        "SOUTH:6,CENTER+1:16"
+#define ui_ghost_mafia           "SOUTH:6,CENTER+2:16"
+#define ui_ghost_spawners_menu   "SOUTH:6,CENTER-4:16"
 
 // AI
 #define ui_ai_core "SOUTH:6,WEST"
@@ -111,7 +135,8 @@
 #define ui_iclothing "WEST:6,SOUTH+1:7"
 #define ui_oclothing "WEST+1:8,SOUTH+1:7"
 #define ui_gloves "WEST+2:10,SOUTH+1:7"
-#define ui_glasses "WEST:6,SOUTH+2:9"
+#define ui_glasses "WEST:6,SOUTH+3:11"
+#define ui_neck "WEST:6,SOUTH+2:9"
 #define ui_mask "WEST+1:8,SOUTH+2:9"
 #define ui_l_ear "WEST+2:10,SOUTH+2:9"
 #define ui_r_ear "WEST+2:10,SOUTH+3:11"
@@ -120,3 +145,35 @@
 //Mecha
 #define ui_iarrowleft "SOUTH-1,EAST-3"
 #define ui_iarrowright "SOUTH-1,EAST-1"
+
+//Ian
+#define ui_ian_ability "CENTER:20,SOUTH+1:5"
+#define ui_ian_mouth   "CENTER:20,SOUTH:5"
+#define ui_ian_back    "CENTER-1:18,SOUTH:5"
+#define ui_ian_neck    "CENTER-2:16,SOUTH:5"
+#define ui_ian_head    "CENTER-3:14,SOUTH:5"
+#define ui_stamina     "EAST-1:28,CENTER:5"
+#define ui_ian_pselect "EAST-4:22,SOUTH:5"
+
+//Families
+#define ui_wanted_lvl "NORTH,11"
+
+//Holomaps
+#define ui_holomap "WEST:120, SOUTH:30"
+// Leap
+#define ui_human_leap "CENTER+3:20,SOUTH:5"
+
+#define ui_direction_arrow "CENTER,CENTER"
+
+// Hud slots
+#define HUD_SLOT_MAIN		1
+#define HUD_SLOT_ADDING		2
+#define HUD_SLOT_HOTKEYS	4
+
+#define HUD_COPY_ICON	1
+#define HUD_COPY_COLOR	2
+#define HUD_COPY_ALPHA	4
+
+//Parallax
+#define PARALLAX_CLASSIC "parallax_classic"
+#define PARALLAX_HEAVEN "parallax_heaven"

@@ -1,19 +1,19 @@
 /mob/living/simple_animal/construct
 	name = "Construct"
 	real_name = "Construct"
-	desc = ""
-	speak_emote = list("hisses")
-	emote_hear = list("wails","screeches")
+	desc = "Оно двигается..?"
+	icon = 'icons/mob/construct.dmi'
+	speak_emote = list("шипит")
+	emote_hear = list("стонет", "визжит")
 	response_help  = "thinks better of touching"
 	response_disarm = "flails at"
 	response_harm = "punches"
 	icon_dead = "shade_dead"
 	speed = -1
-	a_intent = "harm"
-	stop_automated_movement = 1
+	a_intent = INTENT_HARM
+	stop_automated_movement = TRUE
 	status_flags = CANPUSH
 	universal_speak = 1
-	attack_sound = 'sound/weapons/punch1.ogg'
 	min_oxy = 0
 	max_oxy = 0
 	min_tox = 0
@@ -26,20 +26,40 @@
 	faction = "cult"
 	var/list/construct_spells = list()
 
-/mob/living/simple_animal/construct/New()
-	..()
+	animalistic = FALSE
+	has_head = TRUE
+	has_arm = TRUE
+	can_point = TRUE
+
+/mob/living/simple_animal/construct/atom_init()
+	attack_sound = SOUNDIN_PUNCH_MEDIUM
+	. = ..()
 	name = text("[initial(name)] ([rand(1, 1000)])")
 	real_name = name
 	for(var/spell in construct_spells)
-		spell_list += new spell(src)
+		AddSpell(new spell(src))
+
+	var/obj/effect/effect/forcefield/rune/R = new
+	AddComponent(/datum/component/forcefield, "blood aura", 20, 5 SECONDS, 3 SECONDS, R, TRUE, TRUE)
+	SEND_SIGNAL(src, COMSIG_FORCEFIELD_PROTECT, src)
+
+	var/image/glow = image(icon, src, "glow_[icon_state]", ABOVE_LIGHTING_LAYER)
+	glow.plane = LIGHTING_LAMPS_PLANE
+	add_overlay(glow)
+
+	ADD_TRAIT(src, TRAIT_ARIBORN, TRAIT_ARIBORN_FLYING)
 
 /mob/living/simple_animal/construct/death()
 	..()
-	new /obj/item/weapon/ectoplasm (src.loc)
+	new /obj/item/weapon/reagent_containers/food/snacks/ectoplasm(src.loc)
 	visible_message("<span class='red'>[src] collapses in a shattered heap.</span>")
 	ghostize(bancheck = TRUE)
 	qdel(src)
-	return
+
+/mob/living/simple_animal/construct/ghostize(can_reenter_corpse, bancheck)
+	if(!QDELETED(src) && key && ckey)
+		qdel(src)
+	. = ..()
 
 /mob/living/simple_animal/construct/examine(mob/user)
 	var/msg = "<span cass='info'>*---------*\nThis is [bicon(src)] \a <EM>[src]</EM>!\n"
@@ -50,85 +70,87 @@
 		else
 			msg += "<B>It looks severely dented!</B>\n"
 		msg += "</span>"
-	msg += "*---------*</span>"
 
+	if(w_class)
+		msg += "It is a [get_size_flavor()] sized creature.\n"
+
+	msg += "*---------*</span>"
 	to_chat(user, msg)
 
 /mob/living/simple_animal/construct/attack_animal(mob/living/simple_animal/M)
-	if(istype(M, /mob/living/simple_animal/construct/builder))
-		health += 5
-		M.emote("mends some of \the <EM>[src]'s</EM> wounds.")
-	else
-		if(M.melee_damage_upper <= 0)
-			M.emote("[M.friendly] \the <EM>[src]</EM>")
-		else
-			if(M.attack_sound)
-				playsound(loc, M.attack_sound, 50, 1, 1)
-			visible_message("<span class='attack'>\The <EM>[M]</EM> [M.attacktext] \the <EM>[src]</EM>!</span>")
-			M.attack_log += text("\[[time_stamp()]\] <font color='red'>attacked [src.name] ([src.ckey])</font>")
-			src.attack_log += text("\[[time_stamp()]\] <font color='orange'>was attacked by [M.name] ([M.ckey])</font>")
-
-			var/damage = rand(M.melee_damage_lower, M.melee_damage_upper)
-			adjustBruteLoss(damage)
-
-/mob/living/simple_animal/construct/attackby(obj/item/O, mob/user)
-	if(O.force)
-		var/damage = O.force
-		if (O.damtype == HALLOSS)
-			damage = 0
-		adjustBruteLoss(damage)
-		visible_message("<span class='danger'>[src] has been attacked with [O] by [user].</span>")
-	else
-		to_chat(usr, "<span class='red'>This weapon is ineffective, it does no damage.</span>")
-		visible_message("<span class='red'>[user] gently taps [src] with [O].</span>")
-
-/mob/living/simple_animal/construct/airflow_stun()
-	return
-
-/mob/living/simple_animal/construct/airflow_hit(atom/A)
-	return
-
+	if(istype(M, /mob/living/simple_animal/construct/builder) && health <  maxHealth)
+		health += min(health + 5, maxHealth)
+		med_hud_set_health()
+		M.visible_message("[M] mends some of the <EM>[src]'s</EM> wounds.")
+		return
+	return ..()
 
 /////////////////Juggernaut///////////////
+/mob/living/simple_animal/construct/armoured/fire_halloween
+	name = "Fire Eye"
+	icon_state = "firejuggernaut"
+	icon_living = "firejuggernaut"
+	melee_damage = 10
+	speed = 2
+	construct_spells = list(
+		/obj/effect/proc_holder/spell/aoe_turf/hulk_lazor,
+		/obj/effect/proc_holder/spell/aoe_turf/hulk_spit
+	)
+
+/obj/effect/proc_holder/spell/targeted/inflict_handler/disintegrate/halloween
+	clothes_req = 0
+
+/mob/living/simple_animal/construct/armoured/pain_halloween
+	name = "Incarnation of Pain"
+	icon_state = "pain"
+	icon_living = "pain"
+	melee_damage = 5
+	speed = 5
+	construct_spells = list(
+		/obj/effect/proc_holder/spell/targeted/inflict_handler/disintegrate/halloween
+	)
+
+/obj/effect/proc_holder/spell/aoe_turf/repulse/halloween
+	clothes_req = 0
+
+/mob/living/simple_animal/construct/armoured/golem_halloween
+	name = "Metal Golem"
+	icon_state = "golem"
+	icon_living = "golem"
+	melee_damage = 35
+	speed = 4
+	construct_spells = list(
+		/obj/effect/proc_holder/spell/aoe_turf/repulse/halloween
+	)
+
 /mob/living/simple_animal/construct/armoured
 	name = "Juggernaut"
 	real_name = "Juggernaut"
-	desc = "A possessed suit of armour driven by the will of the restless dead."
-	icon = 'icons/mob/mob.dmi'
-	icon_state = "behemoth"
-	icon_living = "behemoth"
-	maxHealth = 250
-	health = 250
+	desc = "Одержимый доспех, управляемый волей беспокойных мертвецов."
+	icon_state = "juggernaut"
+	icon_living = "juggernaut"
+	maxHealth = 200
+	health = 200
 	response_harm = "harmlessly punches"
 	harm_intent_damage = 0
-	melee_damage_lower = 30
-	melee_damage_upper = 30
-	attacktext = "smashes their armoured gauntlet into"
+	melee_damage = 25
+	attacktext = "smash"
 	speed = 3
+	w_class = SIZE_MASSIVE
 	environment_smash = 2
-	attack_sound = 'sound/weapons/punch3.ogg'
 	status_flags = 0
-	construct_spells = list(/obj/effect/proc_holder/spell/aoe_turf/conjure/lesserforcewall)
+	construct_spells = list(
+			/obj/effect/proc_holder/spell/aoe_turf/conjure/lesserforcewall,
+			)
 
-/mob/living/simple_animal/construct/armoured/attackby(obj/item/O, mob/user)
-	if(O.force)
-		if(O.force >= 11)
-			var/damage = O.force
-			if (O.damtype == HALLOSS)
-				damage = 0
-			adjustBruteLoss(damage)
-			visible_message("<span class='danger'>[src] has been attacked with [O] by [user].</span>")
-		else
-			visible_message("<span class='danger'>[O] bounces harmlessly off of [src].</span>")
-	else
-		to_chat(usr, "<span class='red'>This weapon is ineffective, it does no damage.</span>")
-		visible_message("<span class='red'>[user] gently taps [src] with [O].</span>")
+/mob/living/simple_animal/construct/armoured/atom_init()
+	attack_sound = SOUNDIN_PUNCH_VERYHEAVY
+	. = ..()
+	var/obj/effect/effect/forcefield/rune/R = new
+	AddComponent(/datum/component/forcefield, "strong blood aura", 80, 5 SECONDS, 6 SECONDS, R, TRUE, TRUE)
+	SEND_SIGNAL(src, COMSIG_FORCEFIELD_PROTECT, src)
 
-/mob/living/simple_animal/construct/armoured/Life()
-	weakened = 0
-	..()
-
-/mob/living/simple_animal/construct/armoured/bullet_act(obj/item/projectile/P)
+/mob/living/simple_animal/construct/armoured/bullet_act(obj/item/projectile/P, def_zone)
 	if(istype(P, /obj/item/projectile/energy) || istype(P, /obj/item/projectile/beam))
 		var/reflectchance = 80 - round(P.damage/3)
 		if(prob(reflectchance))
@@ -145,109 +167,338 @@
 				// redirect the projectile
 				P.redirect(new_x, new_y, curloc, src)
 
-			return -1 // complete projectile permutation
+			return PROJECTILE_FORCE_MISS // complete projectile permutation
 
-	return (..(P))
+	return ..()
 
 
 ////////////////////////Wraith/////////////////////////////////////////////
+/obj/effect/proc_holder/spell/targeted/ethereal_jaunt/phaseshift/hell
+	dissapear_animation = icon(icon = 'icons/mob/construct.dmi', icon_state = "infernal_rift_out")
+	appear_animation = icon(icon = 'icons/mob/construct.dmi', icon_state = "infernal_rift_in")
+
+/mob/living/simple_animal/construct/wraith/hellknight_halloween
+	name = "Hell Knight"
+	real_name = "Hell Knight"
+	desc = "Hell Knight."
+	icon_state = "hell_knight"
+	icon_living = "hell_knight"
+	speed = 1
+	melee_damage = 25
+	construct_spells = list(
+		/obj/effect/proc_holder/spell/targeted/ethereal_jaunt/phaseshift/hell
+		)
+
+/obj/effect/proc_holder/spell/targeted/emplosion/disable_tech/halloween
+	clothes_req = FALSE
+
+/obj/effect/proc_holder/spell/targeted/ethereal_jaunt/phaseshift/envoy
+	dissapear_animation = icon(icon = 'icons/mob/construct.dmi', icon_state = "shadowstep_out")
+	appear_animation = icon(icon = 'icons/mob/construct.dmi', icon_state = "shadowstep_in")
+
+/mob/living/simple_animal/construct/wraith/envoy_halloween
+	name = "Envoy of Death"
+	real_name = "Envoy of Death"
+	desc = "Envoy of Death."
+	icon_state = "envoy_of_death"
+	icon_living = "envoy_of_death"
+	speed = 0
+	construct_spells = list(
+		/obj/effect/proc_holder/spell/targeted/emplosion/disable_tech/halloween,
+		/obj/effect/proc_holder/spell/targeted/ethereal_jaunt/phaseshift/envoy
+		)
+
+/mob/living/simple_animal/construct/wraith/firewraith_halloween
+	name = "Fire Demon"
+	real_name = "Fire Demon"
+	desc = "Зловещий демон, управляемый духом."
+	icon_state = "firewraith"
+	icon_living = "firewraith"
+	melee_damage = 10
+	speed = 0
+	construct_spells = list(
+		/obj/effect/proc_holder/spell/dumbfire/fireball
+		)
+
 /mob/living/simple_animal/construct/wraith
 	name = "Wraith"
 	real_name = "Wraith"
-	desc = "A wicked bladed shell contraption piloted by a bound spirit."
-	icon = 'icons/mob/mob.dmi'
-	icon_state = "floating"
-	icon_living = "floating"
+	desc = "Зловещий доспех с клинками, управляемый связанным духом."
+	icon_state = "wraith"
+	icon_living = "wraith"
 	maxHealth = 75
 	health = 75
-	melee_damage_lower = 25
-	melee_damage_upper = 25
-	attacktext = "slashes"
+	melee_damage = 20
+	attacktext = "slash"
 	speed = -1
 	see_in_dark = 7
-	attack_sound = 'sound/weapons/bladeslice.ogg'
-	construct_spells = list(/obj/effect/proc_holder/spell/targeted/ethereal_jaunt/shift)
+	attack_sound = list('sound/weapons/bladeslice.ogg')
+	attack_push_vis_effect = ATTACK_EFFECT_SLASH
+	attack_disarm_vis_effect = ATTACK_EFFECT_SLASH
+	construct_spells = list(
+		/obj/effect/proc_holder/spell/targeted/ethereal_jaunt/phaseshift,
+		)
 
 
 /////////////////////////////Artificer/////////////////////////
+/mob/living/simple_animal/construct/builder/summoner_halloween
+	name = "Summoner"
+	real_name = "Summoner"
+	desc = "Summoner."
+	icon_state = "summoner"
+	icon_living = "summoner"
+	melee_damage = 15
+	speed = -1
+	construct_spells = list(
+		/obj/effect/proc_holder/spell/aoe_turf/conjure/lesserforcewall,
+		/obj/effect/proc_holder/spell/targeted/forcewall,
+		/obj/effect/proc_holder/spell/targeted/smoke,
+		)
+
+/obj/effect/proc_holder/spell/targeted/lighting_shock/halloween
+	charge_max = 100
+	clothes_req = 0
+
+/mob/living/simple_animal/construct/builder/firetower_halloween
+	name = "Fire Tower"
+	real_name = "Fire Tower"
+	desc = "Fire Tower."
+	icon_state = "fireartificer"
+	icon_living = "fireartificer"
+	melee_damage = 5
+	construct_spells = list(
+		/obj/effect/proc_holder/spell/targeted/lighting_shock/halloween
+		)
+
 /mob/living/simple_animal/construct/builder
 	name = "Artificer"
 	real_name = "Artificer"
-	desc = "A bulbous construct dedicated to building and maintaining The Cult of Nar-Sie's armies."
-	icon = 'icons/mob/mob.dmi'
+	desc = "Выпуклая структура, предназначенная для создания и поддержания армий Культа Нар-Си."
 	icon_state = "artificer"
 	icon_living = "artificer"
 	maxHealth = 50
 	health = 50
 	response_harm = "viciously beats"
 	harm_intent_damage = 5
-	melee_damage_lower = 5
-	melee_damage_upper = 5
-	attacktext = "rams"
-	speed = 0
+	melee_damage = 10
+	attacktext = "ramm"
+	speed = -0.2
 	environment_smash = 2
-	attack_sound = 'sound/weapons/punch2.ogg'
-	construct_spells = list(/obj/effect/proc_holder/spell/aoe_turf/conjure/construct/lesser,
-							/obj/effect/proc_holder/spell/aoe_turf/conjure/wall,
-							/obj/effect/proc_holder/spell/aoe_turf/conjure/floor,
-							/obj/effect/proc_holder/spell/aoe_turf/conjure/soulstone)
+	construct_spells = list(
+		/obj/effect/proc_holder/spell/aoe_turf/conjure/construct/lesser,
+		/obj/effect/proc_holder/spell/aoe_turf/conjure/door,
+		/obj/effect/proc_holder/spell/aoe_turf/conjure/wall,
+		/obj/effect/proc_holder/spell/aoe_turf/conjure/floor,
+		/obj/effect/proc_holder/spell/aoe_turf/conjure/soulstone,
+		)
 
+/mob/living/simple_animal/construct/builder/atom_init()
+	attack_sound = SOUNDIN_PUNCH_MEDIUM
+	. = ..()
+	var/datum/atom_hud/data/medical/adv/hud = global.huds[DATA_HUD_MEDICAL_ADV]
+	hud.add_hud_to(src)
 
 /////////////////////////////Behemoth/////////////////////////
 /mob/living/simple_animal/construct/behemoth
 	name = "Behemoth"
 	real_name = "Behemoth"
-	desc = "The pinnacle of occult technology, Behemoths are the ultimate weapon in the Cult of Nar-Sie's arsenal."
-	icon = 'icons/mob/mob.dmi'
-	icon_state = "behemoth"
-	icon_living = "behemoth"
-	maxHealth = 750
-	health = 750
+	desc = "Вершина оккультных технологий. Бегемоты — лучшее оружие в арсенале Культа Нар-Си."
+	icon_state = "juggernaut"
+	icon_living = "juggernaut"
+	maxHealth = 10
+	health = 10
 	speak_emote = list("rumbles")
 	response_harm = "harmlessly punches"
 	harm_intent_damage = 0
-	melee_damage_lower = 50
-	melee_damage_upper = 50
-	attacktext = "brutally crushes"
+	melee_damage = 50
+	attacktext = "brutally crush"
 	speed = 5
 	environment_smash = 2
-	attack_sound = 'sound/weapons/punch4.ogg'
-	var/energy = 0
-	var/max_energy = 1000
+	w_class = SIZE_MASSIVE
+	resize = 1.2
 
-/mob/living/simple_animal/construct/behemoth/attackby(obj/item/O, mob/user)
-	if(O.force)
-		if(O.force >= 11)
-			var/damage = O.force
-			if (O.damtype == HALLOSS)
-				damage = 0
-			adjustBruteLoss(damage)
-			visible_message("<span class='danger'>[src] has been attacked with [O] by [user].</span>")
-		else
-			visible_message("<span class='danger'>[O] bounces harmlessly off of [src].</span>")
-	else
-		to_chat(usr, "<span class='red'>This weapon is ineffective, it does no damage.</span>")
-		visible_message("<span class='red'>[user] gently taps [src] with [O].</span>")
+/mob/living/simple_animal/construct/behemoth/atom_init()
+	attack_sound = SOUNDIN_PUNCH_HEAVY
+	. = ..()
+	var/obj/effect/effect/forcefield/rune/R = new
+	AddComponent(/datum/component/forcefield, "strong blood aura", 500, 30 SECONDS, 10 SECONDS, R, TRUE, TRUE)
+	SEND_SIGNAL(src, COMSIG_FORCEFIELD_PROTECT, src)
 
 
 /////////////////////////////////////Harvester construct/////////////////////////////////
+/mob/living/simple_animal/construct/harvester/necro_halloween
+	name = "Necrophage"
+	desc = "Necrophage"
+	icon_state = "necrophage"
+	icon_living = "necrophage"
+	maxHealth = 90
+	health = 90
+	speed = 1
+	construct_spells = list(
+		/obj/effect/proc_holder/spell/aoe_turf/conjure/smoke,
+		/obj/effect/proc_holder/spell/no_target/rot
+		)
+
+/mob/living/simple_animal/construct/harvester/necro_halloween/add_conversion_area_spell()
+	return
+
+/obj/effect/proc_holder/spell/aoe_turf/conjure/the_traps/halloween
+	clothes_req = 0
+
+/mob/living/simple_animal/construct/harvester/fireharvest_halloween
+	name = "Fire Harvester"
+	desc = "Предвестник"
+	icon_state = "fireharvester"
+	icon_living = "fireharvester"
+	construct_spells = list(
+		/obj/effect/proc_holder/spell/aoe_turf/conjure/the_traps/halloween
+		)
+
+/mob/living/simple_animal/construct/harvester/fireharvest_halloween/add_conversion_area_spell()
+	return
+
+/obj/effect/proc_holder/spell/targeted/inflict_handler/blind/halloween
+	clothes_req = FALSE
+
+/mob/living/simple_animal/construct/harvester/boneshaper_halloween
+	name = "Boneshaper"
+	desc = "Boneshaper"
+	icon_state = "boneshaper"
+	icon_living = "boneshaper"
+	maxHealth = 120
+	health = 120
+	melee_damage = 5
+	construct_spells = list(
+		/obj/effect/proc_holder/spell/targeted/trigger/blind,
+		/obj/effect/proc_holder/spell/targeted/inflict_handler/blind/halloween
+		)
+/mob/living/simple_animal/construct/harvester/boneshaper_halloween/add_conversion_area_spell()
+	return
+
 /mob/living/simple_animal/construct/harvester
 	name = "Harvester"
 	real_name = "Harvester"
-	desc = "A harbinger of Nar-Sie's enlightenment. It'll be all over soon."
-	icon = 'icons/mob/harvester.dmi'
+	desc = "Предвестник просветления Нар-Си. Скоро все будет кончено."
 	icon_state = "harvester"
 	icon_living = "harvester"
 	maxHealth = 60
 	health = 60
-	melee_damage_lower = 1
-	melee_damage_upper = 5
-	attacktext = "prods"
+	melee_damage = 8
+	attacktext = "prodd"
 	speed = 0
 	environment_smash = 1
 	see_in_dark = 7
-	attack_sound = 'sound/weapons/slash.ogg'
-	construct_spells = list(/obj/effect/proc_holder/spell/aoe_turf/conjure/smoke)
+	lighting_alpha = LIGHTING_PLANE_ALPHA_MOSTLY_VISIBLE
+	density = FALSE
+	attack_sound = list('sound/weapons/slash.ogg')
+	attack_push_vis_effect = ATTACK_EFFECT_SLASH
+	attack_disarm_vis_effect = ATTACK_EFFECT_SLASH
+	pass_flags = PASSTABLE
+	construct_spells = list(
+		/obj/effect/proc_holder/spell/aoe_turf/conjure/smoke,
+		)
+/mob/living/simple_animal/construct/harvester/atom_init()
+	. = ..()
+	add_conversion_area_spell()
+
+/mob/living/simple_animal/construct/harvester/proc/add_conversion_area_spell()
+	if(SSticker.nar_sie_has_risen)
+		AddSpell(new /obj/effect/proc_holder/spell/no_target/area_conversion(src))
+	else
+		AddSpell(new /obj/effect/proc_holder/spell/no_target/area_conversion/lesser(src))
+
+/mob/living/simple_animal/construct/harvester/Bump(atom/A)
+	. = ..()
+	if(A == loc)
+		return
+	var/its_wall = FALSE
+	if(istype(A, /turf/simulated/wall/cult))
+		its_wall = TRUE
+
+	if(its_wall || istype(A, /obj/structure/mineral_door/cult) || istype(A, /obj/structure/cult) || isconstruct(A) || istype(A, /mob/living/simple_animal/hostile/pylon/cult))
+		var/atom/movable/stored_pulling = pulling
+		if(stored_pulling)
+			stored_pulling.set_dir(get_dir(stored_pulling.loc, loc))
+			stored_pulling.forceMove(loc)
+
+		if(its_wall)
+			forceMove(A)
+		else
+			forceMove(A.loc)
+
+		if(stored_pulling)
+			start_pulling(stored_pulling) //drag anything we're pulling through the wall with us by magic
 
 /mob/living/simple_animal/construct/harvester/Process_Spacemove(movement_dir = 0)
-	return 1
+	return TRUE
+
+/mob/living/simple_animal/construct/harvester/UnarmedAttack(atom/A)
+	if(ishuman(A) && prob(20))
+		if(get_targetzone() == BP_HEAD) // No
+			return ..()
+		var/mob/living/carbon/human/C = A
+		var/obj/item/organ/external/BP = C.get_bodypart(get_targetzone())
+		if(BP && !BP.droplimb(FALSE, FALSE, DROPLIMB_EDGE))
+			return ..() //Attack
+		return
+	return ..()
+
+/////////////////////////////////////Proteon from tg/////////////////////////////////
+/mob/living/simple_animal/construct/proteon
+	name = "Proteon"
+	real_name = "Proteon"
+	desc = "Слабая конструкция, предназначенная для обыска руин в поисках предметов привязанности Нар'Си. Эти зазубренные когти — не шутка."
+	icon_state = "proteon"
+	icon_living = "proteon"
+	maxHealth = 30
+	health = 30
+	melee_damage = 35
+	speed = -2
+	response_harm = "pinch"
+
+	sight = SEE_MOBS
+
+/mob/living/simple_animal/construct/proteon/atom_init()
+	attack_sound = SOUNDIN_PUNCH_HEAVY
+	. = ..()
+
+
+/////////////////////////////////////Charged Pylon not construct/////////////////////////////////
+/mob/living/simple_animal/hostile/pylon/cult
+	name = "charged pylon"
+	real_name = "charged pylon"
+	desc = "Летающий кристалл, излучающий таинственную энергию."
+	icon = 'icons/obj/cult.dmi'
+	icon_state = "pylon_glow"
+	icon_living = "pylon"
+	projectiletype = /obj/item/projectile/beam/cult_laser
+	projectilesound = 'sound/weapons/guns/gunpulse_laser.ogg'
+	faction = "cult"
+	var/timer
+
+/mob/living/simple_animal/hostile/pylon/cult/atom_init()
+	. = ..()
+	friends = global.cult_religion?.members
+
+/mob/living/simple_animal/hostile/pylon/death(gibbed)
+	. = ..()
+	for(var/atom/A in contents)
+		qdel(A)
+	qdel(src)
+
+/mob/living/simple_animal/hostile/pylon/cult/proc/deactivate()
+	for(var/obj/structure/cult/pylon/P in contents)
+		P.update_integrity(health)
+		P.forceMove(loc)
+	qdel(src)
+
+/mob/living/simple_animal/hostile/pylon/cult/proc/add_friend(datum/religion/R, mob/M, holy_role)
+	friends = R.members
+
+/mob/living/simple_animal/hostile/pylon/cult/attackby(obj/item/I, mob/user, params)
+	if(iscultist(user))
+		if(istype(I, /obj/item/weapon/storage/bible/tome))
+			deactivate()
+			deltimer(timer)
+	else
+		return ..()

@@ -1,6 +1,6 @@
 /mob/living/simple_animal/hostile/faithless
 	name = "Faithless"
-	desc = "The Wish Granter's faith in humanity, incarnate."
+	desc = "Воплощенная вера Исполнителя желаний."
 	icon_state = "faithless"
 	icon_living = "faithless"
 	icon_dead = "faithless_dead"
@@ -15,10 +15,9 @@
 	environment_smash = 1
 
 	harm_intent_damage = 10
-	melee_damage_lower = 15
-	melee_damage_upper = 15
+	melee_damage = 15
 	attacktext = "grips"
-	attack_sound = 'sound/hallucinations/growl1.ogg'
+	attack_sound = list('sound/voice/growl1.ogg')
 
 	min_oxy = 0
 	max_oxy = 0
@@ -33,18 +32,24 @@
 
 	faction = "faithless"
 
+	animalistic = FALSE
+	has_head = TRUE
+	has_arm = TRUE
+	has_leg = TRUE
+
 /mob/living/simple_animal/hostile/faithless/Process_Spacemove(movement_dir = 0)
 	return 1
 
 /mob/living/simple_animal/hostile/faithless/FindTarget()
 	. = ..()
 	if(.)
-		emote("wails at [.]")
+		me_emote("wails at [.]")
 
-/mob/living/simple_animal/hostile/faithless/AttackingTarget()
+/mob/living/simple_animal/hostile/faithless/UnarmedAttack(atom/target)
 	. =..()
-	var/mob/living/L = .
-	if(istype(L))
+	if(isliving(target))
+		var/mob/living/L = target
 		if(prob(12))
+			L.Stun(1)
 			L.Weaken(3)
 			L.visible_message("<span class='danger'>\the [src] knocks down \the [L]!</span>")

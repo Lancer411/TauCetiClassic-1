@@ -14,43 +14,84 @@
 	desc = "A large cabinet with drawers."
 	icon = 'icons/obj/bureaucracy.dmi'
 	icon_state = "filingcabinet"
-	density = 1
-	anchored = 1
+	density = TRUE
+	anchored = TRUE
+	throwpass = TRUE//You can throw objects over this, despite it's density.")
+	climbable = TRUE
+
+	resistance_flags = CAN_BE_HIT
 
 
 /obj/structure/filingcabinet/chestdrawer
 	name = "chest drawer"
 	icon_state = "chestdrawer"
 
+/obj/structure/filingcabinet/chestdrawer/black
+	icon_state = "chestdrawer_black"
 
 /obj/structure/filingcabinet/filingcabinet	//not changing the path to avoid unecessary map issues, but please don't name stuff like this in the future -Pete
 	icon_state = "tallcabinet"
 
+/obj/structure/filingcabinet/verb/rotate()
+	set name = "Rotate"
+	set category = "Object"
+	set src in oview(1)
 
-/obj/structure/filingcabinet/initialize()
+	if (usr.incapacitated())
+		return
+	if (anchored)
+		to_chat(usr,"<span class='notice'>It is fastened to the floor!</span>")
+		return
+	set_dir(turn(dir, 90))
+
+
+/obj/structure/filingcabinet/atom_init()
+	. = ..()
 	for(var/obj/item/I in loc)
 		if(istype(I, /obj/item/weapon/paper) || istype(I, /obj/item/weapon/folder) || istype(I, /obj/item/weapon/photo) || istype(I, /obj/item/weapon/paper_bundle))
 			I.loc = src
 
 
 /obj/structure/filingcabinet/attackby(obj/item/P, mob/user)
+	add_fingerprint(user)
+	if(!allowed(usr))
+		to_chat(usr, "[bicon(src)] [name] <span class='warning'>Доступ запрещён</span>")
+		return FALSE
+
 	if(istype(P, /obj/item/weapon/paper) || istype(P, /obj/item/weapon/folder) || istype(P, /obj/item/weapon/photo) || istype(P, /obj/item/weapon/paper_bundle))
 		to_chat(user, "<span class='notice'>You put [P] in [src].</span>")
-		user.drop_item()
-		P.loc = src
-		icon_state = "[initial(icon_state)]-open"
-		sleep(5)
-		icon_state = initial(icon_state)
+		user.drop_from_inventory(P, src)
+		flick("[initial(icon_state)]-open", src)
 		updateUsrDialog()
-	else if(istype(P, /obj/item/weapon/wrench))
-		playsound(loc, 'sound/items/Ratchet.ogg', 50, 1)
+
+	else if(iswrenching(P))
+		user.SetNextMove(CLICK_CD_INTERACT)
+		playsound(src, 'sound/items/Ratchet.ogg', VOL_EFFECTS_MASTER)
 		anchored = !anchored
 		to_chat(user, "<span class='notice'>You [anchored ? "wrench" : "unwrench"] \the [src].</span>")
+
+	else if(isscrewing(P))
+		if(P.use_tool(src, user, 15, quality = QUALITY_SCREWING))
+			deconstruct(TRUE)
+			playsound(src, 'sound/items/Screwdriver.ogg', VOL_EFFECTS_MASTER)
 	else
 		to_chat(user, "<span class='notice'>You can't put [P] in [src]!</span>")
+		..()
 
+/obj/structure/filingcabinet/deconstruct(disassembled)
+	for(var/obj/item/I as anything in contents)
+		I.forceMove(loc)
+	if(flags & NODECONSTRUCT)
+		return ..()
+	new /obj/item/stack/sheet/metal(loc, 4)
+	..()
 
 /obj/structure/filingcabinet/attack_hand(mob/user)
+	add_fingerprint(user)
+	if(!allowed(usr))
+		to_chat(usr, "[bicon(src)] [name] <span class='warning'>Доступ запрещён</span>")
+		return FALSE
+
 	if(contents.len <= 0)
 		to_chat(user, "<span class='notice'>\The [src] is empty.</span>")
 		return
@@ -60,41 +101,23 @@
 	var/i
 	for(i=contents.len, i>=1, i--)
 		var/obj/item/P = contents[i]
-		dat += "<tr><td><a href='?src=\ref[src];retrieve=\ref[P]'>[sanitize_popup(P.name)]</a></td></tr>"
+		dat += "<tr><td><a href='byond://?src=\ref[src];retrieve=\ref[P]'>[sanitize(P.name)]</a></td></tr>"
 	dat += "</table></center>"
-	user << browse("<html><head><title>[name]</title></head><body>[dat]</body></html>", "window=filingcabinet;size=350x300")
 
-	return
-
-/obj/structure/filingcabinet/attack_tk(mob/user)
-	if(anchored)
-		attack_self_tk(user)
-	else
-		..()
-
-/obj/structure/filingcabinet/attack_self_tk(mob/user)
-	if(contents.len)
-		if(prob(40 + contents.len * 5))
-			var/obj/item/I = pick(contents)
-			I.loc = loc
-			if(prob(25))
-				step_rand(I)
-			to_chat(user, "<span class='notice'>You pull \a [I] out of [src] at random.</span>")
-			return
-	to_chat(user, "<span class='notice'>You find nothing in [src].</span>")
+	var/datum/browser/popup = new(user, "filingcabinet", src.name, 350, 300)
+	popup.set_content(dat)
+	popup.open()
 
 /obj/structure/filingcabinet/Topic(href, href_list)
 	if(href_list["retrieve"])
-		usr << browse("", "window=filingcabinet") // Close the menu
+		usr << browse(null, "window=filingcabinet") // Close the menu
 
 		//var/retrieveindex = text2num(href_list["retrieve"])
-		var/obj/item/P = locate(href_list["retrieve"])//contents[retrieveindex]
-		if(P && in_range(src, usr))
+		var/obj/item/P = locate(href_list["retrieve"]) in src //contents[retrieveindex]
+		if(P && Adjacent(usr))
 			usr.put_in_hands(P)
 			updateUsrDialog()
-			icon_state = "[initial(icon_state)]-open"
-			sleep(5)
-			icon_state = initial(icon_state)
+			flick("[initial(icon_state)]-open", src)
 
 
 /*
@@ -122,15 +145,11 @@
 				counter++
 			P.info += "</TT>"
 			P.name = "Security Record ([G.fields["name"]])"
+			P.update_icon()
 			virgin = 0	//tabbing here is correct- it's possible for people to try and use it
 						//before the records have been generated, so we do this inside the loop.
-	..()
 
 /obj/structure/filingcabinet/security/attack_hand()
-	populate()
-	..()
-
-/obj/structure/filingcabinet/security/attack_tk()
 	populate()
 	..()
 
@@ -158,14 +177,10 @@
 				counter++
 			P.info += "</TT>"
 			P.name = "Medical Record ([G.fields["name"]])"
+			P.update_icon()
 			virgin = 0	//tabbing here is correct- it's possible for people to try and use it
 						//before the records have been generated, so we do this inside the loop.
-	..()
 
 /obj/structure/filingcabinet/medical/attack_hand()
-	populate()
-	..()
-
-/obj/structure/filingcabinet/medical/attack_tk()
 	populate()
 	..()

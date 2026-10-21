@@ -1,10 +1,7 @@
 /mob/living/silicon/robot/updatehealth()
-	if(status_flags & GODMODE)
-		health = 200
-		stat = CONSCIOUS
-		return
-	health = 200 - (getBruteLoss() + getFireLoss())
-	return
+	health = maxHealth - (getBruteLoss() + getFireLoss())
+	diag_hud_set_status()
+	diag_hud_set_health()
 
 /mob/living/silicon/robot/getBruteLoss()
 	var/amount = 0
@@ -22,15 +19,15 @@
 
 /mob/living/silicon/robot/adjustBruteLoss(amount)
 	if(amount > 0)
-		take_overall_damage(amount, 0)
+		return take_overall_damage(amount, 0)
 	else
-		heal_overall_damage(-amount, 0)
+		return heal_overall_damage(-amount, 0)
 
 /mob/living/silicon/robot/adjustFireLoss(amount)
 	if(amount > 0)
-		take_overall_damage(0, amount)
+		return take_overall_damage(0, amount)
 	else
-		heal_overall_damage(0, -amount)
+		return heal_overall_damage(0, -amount)
 
 /mob/living/silicon/robot/proc/get_damaged_components(brute, burn, destroyed = 0)
 	var/list/datum/robot_component/parts = list()
@@ -56,13 +53,13 @@
 		return C
 	return 0
 
-/mob/living/silicon/robot/heal_organ_damage(brute, burn)
+/mob/living/silicon/robot/heal_bodypart_damage(brute, burn)
 	var/list/datum/robot_component/parts = get_damaged_components(brute,burn)
 	if(!parts.len)	return
 	var/datum/robot_component/picked = pick(parts)
 	picked.heal_damage(brute,burn)
 
-/mob/living/silicon/robot/take_organ_damage(brute = 0, burn = 0, sharp = 0, edge = 0)
+/mob/living/silicon/robot/take_bodypart_damage(brute = 0, burn = 0, sharp = 0, edge = 0)
 	var/list/components = get_damageable_components()
 	if(!components.len)
 		return
@@ -78,11 +75,11 @@
 		cell.charge -= cost
 		if(cell.charge <= 0)
 			cell.charge = 0
-			to_chat(src, "\red Your shield has overloaded!")
+			to_chat(src, "<span class='warning'>Your shield has overloaded!</span>")
 		else
 			brute -= absorb_brute
 			burn -= absorb_burn
-			to_chat(src, "\red Your shield absorbs some of the impact!")
+			to_chat(src, "<span class='warning'>Your shield absorbs some of the impact!</span>")
 
 	var/datum/robot_component/armour/A = get_armour()
 	if(A)
@@ -91,6 +88,8 @@
 
 	var/datum/robot_component/C = pick(components)
 	C.take_damage(brute,burn,sharp,edge)
+
+	updatehealth()
 
 /mob/living/silicon/robot/heal_overall_damage(brute, burn)
 	var/list/datum/robot_component/parts = get_damaged_components(brute,burn)
@@ -109,7 +108,16 @@
 		parts -= picked
 
 /mob/living/silicon/robot/take_overall_damage(brute = 0, burn = 0, sharp = 0, used_weapon = null)
-	if(status_flags & GODMODE)	return	//godmode
+
+	// todo: should we move it to robot_component?
+	if(brute > 0)
+		brute *= mob_brute_mod.Get()
+	if(burn > 0)
+		burn *= mob_burn_mod.Get()
+
+	if(!brute && !burn)
+		return FALSE
+
 	var/list/datum/robot_component/parts = get_damageable_components()
 
 	 //Combat shielding absorbs a percentage of damage directly into the cell.
@@ -123,11 +131,11 @@
 		cell.charge -= cost
 		if(cell.charge <= 0)
 			cell.charge = 0
-			to_chat(src, "\red Your shield has overloaded!")
+			to_chat(src, "<span class='warning'>Your shield has overloaded!</span>")
 		else
 			brute -= absorb_brute
 			burn -= absorb_burn
-			to_chat(src, "\red Your shield absorbs some of the impact!")
+			to_chat(src, "<span class='warning'>Your shield absorbs some of the impact!</span>")
 
 	var/datum/robot_component/armour/A = get_armour()
 	if(A)
@@ -146,3 +154,5 @@
 		burn	-= (picked.electronics_damage - burn_was)
 
 		parts -= picked
+
+	updatehealth()

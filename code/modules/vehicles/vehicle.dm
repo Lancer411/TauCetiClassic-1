@@ -8,8 +8,8 @@
 	name = "vehicle"
 	icon = 'icons/obj/vehicles.dmi'
 	layer = MOB_LAYER + 0.1 //so it sits above objects including mobs
-	density = 1
-	anchored = 1
+	density = TRUE
+	anchored = TRUE
 	animate_movement = 1
 	light_range = 3
 
@@ -17,11 +17,11 @@
 	buckle_movable = 1
 	buckle_lying = 0
 
+	w_class = SIZE_MASSIVE
+
 	var/attack_log = null
 	var/on = 0
 	var/open = 0
-	var/health = 0	//do not forget to set health for your vehicle!
-	var/maxhealth = 0
 	var/fire_dam_coeff = 1.0
 	var/brute_dam_coeff = 1.0
 	var/stat = 0
@@ -37,18 +37,18 @@
 //-------------------------------------------
 // Standard procs
 //-------------------------------------------
-/obj/vehicle/New()
-	..()
-
-/obj/vehicle/Move()
+/obj/vehicle/Move(NewLoc, Dir = 0, step_x = 0, step_y = 0)
 	if(can_move())
 		var/old_loc = get_turf(src)
 
 		var/init_anc = anchored
-		anchored = 0
-		if(!..())
+		anchored = FALSE
+		. = ..()
+		if(!.)
 			anchored = init_anc
-			return 0
+			if(load && !istype(load, /datum/vehicle_dummy_load))
+				load.set_dir(dir)
+			return
 
 		set_dir(get_dir(old_loc, loc))
 		anchored = init_anc
@@ -56,39 +56,49 @@
 		//Dummy loads do not have to be moved as they are just an overlay
 		//See load_object() proc in cargo_trains.dm for an example
 		if(load && !istype(load, /datum/vehicle_dummy_load))
-			load.forceMove(loc)
-			load.set_dir(dir)
+			load.Move(loc, dir)
 
-		return 1
 	else
-		return 0
+		return FALSE
+
+/obj/vehicle/space/spacebike/relaymove(mob/user, direction)
+	if(!user)
+		return
+	//manually set move_delay for vehicles so we don't inherit any mob movement penalties
+	//specific vehicle move delays are set in code\modules\vehicles\vehicle.dm
+	user.client?.move_delay = world.time
+	//drunk driving
+	if(user.confused)
+		direction = user.confuse_input(direction)
+	return Move(get_step(src, direction))
 
 /obj/vehicle/proc/can_move()
 	if(world.time <= l_move_time + move_delay)
 		return 0
 	if(!on)
 		return 0
-	if(istype(loc, /turf/space) && !istype(src, /obj/vehicle/space))
+	if(isspaceturf(loc) && !istype(src, /obj/vehicle/space))
 		return 0
 	return 1
 
 /obj/vehicle/attackby(obj/item/weapon/W, mob/user)
-	if(istype(W, /obj/item/weapon/hand_labeler))
+	if(istagger(W))
 		return
-	else if(istype(W, /obj/item/weapon/screwdriver))
+	else if(isscrewing(W))
 		open = !open
-		playsound(loc, 'sound/items/Screwdriver.ogg', 50, 1)
+		playsound(src, 'sound/items/Screwdriver.ogg', VOL_EFFECTS_MASTER)
 		if(on && open)
 			turn_off()
 		update_icon()
 		to_chat(user, "<span class='notice'>Maintenance panel is now [open ? "opened" : "closed"].</span>")
-	else if(istype(W, /obj/item/weapon/weldingtool))
+	else if(iswelding(W))
 		var/obj/item/weapon/weldingtool/T = W
-		if(T.welding)
-			if(health < maxhealth)
+		user.SetNextMove(CLICK_CD_INTERACT)
+		if(T.isOn())
+			if(get_integrity() < max_integrity)
 				if(open)
-					health = min(maxhealth, health + 20)
-					playsound(src.loc, 'sound/items/welder.ogg', 50, 1)
+					repair_damage(20)
+					playsound(src, 'sound/items/welder.ogg', VOL_EFFECTS_MASTER)
 					user.visible_message("<span class='red'>[user] repairs \the [src]!</span>","<span class='notice'>You repair \the [src]!</span>")
 					check_move_delay()
 				else
@@ -97,48 +107,27 @@
 				to_chat(user, "<span class='notice'>[src] does not need a repair.</span>")
 		else
 			to_chat(user, "<span class='notice'>Unable to repair while [src] is off.</span>")
-	else if(hasvar(W,"force") && hasvar(W,"damtype"))
-		switch(W.damtype)
-			if("fire")
-				health -= W.force * fire_dam_coeff
-			if("brute")
-				health -= W.force * brute_dam_coeff
-		..()
-		healthcheck()
 	else
-		..()
+		return ..()
 
-/obj/vehicle/bullet_act(obj/item/projectile/Proj)
-	health -= Proj.damage
-	..()
-	healthcheck()
+/obj/vehicle/run_atom_armor(damage_amount, damage_type, damage_flag, attack_dir)
+	switch(damage_type)
+		if(BRUTE)
+			return damage_amount * brute_dam_coeff
+		if(BURN)
+			return damage_amount * fire_dam_coeff
 
-/obj/vehicle/meteorhit()
+/obj/vehicle/take_damage(damage_amount, damage_type, damage_flag, sound_effect, attack_dir)
+	. = ..()
+	if(QDELING(src))
+		return
+	if(.)
+		if(prob(10))
+			new /obj/effect/decal/cleanable/blood/oil(loc)
+		check_move_delay()
+
+/obj/vehicle/deconstruct(disassembled)
 	explode()
-	return
-
-/obj/vehicle/blob_act()
-	src.health -= rand(20,40)*fire_dam_coeff
-	healthcheck()
-	return
-
-/obj/vehicle/ex_act(severity)
-	switch(severity)
-		if(1.0)
-			explode()
-			return
-		if(2.0)
-			health -= rand(5,10)*fire_dam_coeff
-			health -= rand(10,20)*brute_dam_coeff
-			healthcheck()
-			return
-		if(3.0)
-			if (prob(50))
-				health -= rand(1,5)*fire_dam_coeff
-				health -= rand(1,5)*brute_dam_coeff
-				healthcheck()
-				return
-	return
 
 /obj/vehicle/attack_ai(mob/user)
 	return
@@ -161,25 +150,23 @@
 	if(stat)
 		return 0
 	on = 1
-	luminosity = initial(luminosity)
 	update_icon()
 	return 1
 
 /obj/vehicle/proc/turn_off()
 	on = 0
-	luminosity = 0
 	update_icon()
 
 /obj/vehicle/proc/explode()
-	src.visible_message("<span class='danger'>[src] blows apart!</span>", 1)
+	visible_message("<span class='danger'>[src] blows apart!</span>")
 	var/turf/Tsec = get_turf(src)
 
 	new /obj/item/stack/rods(Tsec)
 	new /obj/item/stack/rods(Tsec)
-	new /obj/item/weapon/cable_coil/cut(Tsec)
+	new /obj/item/stack/cable_coil/red(Tsec, 2)
 
 	//stuns people who are thrown off a train that has been blown up
-	if(istype(load, /mob/living))
+	if(isliving(load))
 		var/mob/living/M = load
 		M.apply_effects(5, 5)
 
@@ -189,11 +176,6 @@
 	new /obj/effect/decal/cleanable/blood/oil(src.loc)
 
 	qdel(src)
-
-/obj/vehicle/proc/healthcheck()
-	check_move_delay()
-	if(health <= 0)
-		explode()
 
 /obj/vehicle/proc/RunOver(mob/living/carbon/human/H)
 	return		//write specifics for different vehicles
@@ -220,7 +202,6 @@
 
 	C.forceMove(loc)
 	C.set_dir(dir)
-	C.anchored = 1
 
 	load = C
 
@@ -234,6 +215,8 @@
 
 	if(ismob(C))
 		buckle_mob(C)
+
+	C.anchored = TRUE
 
 	return 1
 
@@ -276,24 +259,18 @@
 	load.layer = initial(load.layer)
 	load.plane = initial(load.plane)
 
-	if(ismob(load))
-		unbuckle_mob(load)
-
 	load = null
 
 	return 1
 
 /obj/vehicle/proc/check_move_delay()
-	var/health_procent = (health / maxhealth) * 100
-	if(health_procent >= 66)
-		slow_cooef = 0
-		return
-	if(health_procent >= 33)
-		slow_cooef = 1
-		return
-	slow_cooef = 2
-	return
-
+	switch(get_integrity() / max_integrity)
+		if(0 to 0.33)
+			slow_cooef = 2
+		if(0.33 to 0.66)
+			slow_cooef = 1
+		else
+			slow_cooef = 0
 
 //-------------------------------------------------------
 // Stat update procs
@@ -304,10 +281,7 @@
 /obj/vehicle/attack_hand(mob/user, damage, attack_message)
 	if(!damage)
 		return
+	user.SetNextMove(CLICK_CD_MELEE)
 	visible_message("<span class='danger'>[user] [attack_message] the [src]!</span>")
 	user.attack_log += text("\[[time_stamp()]\] <font color='red'>attacked [src.name]</font>")
-	src.health -= damage
-	if(prob(10))
-		new /obj/effect/decal/cleanable/blood/oil(src.loc)
-	spawn(1) healthcheck()
-	return 1
+	take_damage(damage, BRUTE, MELEE)

@@ -55,7 +55,9 @@
 
 			if(is_special_character(C.mob))
 				entry += " - <b><font color='red'>Antagonist</font></b>"
-			entry += " (<A HREF='?_src_=holder;adminmoreinfo=\ref[C.mob]'>?</A>)"
+			if(C.is_afk())
+				entry += " (AFK - [C.inactivity2text()])"
+			entry += " (<A href='byond://?_src_=holder;adminmoreinfo=\ref[C.mob]'>?</A>)"
 			Lines += entry
 	else
 		for(var/client/C in clients)
@@ -71,53 +73,77 @@
 	msg += "<b>Total Players: [length(Lines)]</b>"
 	to_chat(src, msg)
 
+#define SW_NAME       1
+#define SW_WHOTEXT    2
+#define SW_COUNT      3
+#define SW_CSS_CLASS  4
+#define SW_ALL_PARAMS 4 //update this, if add more params
+
+#define SW_TR(CKEY, RANK, EXTRA) "<tr><td>&emsp;[CKEY]</td><td><b>[SSholiday.get_staffwho_prefix(CKEY.ckey) ? SSholiday.get_staffwho_prefix(CKEY.ckey) + " " : ""][RANK]</b></td><td>[EXTRA]</td></tr>"
+#define SW_INCREMENT(GROUP, CKEY, RANK, EXTRA) staffwho[GROUP][SW_WHOTEXT] += SW_TR(CKEY, RANK, EXTRA);staffwho[GROUP][SW_COUNT]++
 /client/verb/staffwho()
 	set category = "Admin"
 	set name = "Staffwho"
 
-	var/msg = ""
-	var/mentmsg = ""
-	var/num_admins_online = 0
-	var/num_mentors_online = 0
-	if(holder)
-		for(var/client/C in admins)
-			if(C.ckey in stealth_keys)
-				continue
-			if(C.holder.fakekey && (!R_ADMIN & holder.rights))
-				continue
-			msg += "&emsp;[C] is a [C.holder.rank]"
-			if(C.holder.fakekey)
-				msg += " <i>(as [C.holder.fakekey])</i>"
+	var/list/staffwho[SW_ALL_GROUPS][SW_ALL_PARAMS]
+	staffwho[SW_ADMINS][SW_NAME] = SSholiday.get_admin_name(SW_ADMINS)
+	staffwho[SW_MENTORS][SW_NAME] = SSholiday.get_admin_name(SW_MENTORS)
+	staffwho[SW_XENOVISORS][SW_NAME] = SSholiday.get_admin_name(SW_XENOVISORS)
+	staffwho[SW_DEVELOPERS][SW_NAME] = SSholiday.get_admin_name(SW_DEVELOPERS)
+
+	// update tgui\packages\tgui-panel\styles\goon\chat-base.scss, if change this
+	staffwho[SW_ADMINS][SW_CSS_CLASS] =     "Admins"
+	staffwho[SW_MENTORS][SW_CSS_CLASS] =    "Mentors"
+	staffwho[SW_XENOVISORS][SW_CSS_CLASS] = "Xenovisors"
+	staffwho[SW_DEVELOPERS][SW_CSS_CLASS] = "Developers"
+
+	for(var/client/C as anything in admins|mentors)
+		if(C.ckey in stealth_keys)
+			continue
+		if(C.holder?.fakekey && (!holder || !(R_ADMIN & holder.rights)))
+			continue
+		var/extra = ""
+		if(holder)
+			if(C.holder?.fakekey)
+				extra += "<i>(as [C.holder.fakekey])</i> "
 			if(isobserver(C.mob))
-				msg += " - Observing"
-			else if(istype(C.mob,/mob/new_player))
-				msg += " - Lobby"
+				extra += "Observing"
+			else if(isnewplayer(C.mob))
+				extra += "Lobby"
 			else
-				msg += " - Playing"
+				extra += "Playing"
 			if(C.is_afk())
-				msg += " (AFK)"
-			msg += "\n"
-			num_admins_online++
-		for(var/client/C in mentors)
-			mentmsg += "&emsp;[C] is a Mentor"
-			if(isobserver(C.mob))
-				mentmsg += " - Observing"
-			else if(istype(C.mob,/mob/new_player))
-				mentmsg += " - Lobby"
+				extra += " (AFK - [C.inactivity2text()])"
+		if(C.ckey in mentor_ckeys)
+			SW_INCREMENT(SW_MENTORS, C, "Mentor", extra)
+		if(C.holder)
+			if(R_BAN & C.holder.rights)
+				SW_INCREMENT(SW_ADMINS, C, C.holder.rank, extra)
+			else if(R_DEBUG & C.holder.rights)
+				SW_INCREMENT(SW_DEVELOPERS, C, C.holder.rank, extra)
+			else if(R_WHITELIST & C.holder.rights)
+				SW_INCREMENT(SW_XENOVISORS, C, C.holder.rank, extra)
 			else
-				mentmsg += " - Playing"
-			if(C.is_afk())
-				mentmsg += " (AFK)"
-			mentmsg += "\n"
-			num_mentors_online++
+				SW_INCREMENT(SW_ADMINS, C, C.holder.rank, extra)
+
+	var/msg
+	for(var/staff in staffwho)
+		if(!staff[SW_COUNT])
+			continue
+		msg += "<tr><th class='[staff[SW_CSS_CLASS]]' colspan='3'>[staff[SW_NAME]] — [staff[SW_COUNT] || 0]</td></tr>"
+		msg += "[staff[SW_WHOTEXT]]"
+	if(!msg)
+		var/no_staff_text = SSholiday.get_no_staff_text()
+		if(!no_staff_text)
+			no_staff_text = "No Staff Online"
+		msg = "<b>[no_staff_text]</b>"
 	else
-		for(var/client/C in admins)
-			if(C.ckey in stealth_keys)
-				continue
-			if(!C.holder.fakekey)
-				msg += "&emsp;[C] is a [C.holder.rank]\n"
-				num_admins_online++
-		for(var/client/C in mentors)
-			mentmsg += "&emsp;[C] is a Mentor\n"
-			num_mentors_online++
-	to_chat(src, "<b>Current Admins ([num_admins_online]):</b>\n" + msg + "\n<b>Current Mentors ([num_mentors_online]):</b>\n" + mentmsg)
+		msg = "<table class='staffwho'>[msg]</table>"
+	to_chat(src, msg)
+
+#undef SW_NAME
+#undef SW_WHOTEXT
+#undef SW_COUNT
+#undef SW_TR
+#undef SW_INCREMENT
+#undef SW_ALL_PARAMS

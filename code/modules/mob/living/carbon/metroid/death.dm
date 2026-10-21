@@ -3,10 +3,10 @@
 		return
 	stat = DEAD
 	icon_state = "[colour] baby slime dead"
-	overlays.len = 0
+	cut_overlays()
 
 	if(!gibbed)
-		if(istype(src, /mob/living/carbon/slime/adult))
+		if(isslimeadult(src))
 			ghostize(bancheck = TRUE)
 			var/mob/living/carbon/slime/M1 = new primarytype(loc)
 			M1.rabid = 1
@@ -19,11 +19,8 @@
 			if(src)
 				qdel(src)
 		else
-			for(var/mob/O in viewers(src, null))
-				O.show_message("<b>The [name]</b> seizes up and falls limp...", 1) //ded -- Urist
+			visible_message("<b>The [name]</b> seizes up and falls limp...") //ded -- Urist
 
 	update_canmove()
-
-	ticker.mode.check_win()
 
 	return ..(gibbed)

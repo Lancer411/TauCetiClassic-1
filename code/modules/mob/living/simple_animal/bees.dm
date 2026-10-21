@@ -1,4 +1,3 @@
-
 /mob/living/simple_animal/bee
 	name = "bees"
 	icon = 'icons/obj/apiary_bees_etc.dmi'
@@ -11,17 +10,22 @@
 	var/turf/target_turf
 	var/mob/target_mob
 	var/obj/machinery/apiary/parent
-	pass_flags = PASSTABLE
+	pass_flags = PASSMOB | PASSTABLE
 	turns_per_move = 6
+	w_class = SIZE_MINUSCULE
 	var/obj/machinery/hydroponics/my_hydrotray
 
-/mob/living/simple_animal/bee/New(loc, var/obj/machinery/apiary/new_parent)
-	..()
+/mob/living/simple_animal/bee/atom_init(mapload, obj/machinery/apiary/new_parent)
+	. = ..()
 	parent = new_parent
 
 /mob/living/simple_animal/bee/Destroy()
 	if(parent)
-		parent.owned_bee_swarms.Remove(src)
+		parent.owned_bee_swarms -= src
+		parent = null
+	target_turf = null
+	target_mob = null
+	my_hydrotray = null
 	return ..()
 
 /mob/living/simple_animal/bee/Life()
@@ -36,14 +40,13 @@
 				var/obj/item/clothing/worn_suit = M.wear_suit
 				var/obj/item/clothing/worn_helmet = M.head
 				if(worn_suit) // Are you wearing clothes?
-					sting_prob -= min(worn_suit.armor["bio"],70) // Is it sealed? I can't get to 70% of your body.
-				if(worn_helmet)
-					sting_prob -= min(worn_helmet.armor["bio"],30) // Is your helmet sealed? I can't get to 30% of your body.
+					sting_prob -= min(worn_suit.armor[BIO],70) // Is it sealed? I can't get to 70% of your body.
+				if(istype(worn_helmet) && worn_helmet)
+					sting_prob -= min(worn_helmet.armor[BIO],30) // Is your helmet sealed? I can't get to 30% of your body.
 				if( prob(sting_prob) && (M.stat == CONSCIOUS || (M.stat == UNCONSCIOUS && prob(25))) ) // Try to sting! If you're not moving, think about stinging.
-					M.apply_damage(min(strength,2)+mut, BRUTE, sharp=1) // Stinging. The more mutated I am, the harder I sting.
+					M.apply_damage(min(strength, 2) + mut, BRUTE, null, null, DAM_SHARP) // Stinging. The more mutated I am, the harder I sting.
 					M.apply_damage((round(feral/10,1)*(max((round(strength/20,1)),1)))+toxic, TOX) // Bee venom based on how angry I am and how many there are of me!
-					to_chat(M, "\red You have been stung!")
-					M.flash_pain()
+					to_chat(M, "<span class='warning'>Ай! Они жалятся!</span>")
 
 		//if we're chasing someone, get a little bit angry
 		if(target_mob && prob(5))
@@ -71,11 +74,11 @@
 				B.icon_state = "bees[B.strength]"
 				if(src.parent)
 					B.parent = src.parent
-					src.parent.owned_bee_swarms.Add(B)
+					parent.owned_bee_swarms.Add(B)
 
 		//make some noise
 		if(prob(0.5))
-			src.visible_message("\blue [pick("Buzzzz.","Hmmmmm.","Bzzz.")]")
+			visible_message("<span class='notice'>[pick("Жжжжжжжжжж.")]</span>")
 
 		//smoke, water and steam calms us down
 		var/calming = 0
@@ -94,11 +97,11 @@
 
 		if(calming)
 			if(feral > 0)
-				src.visible_message("\blue The bees calm down!")
+				visible_message("<span class='notice'>Пчелы успокаиваются.</span>")
 			feral = -10
 			target_mob = null
 			target_turf = null
-			wander = 1
+			wander = TRUE
 
 		for(var/mob/living/simple_animal/bee/B in src.loc)
 			if(B == src)
@@ -122,17 +125,15 @@
 						qdel(src)
 						return
 					src.icon_state = "bees[B.strength]"
-					var/turf/simulated/floor/T = get_turf(get_step(src, pick(1,2,4,8)))
-					density = 1
-					if(T.Enter(src, get_turf(src)))
-						src.loc = T
-					density = 0
+					density = TRUE
+					step(src, pick(NORTH,SOUTH,EAST,WEST))
+					density = FALSE
 				break
 
 		if(target_mob)
 			if(target_mob in view(src,7))
 				target_turf = get_turf(target_mob)
-				wander = 0
+				wander = FALSE
 
 			else // My target's gone! But I might still be pissed! You there. You look like a good stinging target!
 				for(var/mob/living/carbon/G in view(src,7))
@@ -140,13 +141,13 @@
 					break
 
 		if(target_turf)
-			if (!(DirBlocked(get_step(src, get_dir(src,target_turf)),get_dir(src,target_turf)))) // Check for windows and doors!
+			if(AStar(src, target_turf, TYPE_PROC_REF(/turf, Distance), 1))
 				Move(get_step(src, get_dir(src,target_turf)))
 				if (prob(0.1))
-					src.visible_message("\blue The bees swarm after [target_mob]!")
+					visible_message("<span class='notice'>The bees swarm after [target_mob]!</span>")
 			if(src.loc == target_turf)
 				target_turf = null
-				wander = 1
+				wander = TRUE
 		else
 			//find some flowers, harvest
 			//angry bee swarms don't hang around
